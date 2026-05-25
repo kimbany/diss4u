@@ -116,7 +116,7 @@ async function load() {
       ${s.audioUrl ? `<div class="player"><audio controls autoplay src="${esc(s.audioUrl)}"></audio></div>` : '<div class="player" style="color:var(--dim);font-size:13px;">오디오를 불러올 수 없어요 (링크 만료)</div>'}
       <div class="sec">가사</div>
       <div class="lyrics">${esc(s.lyrics)}</div>
-      <a class="cta" href="${appHomeUrl()}">🎤 나도 Diss4U 만들기</a>
+      <a class="cta" href="${appHomeUrl()}">🎤 나도 Diss4U로 복수하기</a>
       <div class="ad-slot" id="adShare"></div>
     `;
     mountAd('adShare', AD_SLOT_SHARE);
