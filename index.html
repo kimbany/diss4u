@@ -1440,7 +1440,7 @@ async function startGeneration() {
     });
 
     if (STATE.generationCancelled) return;
-    setProgress(25, '노래 생성 시작!', 'Suno AI가 작업 중...');
+    setProgress(25, '노래 생성 시작!', '노래 준비 중이에요');
 
     const submitResult = await callWorker('/generate-song', {
       lyrics: lyricsData.lyrics,
