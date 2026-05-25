@@ -794,19 +794,17 @@
       <div style="color:var(--text-dim);text-align:center;padding:24px 0;">상품 불러오는 중...</div>
     </div>
 
-    <!-- 무료로 크레딧 받기 (광고 / 친구 초대) -->
+    <!-- 무료로 크레딧 받기 (친구 초대 / 공유) -->
     <div id="freeCreditBox" style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border);display:none;">
       <div class="label" style="margin-bottom:10px;">🎁 무료로 크레딧 받기</div>
-      <button class="btn-secondary" id="adRewardBtn" onclick="watchAdForCredit()"
-        style="display:flex;justify-content:space-between;align-items:center;width:100%;padding:14px 16px;text-align:left;margin-bottom:10px;">
-        <span>🎬 광고 보고 <b style="color:var(--lime);">+1p</b></span>
-        <span id="adRemainText" style="color:var(--text-dim);font-size:12px;"></span>
-      </button>
       <button class="btn-secondary" onclick="copyInviteLink()"
-        style="display:flex;justify-content:space-between;align-items:center;width:100%;padding:14px 16px;text-align:left;">
+        style="display:flex;justify-content:space-between;align-items:center;width:100%;padding:14px 16px;text-align:left;margin-bottom:10px;">
         <span>👯 친구 초대 링크 복사</span>
         <span style="color:var(--text-dim);font-size:12px;">가입+첫곡 시 <b style="color:var(--lime);">+10p</b></span>
       </button>
+      <div style="font-size:12px;color:var(--text-dim);text-align:center;line-height:1.5;">
+        📤 만든 곡을 인스타에 공유하면 <b style="color:var(--lime);">곡당 +2p</b>
+      </div>
     </div>
 
     <div id="chargeMethod" style="display:none;margin-top:16px;">
@@ -974,8 +972,6 @@ async function fetchCredits() {
     STATE.credits = (typeof d.credits === 'number') ? d.credits : null;
     STATE.costPerSong = d.cost || 10;
     STATE.refCode = d.refCode || null;
-    if (typeof d.adRemaining === 'number') STATE.adRemaining = d.adRemaining;
-    if (typeof d.adCap === 'number') STATE.adCap = d.adCap;
     updateCreditUI();
     maybeClaimReferral();
   } catch (e) { console.warn('fetchCredits fail', e); }
@@ -1045,67 +1041,31 @@ async function openChargeModal() {
   await loadPacks();
 }
 
-// 광고/초대 영역 표시 갱신 (크레딧 시스템 켜져 있고 로그인 시에만)
+// 무료 크레딧 영역 표시 (크레딧 시스템 켜져 있고 로그인 시에만)
 function updateFreeCreditUI() {
   const box = document.getElementById('freeCreditBox');
   if (!box) return;
-  if (!(currentUser && STATE.creditsEnabled)) { box.style.display = 'none'; return; }
-  box.style.display = '';
-  const btn = document.getElementById('adRewardBtn');
-  const rem = document.getElementById('adRemainText');
-  const out = STATE.adRemaining <= 0;
-  if (rem) rem.textContent = out ? '오늘 마감 (내일 또!)' : `오늘 ${STATE.adRemaining}/${STATE.adCap}회`;
-  if (btn) { btn.disabled = out; btn.style.opacity = out ? '0.5' : ''; }
+  box.style.display = (currentUser && STATE.creditsEnabled) ? '' : 'none';
 }
 
-// 광고 시청 → 크레딧 보상. (현재는 플레이스홀더 광고. 실제 광고 SDK 연동 시 playPlaceholderAd만 교체)
-async function watchAdForCredit() {
-  if (!currentUser) { showError('로그인이 필요해요'); loginGoogle(); return; }
-  if (STATE.adRemaining <= 0) { showToast('오늘 광고 보상을 다 받았어요. 내일 또 받을 수 있어요!'); return; }
-  const btn = document.getElementById('adRewardBtn');
-  if (btn) btn.disabled = true;
+// 만든 곡을 공유했을 때 곡당 1회 +2크레딧 (서버에서 곡 소유·중복 검사)
+async function claimShareReward(songId) {
+  if (!currentUser || !songId || !STATE.creditsEnabled) return;
   try {
-    await playPlaceholderAd();   // TODO: 실제 광고 네트워크(AdMob/AdSense 등) 연동으로 교체
     const token = await currentUser.getIdToken();
-    const r = await fetch(getWorkerUrl() + '/ad-reward', {
+    const r = await fetch(getWorkerUrl() + '/share-reward', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ songId })
     });
     const d = await r.json().catch(() => ({}));
-    if (!r.ok) { showToast(d.message || '잠시 후 다시 시도해주세요'); if (typeof d.credits === 'number') { STATE.credits = d.credits; updateCreditUI(); } STATE.adRemaining = 0; updateFreeCreditUI(); return; }
-    STATE.credits = d.credits;
-    if (typeof d.remaining === 'number') STATE.adRemaining = d.remaining;
-    updateCreditUI();
-    updateFreeCreditUI();
-    const bal = document.getElementById('chargeBalance');
-    if (bal) bal.textContent = `💎 현재 보유: ${STATE.credits}p`;
-    showToast(`🎬 +${d.credited || 1}p 적립 완료!`);
-  } catch (e) {
-    if (e === 'ad_cancelled') showToast('광고를 끝까지 봐야 크레딧을 받을 수 있어요');
-    else { console.warn('ad reward fail', e); showToast('광고 로딩에 실패했어요. 잠시 후 다시 시도해주세요'); }
-  } finally {
-    updateFreeCreditUI();
-  }
-}
-
-// 플레이스홀더 광고: 5초 카운트다운 오버레이. 실제 광고 SDK로 교체 예정.
-function playPlaceholderAd() {
-  return new Promise((resolve) => {
-    const ov = document.createElement('div');
-    ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#fff;text-align:center;padding:24px;';
-    let n = 5;
-    ov.innerHTML = `<div style="font-size:13px;color:#8a8a99;">광고 (샘플)</div>
-      <div style="font-size:22px;font-weight:800;">🎬 광고 시청 중...</div>
-      <div id="adCount" style="font-size:40px;font-weight:800;color:#d4ff3a;">${n}</div>
-      <div style="font-size:12px;color:#5a5a65;">끝까지 보면 +1 크레딧이 적립돼요</div>`;
-    document.body.appendChild(ov);
-    const tick = setInterval(() => {
-      n -= 1;
-      const c = ov.querySelector('#adCount');
-      if (c) c.textContent = n;
-      if (n <= 0) { clearInterval(tick); ov.remove(); resolve(); }
-    }, 1000);
-  });
+    if (r.ok && d.ok) {
+      STATE.credits = d.credits;
+      updateCreditUI();
+      showToast(`📤 공유 고마워요! +${d.credited || 2}p 적립`);
+    }
+    // 이미 받은 곡(already) 등은 조용히 무시
+  } catch (e) { console.warn('share reward fail', e); }
 }
 
 // 친구 초대 링크 복사
@@ -1315,8 +1275,6 @@ const STATE = {
   costPerSong: 10,
   creditsEnabled: false,
   refCode: null,        // 내 추천 코드
-  adRemaining: 0,       // 오늘 남은 광고 보상 횟수
-  adCap: 3,             // 광고 보상 하루 최대 횟수
 };
 
 const GENRE_NAMES = {
@@ -2255,6 +2213,7 @@ async function shareInstaVideo() {
         title: song.title || 'Diss4U',
         text: '🎤 ' + (song.title || '') + ' — Diss4U로 만든 디스곡'
       });
+      claimShareReward(song.id);   // 곡당 1회 +2크레딧
       return;
     } catch (e) {
       if (e.name === 'AbortError') return;
@@ -2263,6 +2222,7 @@ async function shareInstaVideo() {
   }
   showToast('공유시트 미지원 — 저장 후 인스타에 올려주세요');
   downloadInstaVideo();
+  claimShareReward(song.id);   // 저장(=인스타에 올리려는 의도)도 곡당 1회 +2크레딧
 }
 
 function downloadInstaVideo() {

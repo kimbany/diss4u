@@ -18,13 +18,7 @@ const COST_PER_SONG = 10;     // 곡 1개 = 10포인트
 const SIGNUP_BONUS = 20;      // 신규가입 보너스 = 20포인트(2곡)
 const REFERRAL_REWARD = 10;   // 추천 보상 = 10포인트(1곡). 피추천인이 첫 곡을 만들면 추천인에게 지급
 const REFERRAL_MAX = 100;     // 추천 보상 누적 상한(어뷰징 방지)
-const AD_REWARD = 1;          // 광고 1회 시청 보상 = 1포인트
-const AD_DAILY_CAP = 3;       // 광고 보상 하루 최대 횟수
-
-// 한국(KST) 기준 YYYY-MM-DD (광고 일일 한도 리셋 기준)
-function kstDate() {
-  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
-}
+const SHARE_REWARD = 2;       // 인스타 등 공유 보상 = 2포인트. 곡 1개당 1회만 지급(어뷰징 방지)
 
 // 추천 코드 생성 (혼동되는 0/O/1/I 제외 8자리)
 function genRefCode() {
@@ -650,8 +644,7 @@ const server = http.createServer(async (req, res) => {
       cost_per_song: COST_PER_SONG,
       signup_bonus: SIGNUP_BONUS,
       referral_reward: REFERRAL_REWARD,
-      ad_reward: AD_REWARD,
-      ad_daily_cap: AD_DAILY_CAP
+      share_reward: SHARE_REWARD
     });
   }
 
@@ -661,8 +654,6 @@ const server = http.createServer(async (req, res) => {
     const a = await verifyAuthFull(req);
     if (!a) return send(res, 401, { error: 'auth_required', message: '로그인이 필요해요' });
     const u = await getOrCreateUser(a.uid, a.email);
-    const today = kstDate();
-    const adUsed = (u.adRewardDate === today) ? (u.adRewardCount || 0) : 0;
     return send(res, 200, {
       enabled: true,
       credits: u.credits || 0,
@@ -670,9 +661,7 @@ const server = http.createServer(async (req, res) => {
       freeCredits: u.free || 0,
       paidCredits: u.paid || 0,
       refCode: u.refCode || null,
-      adReward: AD_REWARD,
-      adCap: AD_DAILY_CAP,
-      adRemaining: Math.max(0, AD_DAILY_CAP - adUsed)
+      shareReward: SHARE_REWARD
     });
   }
 
@@ -700,35 +689,40 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
 
-  // 광고 보상: 하루 AD_DAILY_CAP회까지 1회당 AD_REWARD 크레딧 지급(서버에서 한도 강제)
-  if (path === '/ad-reward' && req.method === 'POST') {
+  // 공유 보상: 내가 만든 곡 1개당 1회만 +SHARE_REWARD(무료 풀). body { songId }
+  // 곡 생성에 이미 COST_PER_SONG(10)를 썼으므로, 곡당 2p 환급은 farming으로 이득을 못 봄 → 어뷰징 안전.
+  if (path === '/share-reward' && req.method === 'POST') {
     if (!CREDITS_ENABLED) return send(res, 400, { error: 'credits_disabled', message: '크레딧 시스템이 꺼져 있어요' });
     const uid = await verifyAuth(req);
     if (!uid) return send(res, 401, { error: 'auth_required', message: '로그인이 필요해요' });
-    await getOrCreateUser(uid); // 문서/추천코드 보장
+    const { songId } = await readBody(req);
+    if (!songId || typeof songId !== 'string') return send(res, 400, { error: 'no_song', message: '곡 정보가 없어요' });
+    await getOrCreateUser(uid); // 문서/풀 보장
+
+    const sref = fdb.collection('shareRewards').doc(songId);   // 곡당 1회 지급 마커
+    const songRef = fdb.collection('songs').doc(songId);
     const uref = fdb.collection('users').doc(uid);
-    const today = kstDate();
     try {
       const result = await fdb.runTransaction(async (t) => {
-        const snap = await t.get(uref);
-        const d = snap.exists ? snap.data() : {};
-        const p = snap.exists
-          ? splitPools(d)
-          : { free: SIGNUP_BONUS, paid: 0, freeGranted: SIGNUP_BONUS, paidGranted: 0 };
-        let count = (d.adRewardDate === today) ? (d.adRewardCount || 0) : 0;
-        if (count >= AD_DAILY_CAP) return { ok: false, credits: p.free + p.paid };
-        count += 1;
-        p.free += AD_REWARD;
-        p.freeGranted += AD_REWARD;
-        t.set(uref, poolPatch(p, { adRewardDate: today, adRewardCount: count }), { merge: true });
-        return { ok: true, credits: p.free + p.paid, remaining: AD_DAILY_CAP - count };
+        const ssnap = await t.get(sref);       // 모든 read 먼저
+        const songSnap = await t.get(songRef);
+        const usnap = await t.get(uref);
+        if (!songSnap.exists) return { ok: false, code: 404, reason: 'no_song', message: '곡을 찾을 수 없어요' };
+        if ((songSnap.data() || {}).uid !== uid) return { ok: false, code: 403, reason: 'not_owner', message: '본인이 만든 곡만 보상받을 수 있어요' };
+        const cur = usnap.exists ? splitPools(usnap.data()) : { free: SIGNUP_BONUS, paid: 0, freeGranted: SIGNUP_BONUS, paidGranted: 0 };
+        if (ssnap.exists) return { ok: false, code: 200, reason: 'already', message: '이미 이 곡으로 보상받았어요', credits: cur.free + cur.paid };
+        cur.free += SHARE_REWARD;
+        cur.freeGranted += SHARE_REWARD;
+        t.set(uref, poolPatch(cur), { merge: true });
+        t.set(sref, { uid, songId, reward: SHARE_REWARD, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+        return { ok: true, credits: cur.free + cur.paid, credited: SHARE_REWARD };
       });
       if (!result.ok) {
-        return send(res, 429, { error: 'daily_cap', message: '오늘 광고 보상을 다 받았어요. 내일 또 받을 수 있어요!', credits: result.credits, remaining: 0 });
+        return send(res, result.code || 400, { error: result.reason, message: result.message, credits: result.credits });
       }
-      return send(res, 200, { ok: true, credits: result.credits, credited: AD_REWARD, remaining: result.remaining });
+      return send(res, 200, { ok: true, credits: result.credits, credited: SHARE_REWARD });
     } catch (e) {
-      return send(res, 500, { error: 'ad_reward_fail', message: '잠시 후 다시 시도해주세요' });
+      return send(res, 500, { error: 'share_reward_fail', message: '잠시 후 다시 시도해주세요' });
     }
   }
 
