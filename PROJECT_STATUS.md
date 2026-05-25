@@ -145,6 +145,22 @@ service cloud.firestore {
 
 ---
 
+## 10-1. 관리자 페이지 (admin.html) — v9.0 추가
+- **주소**: https://diss4u.com/admin.html (검색엔진 noindex)
+- **로그인**: 관리자 전용 아이디/비밀번호. 정적 사이트라 **검증은 전부 서버에서** 처리(프론트에 비번 없음).
+  - 비밀번호는 Firestore `admin/config`에 **scrypt 해시**로만 저장(평문/코드 하드코딩 없음).
+  - 로그인 성공 시 HMAC 서명 토큰(12h) 발급 → 이후 관리자 API는 `X-Admin-Token` 헤더 필요. 서명키가 현재 비번 해시 기반이라 **비번 변경 시 기존 토큰 자동 무효화**.
+- **초기 계정 시드**: Render 환경변수 **`ADMIN_USERNAME`**, **`ADMIN_INITIAL_PASSWORD`** 설정 → 첫 `/admin/login` 시 `admin/config` 1회 생성. (선택: `ADMIN_TOKEN_SECRET`로 서명키 강화)
+- **기능**: ① 회원 목록(구글 이메일/가입일/총 크레딧/가용 크레딧/무료 보유/충전 누적/충전 가용) ② 회원별 크레딧 증정(무료 풀 적립) ③ 관리자 비밀번호 변경.
+- **서버 엔드포인트**: `POST /admin/login`, `GET /admin/users`, `POST /admin/grant`, `POST /admin/change-password`.
+
+## 10-2. 크레딧 풀 분리 (무료/충전) — v9.0
+- `users/{uid}` 문서에 분리 필드 추가: `freeCredits`/`paidCredits`(현재 잔액), `freeGranted`/`paidGranted`(누적 지급). `credits = freeCredits + paidCredits`는 **항상 동기화**(프론트/규칙 호환).
+- **차감 순서: 무료 먼저, 부족분은 충전.** 환불은 역순(충전부터 복원).
+- 신규 보너스·관리자 증정 → 무료 풀. 결제 충전 → 충전 풀.
+- 구버전 문서(단일 `credits`)는 조회 시 전액 무료로 간주해 자동 백필.
+- 새 Firestore 컬렉션: `admin`(관리자 설정), `creditGrants`(증정 감사 로그). 둘 다 **서버 admin SDK 전용**(클라 접근은 규칙 기본 거부로 차단됨 — 규칙 변경 불필요).
+
 ## 11. 완성된 기능
 - 노래 생성(가사+곡), 입력 폼(이름/성별/관계/키워드/꼭넣을문장/장르/언어)
 - 욕설 마스킹(서버 `maskProfanity`)
