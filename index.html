@@ -1029,27 +1029,41 @@ async function buyPack(amount, credits) {
       return;
     }
     // 결제창 성공 → 서버에서 진위/금액 검증 후 적립
-    showToast('💎 결제 확인 중...');
+    chargeMsg('💎 결제 확인 중...');
     const token = await currentUser.getIdToken();
-    const vr = await fetch(getWorkerUrl() + '/verify-payment', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ paymentId: resp.paymentId || paymentId }),
-    });
-    const vd = await vr.json();
+    let vr, vd;
+    try {
+      vr = await fetch(getWorkerUrl() + '/verify-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ paymentId: resp.paymentId || paymentId }),
+      });
+      vd = await vr.json().catch(() => ({}));
+    } catch (netErr) {
+      chargeMsg('서버 연결 실패: ' + (netErr.message || netErr), true);
+      return;
+    }
     if (!vr.ok || !vd.ok) {
-      showError('결제는 됐지만 적립 확인이 안 됐어요. 잠시 후 새로고침하거나 문의해주세요.');
+      const detail = vd.message || vd.error || ('HTTP ' + vr.status);
+      const extra = vd.detail ? (' / ' + vd.detail) : (vd.status ? (' / ' + vd.status) : '');
+      chargeMsg('적립 실패: ' + detail + extra, true);
       return;
     }
     STATE.credits = vd.credits;
     updateCreditUI();
-    const bal = document.getElementById('chargeBalance');
-    if (bal) bal.textContent = `💎 현재 보유: ${STATE.credits}p`;
-    showToast(vd.already ? '이미 적립된 결제예요' : `✓ ${vd.credited}p 충전 완료!`);
-    setTimeout(closeChargeModal, 1200);
+    chargeMsg(vd.already ? '이미 적립된 결제예요' : `✓ ${vd.credited}p 충전 완료! (보유 ${vd.credits}p)`);
+    setTimeout(closeChargeModal, 1500);
   } catch (e) {
-    showError('결제 중 오류가 발생했어요: ' + (e.message || e));
+    chargeMsg('결제 중 오류: ' + (e.message || e), true);
   }
+}
+
+// 충전 모달 안에 메시지 표시 (모달이 errorBox를 가려서 별도로 보여줌)
+function chargeMsg(text, isError) {
+  const bal = document.getElementById('chargeBalance');
+  if (!bal) return;
+  bal.textContent = text;
+  bal.style.color = isError ? '#ff8a8a' : 'var(--text-dim)';
 }
 
 function loginGoogle() {
