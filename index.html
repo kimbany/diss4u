@@ -1914,12 +1914,12 @@ function drawLayeredCenter(ctx, cx, cy, orbR, bass, elapsed) {
   const beat = 1 + bass * 0.18;
   const bob = Math.sin(elapsed * 5) * (3 + bass * 12);
 
-  // 1) 사운드웨이브 프레임 — 천천히 회전 + 베이스에 따라 확대
+  // 1) 사운드웨이브 프레임 — 살짝 흔들림(좌우) + 베이스에 따라 확대
   if (LAYERS.wave) {
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate(elapsed * 0.25);
-    ctx.globalAlpha = 0.85;
+    ctx.rotate(Math.sin(elapsed * 0.9) * 0.06);
+    ctx.globalAlpha = 0.9;
     ctx.shadowColor = 'rgba(163,229,255,0.5)';
     ctx.shadowBlur = 18 + bass * 26;
     drawImgCentered(ctx, LAYERS.wave, 0, 0, orbR * 2.7 * (1 + bass * 0.12));
