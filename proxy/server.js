@@ -13,8 +13,25 @@ const CORS = {
 };
 
 // ===== 크레딧 시스템 =====
-const COST_PER_SONG = 10;   // 곡 1개 = 10포인트
-const SIGNUP_BONUS = 20;    // 신규가입 보너스 = 20포인트(2곡)
+const COST_PER_SONG = 10;     // 곡 1개 = 10포인트
+const SIGNUP_BONUS = 20;      // 신규가입 보너스 = 20포인트(2곡)
+const REFERRAL_REWARD = 10;   // 추천 보상 = 10포인트(1곡). 피추천인이 첫 곡을 만들면 추천인에게 지급
+const REFERRAL_MAX = 100;     // 추천 보상 누적 상한(어뷰징 방지)
+const AD_REWARD = 1;          // 광고 1회 시청 보상 = 1포인트
+const AD_DAILY_CAP = 3;       // 광고 보상 하루 최대 횟수
+
+// 한국(KST) 기준 YYYY-MM-DD (광고 일일 한도 리셋 기준)
+function kstDate() {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+// 추천 코드 생성 (혼동되는 0/O/1/I 제외 8자리)
+function genRefCode() {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let s = '';
+  for (let i = 0; i < 8; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return s;
+}
 
 // ===== 결제(충전) — 포트원 V2 =====
 // 결제 금액(원)당 적립 크레딧. 클라가 보낸 금액이 아니라 포트원에서 조회한 실결제액으로만 매칭한다.
@@ -59,18 +76,62 @@ async function verifyAuth(req) {
   }
 }
 
-// 유저 문서 조회 (없으면 신규 보너스 지급하며 생성)
+// 유저 문서 조회 (없으면 신규 보너스 지급하며 생성). 추천 코드도 함께 보장한다.
 async function getOrCreateUser(uid) {
   const ref = fdb.collection('users').doc(uid);
   const snap = await ref.get();
   if (!snap.exists) {
+    const refCode = genRefCode();
     await ref.set({
       credits: SIGNUP_BONUS,
+      refCode,
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
-    return { credits: SIGNUP_BONUS };
+    return { credits: SIGNUP_BONUS, refCode };
   }
-  return snap.data() || { credits: 0 };
+  const data = snap.data() || { credits: 0 };
+  // 기존 유저에 추천 코드가 없으면 보강
+  if (!data.refCode) {
+    data.refCode = genRefCode();
+    try { await ref.set({ refCode: data.refCode }, { merge: true }); } catch (e) {}
+  }
+  return data;
+}
+
+// 곡 생성 성공 시: songsMade 증가 + (첫 곡 & 추천 귀속됐으면) 추천인 보상 지급
+async function onSongMade(uid) {
+  if (!fdb || !uid) return;
+  const uref = fdb.collection('users').doc(uid);
+  let payTo = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(uref);
+      const d = snap.exists ? snap.data() : {};
+      const songsMade = d.songsMade || 0;
+      const patch = { songsMade: songsMade + 1 };
+      // 첫 곡이고, 추천인이 귀속돼 있고, 아직 보상 지급 전이면 추천인에게 보상 예약
+      if (songsMade === 0 && d.referredBy && !d.referralRewarded) {
+        patch.referralRewarded = true;
+        payTo = d.referredBy;
+      }
+      t.set(uref, patch, { merge: true });
+    });
+    if (payTo && payTo !== uid) {
+      const rref = fdb.collection('users').doc(payTo);
+      await fdb.runTransaction(async (t) => {
+        const rsnap = await t.get(rref);
+        if (!rsnap.exists) return;
+        const rd = rsnap.data();
+        const cnt = rd.referralCount || 0;
+        if (cnt >= REFERRAL_MAX) return; // 누적 상한 초과 시 보상 없음
+        t.set(rref, {
+          credits: (rd.credits || 0) + REFERRAL_REWARD,
+          referralCount: cnt + 1,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      });
+    }
+  } catch (e) { console.warn('onSongMade fail', e.message); }
 }
 
 // 트랜잭션으로 크레딧 차감 ({ ok, credits })
@@ -414,17 +475,85 @@ const server = http.createServer(async (req, res) => {
       credits_enabled: CREDITS_ENABLED,
       payments_enabled: CREDITS_ENABLED && !!process.env.PORTONE_V2_API_SECRET,
       cost_per_song: COST_PER_SONG,
-      signup_bonus: SIGNUP_BONUS
+      signup_bonus: SIGNUP_BONUS,
+      referral_reward: REFERRAL_REWARD,
+      ad_reward: AD_REWARD,
+      ad_daily_cap: AD_DAILY_CAP
     });
   }
 
-  // 내 크레딧 조회 (없으면 신규 보너스 지급)
+  // 내 크레딧 조회 (없으면 신규 보너스 지급). 추천 코드 / 광고 잔여 횟수도 함께 반환.
   if (path === '/me') {
     if (!CREDITS_ENABLED) return send(res, 200, { enabled: false, credits: null, cost: COST_PER_SONG });
     const uid = await verifyAuth(req);
     if (!uid) return send(res, 401, { error: 'auth_required', message: '로그인이 필요해요' });
     const u = await getOrCreateUser(uid);
-    return send(res, 200, { enabled: true, credits: u.credits || 0, cost: COST_PER_SONG });
+    const today = kstDate();
+    const adUsed = (u.adRewardDate === today) ? (u.adRewardCount || 0) : 0;
+    return send(res, 200, {
+      enabled: true,
+      credits: u.credits || 0,
+      cost: COST_PER_SONG,
+      refCode: u.refCode || null,
+      adReward: AD_REWARD,
+      adCap: AD_DAILY_CAP,
+      adRemaining: Math.max(0, AD_DAILY_CAP - adUsed)
+    });
+  }
+
+  // 추천 귀속: body { ref }. 신규(첫 곡 만들기 전) 유저만 1회 귀속. 보상은 첫 곡 생성 시 지급.
+  if (path === '/claim-referral' && req.method === 'POST') {
+    if (!CREDITS_ENABLED) return send(res, 200, { ok: false, reason: 'disabled' });
+    const uid = await verifyAuth(req);
+    if (!uid) return send(res, 401, { error: 'auth_required', message: '로그인이 필요해요' });
+    const { ref } = await readBody(req);
+    if (!ref || typeof ref !== 'string') return send(res, 200, { ok: false, reason: 'no_ref' });
+
+    const uref = fdb.collection('users').doc(uid);
+    const u = await getOrCreateUser(uid);
+    // 이미 귀속됐거나 / 이미 곡을 만든 유저 / 본인 코드면 무시
+    if (u.referredBy) return send(res, 200, { ok: false, reason: 'already' });
+    if ((u.songsMade || 0) > 0) return send(res, 200, { ok: false, reason: 'not_new' });
+    if (u.refCode === ref) return send(res, 200, { ok: false, reason: 'self' });
+
+    const q = await fdb.collection('users').where('refCode', '==', ref).limit(1).get();
+    if (q.empty) return send(res, 200, { ok: false, reason: 'invalid' });
+    const referrerUid = q.docs[0].id;
+    if (referrerUid === uid) return send(res, 200, { ok: false, reason: 'self' });
+
+    await uref.set({ referredBy: referrerUid }, { merge: true });
+    return send(res, 200, { ok: true });
+  }
+
+  // 광고 보상: 하루 AD_DAILY_CAP회까지 1회당 AD_REWARD 크레딧 지급(서버에서 한도 강제)
+  if (path === '/ad-reward' && req.method === 'POST') {
+    if (!CREDITS_ENABLED) return send(res, 400, { error: 'credits_disabled', message: '크레딧 시스템이 꺼져 있어요' });
+    const uid = await verifyAuth(req);
+    if (!uid) return send(res, 401, { error: 'auth_required', message: '로그인이 필요해요' });
+    await getOrCreateUser(uid); // 문서/추천코드 보장
+    const uref = fdb.collection('users').doc(uid);
+    const today = kstDate();
+    try {
+      const result = await fdb.runTransaction(async (t) => {
+        const snap = await t.get(uref);
+        const d = snap.exists ? snap.data() : { credits: SIGNUP_BONUS };
+        let count = (d.adRewardDate === today) ? (d.adRewardCount || 0) : 0;
+        if (count >= AD_DAILY_CAP) return { ok: false, credits: d.credits || 0 };
+        count += 1;
+        const credits = (d.credits || 0) + AD_REWARD;
+        t.set(uref, {
+          credits, adRewardDate: today, adRewardCount: count,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        return { ok: true, credits, remaining: AD_DAILY_CAP - count };
+      });
+      if (!result.ok) {
+        return send(res, 429, { error: 'daily_cap', message: '오늘 광고 보상을 다 받았어요. 내일 또 받을 수 있어요!', credits: result.credits, remaining: 0 });
+      }
+      return send(res, 200, { ok: true, credits: result.credits, credited: AD_REWARD, remaining: result.remaining });
+    } catch (e) {
+      return send(res, 500, { error: 'ad_reward_fail', message: '잠시 후 다시 시도해주세요' });
+    }
   }
 
   // 충전 상품 목록 (금액→크레딧). 프론트가 표시/결제요청에 사용.
@@ -556,11 +685,12 @@ const server = http.createServer(async (req, res) => {
       return send(res, r.status, text);
     }
 
-    // 제출 성공 → jobId 기록(비동기 실패 시 1회 환불용)
+    // 제출 성공 → jobId 기록(비동기 실패 시 1회 환불용) + 첫 곡이면 추천 보상 처리
     if (uid) {
       let jobId = null;
       try { const j = JSON.parse(text); jobId = j.jobId || j.job_id || j.id || (j.data && (j.data.jobId || j.data.job_id || j.data.id)); } catch (e) {}
       if (jobId) await recordJob(jobId, uid, COST_PER_SONG);
+      await onSongMade(uid);
     }
     return send(res, r.status, text);
   }

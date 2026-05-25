@@ -93,7 +93,7 @@ injectAdsenseLoader();
 const GENRE_NAMES = { hiphop:'힙합', ballad:'발라드', trot:'트로트', kpop:'K-pop', rock:'락', kids:'동요', lofi:'로파이', random:'랜덤' };
 
 function esc(s){ const d=document.createElement('div'); d.textContent=s==null?'':s; return d.innerHTML; }
-function appHomeUrl(){ const dir=location.origin+location.pathname.substring(0,location.pathname.lastIndexOf('/')+1); return dir+'index.html'; }
+function appHomeUrl(){ const dir=location.origin+location.pathname.substring(0,location.pathname.lastIndexOf('/')+1); const ref=new URLSearchParams(location.search).get('ref'); return dir+'index.html'+(ref?('?ref='+encodeURIComponent(ref)):''); }
 
 async function load() {
   const content = document.getElementById('content');
