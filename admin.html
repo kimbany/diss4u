@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Diss4U 관리자</title>
+<style>
+  :root {
+    --bg: #0e0f13; --panel: #171922; --panel2: #1f2230;
+    --line: #2a2e3d; --text: #e9ecf4; --dim: #9aa1b2;
+    --accent: #d4ff3a; --accent2: #7c5cff; --danger: #ff5a6a; --ok: #4cd07d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+  a { color: var(--accent2); }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px 80px; }
+  h1 { font-size: 20px; margin: 0; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+  .brand .tag { font-size: 12px; color: var(--dim); border: 1px solid var(--line); padding: 2px 8px; border-radius: 999px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 18px; }
+  .card h2 { font-size: 15px; margin: 0 0 14px; color: var(--accent); }
+  label { display: block; font-size: 12px; color: var(--dim); margin: 0 0 6px; }
+  input { width: 100%; background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 10px; padding: 11px 12px; font-size: 14px; outline: none; }
+  input:focus { border-color: var(--accent2); }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > .col { flex: 1 1 180px; margin-bottom: 12px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    background: var(--accent); color: #11131a; border: none; border-radius: 10px;
+    padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.secondary { background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
+  .btn.small { padding: 6px 12px; font-size: 13px; }
+  .btn.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  .msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+  .msg.err { color: var(--danger); } .msg.ok { color: var(--ok); }
+  .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+  .topbar .who { font-size: 13px; color: var(--dim); }
+  .hidden { display: none !important; }
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .search { max-width: 280px; }
+  .stat { font-size: 13px; color: var(--dim); }
+  .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 760px; }
+  th, td { padding: 11px 12px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--dim); font-weight: 600; font-size: 12px; background: var(--panel2); position: sticky; top: 0; }
+  tr:last-child td { border-bottom: none; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .email { font-weight: 600; }
+  .sub { color: var(--dim); font-size: 11px; }
+  .pill { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); color: var(--dim); }
+  .free { color: var(--accent); } .paid { color: var(--accent2); }
+  @media (max-width: 560px) { .wrap { padding: 16px 10px 60px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <h1>Diss4U 관리자</h1>
+    <span class="tag">admin</span>
+  </div>
+
+  <!-- 로그인 -->
+  <div id="loginCard" class="card" style="max-width:380px;">
+    <h2>로그인</h2>
+    <label for="username">아이디</label>
+    <input id="username" autocomplete="username" />
+    <div style="height:12px"></div>
+    <label for="password">비밀번호</label>
+    <input id="password" type="password" autocomplete="current-password" />
+    <div style="height:16px"></div>
+    <button class="btn" id="loginBtn" style="width:100%">로그인</button>
+    <div class="msg" id="loginMsg"></div>
+  </div>
+
+  <!-- 대시보드 -->
+  <div id="dash" class="hidden">
+    <div class="topbar">
+      <div class="who" id="whoami"></div>
+      <button class="btn secondary small" id="logoutBtn">로그아웃</button>
+    </div>
+
+    <!-- 회원 관리 -->
+    <div class="card">
+      <h2>회원 관리</h2>
+      <div class="toolbar">
+        <input class="search" id="search" placeholder="이메일 검색…" />
+        <button class="btn secondary small" id="reloadBtn">새로고침</button>
+        <span class="stat" id="memberStat"></span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>구글 아이디</th>
+              <th>가입 일자</th>
+              <th style="text-align:right">총 크레딧</th>
+              <th style="text-align:right">가용 가능</th>
+              <th style="text-align:right">무료 보유</th>
+              <th style="text-align:right">충전(누적)</th>
+              <th style="text-align:right">충전 가용</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="memberRows">
+            <tr><td colspan="8" style="color:var(--dim)">불러오는 중…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="msg" id="memberMsg"></div>
+    </div>
+
+    <!-- 비밀번호 변경 -->
+    <div class="card" style="max-width:420px;">
+      <h2>관리자 비밀번호 변경</h2>
+      <label for="curPw">현재 비밀번호</label>
+      <input id="curPw" type="password" autocomplete="current-password" />
+      <div style="height:12px"></div>
+      <label for="newPw">새 비밀번호 (8자 이상)</label>
+      <input id="newPw" type="password" autocomplete="new-password" />
+      <div style="height:12px"></div>
+      <label for="newPw2">새 비밀번호 확인</label>
+      <input id="newPw2" type="password" autocomplete="new-password" />
+      <div style="height:16px"></div>
+      <button class="btn" id="pwBtn">비밀번호 변경</button>
+      <div class="msg" id="pwMsg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = (function () {
+  // index.html과 동일한 프록시. ?api= 로 임시 변경 가능(개발용).
+  const q = new URLSearchParams(location.search).get('api');
+  if (q) return q.replace(/\/$/, '');
+  return 'https://chinolsong-proxy.onrender.com';
+})();
+
+const TOKEN_KEY = 'diss4u_admin_token';
+let TOKEN = sessionStorage.getItem(TOKEN_KEY) || '';
+let ADMIN_USER = sessionStorage.getItem('diss4u_admin_user') || '';
+let MEMBERS = [];
+
+const $ = (id) => document.getElementById(id);
+function setMsg(el, text, kind) { el.textContent = text || ''; el.className = 'msg' + (kind ? ' ' + kind : ''); }
+
+async function api(path, opts = {}) {
+  const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+  if (TOKEN) headers['X-Admin-Token'] = TOKEN;
+  const r = await fetch(API + path, { method: opts.method || 'GET', headers, body: opts.body });
+  let data = {};
+  try { data = await r.json(); } catch (e) {}
+  return { ok: r.ok, status: r.status, data };
+}
+
+function showDash() {
+  $('loginCard').classList.add('hidden');
+  $('dash').classList.remove('hidden');
+  $('whoami').textContent = '관리자: ' + (ADMIN_USER || '');
+  loadMembers();
+}
+function showLogin() {
+  $('dash').classList.add('hidden');
+  $('loginCard').classList.remove('hidden');
+}
+
+// ===== 로그인 =====
+async function doLogin() {
+  const username = $('username').value.trim();
+  const password = $('password').value;
+  if (!username || !password) { setMsg($('loginMsg'), '아이디와 비밀번호를 입력하세요', 'err'); return; }
+  $('loginBtn').disabled = true; setMsg($('loginMsg'), '확인 중…');
+  try {
+    const r = await api('/admin/login', { method: 'POST', body: JSON.stringify({ username, password }) });
+    if (!r.ok || !r.data.ok) { setMsg($('loginMsg'), r.data.message || '로그인 실패', 'err'); return; }
+    TOKEN = r.data.token; ADMIN_USER = r.data.username || username;
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    sessionStorage.setItem('diss4u_admin_user', ADMIN_USER);
+    $('password').value = '';
+    showDash();
+  } catch (e) {
+    setMsg($('loginMsg'), '서버에 연결할 수 없어요', 'err');
+  } finally { $('loginBtn').disabled = false; }
+}
+
+function logout() {
+  TOKEN = ''; ADMIN_USER = '';
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem('diss4u_admin_user');
+  showLogin();
+}
+
+// ===== 회원 목록 =====
+function fmtDate(s) {
+  if (!s) return '-';
+  const d = new Date(s);
+  if (isNaN(d)) return s;
+  const p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+function renderMembers() {
+  const q = $('search').value.trim().toLowerCase();
+  const rows = MEMBERS.filter(m => !q || (m.email || '').toLowerCase().includes(q));
+  $('memberStat').textContent = `총 ${MEMBERS.length}명` + (q ? ` · 검색 ${rows.length}명` : '');
+  if (!rows.length) {
+    $('memberRows').innerHTML = '<tr><td colspan="8" style="color:var(--dim)">회원이 없어요</td></tr>';
+    return;
+  }
+  $('memberRows').innerHTML = rows.map(m => `
+    <tr>
+      <td><div class="email">${escapeHtml(m.email || '(이메일 없음)')}</div><div class="sub">${m.uid}</div></td>
+      <td>${fmtDate(m.signupAt)}</td>
+      <td class="num">${m.totalCredits}</td>
+      <td class="num"><b>${m.availableCredits}</b></td>
+      <td class="num free">${m.freeCredits}</td>
+      <td class="num paid">${m.paidGranted}</td>
+      <td class="num paid">${m.paidCredits}</td>
+      <td style="text-align:right"><button class="btn small" data-uid="${m.uid}" data-email="${escapeHtml(m.email || '')}">크레딧 증정</button></td>
+    </tr>`).join('');
+  document.querySelectorAll('#memberRows button[data-uid]').forEach(b => {
+    b.addEventListener('click', () => grant(b.getAttribute('data-uid'), b.getAttribute('data-email')));
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function loadMembers() {
+  setMsg($('memberMsg'), '');
+  $('memberRows').innerHTML = '<tr><td colspan="8" style="color:var(--dim)">불러오는 중…</td></tr>';
+  const r = await api('/admin/users');
+  if (r.status === 401) { logout(); setMsg($('loginMsg'), '세션이 만료됐어요. 다시 로그인하세요', 'err'); return; }
+  if (!r.ok || !r.data.ok) { setMsg($('memberMsg'), r.data.message || '회원 목록을 불러오지 못했어요', 'err'); $('memberRows').innerHTML = ''; return; }
+  MEMBERS = r.data.users || [];
+  renderMembers();
+}
+
+// ===== 크레딧 증정 =====
+async function grant(uid, email) {
+  const label = email || uid;
+  const input = prompt(`'${label}' 님에게 증정할 크레딧(포인트)을 입력하세요.\n(무료 크레딧으로 적립됩니다)`, '10');
+  if (input === null) return;
+  const amount = Math.floor(Number(input));
+  if (!Number.isFinite(amount) || amount <= 0) { alert('1 이상의 숫자를 입력하세요'); return; }
+  setMsg($('memberMsg'), '증정 중…');
+  const r = await api('/admin/grant', { method: 'POST', body: JSON.stringify({ uid, amount }) });
+  if (r.status === 401) { logout(); return; }
+  if (!r.ok || !r.data.ok) { setMsg($('memberMsg'), r.data.message || '증정 실패', 'err'); return; }
+  setMsg($('memberMsg'), `✓ ${label} 님에게 ${r.data.granted}p 증정 완료 (현재 잔액 ${r.data.credits}p)`, 'ok');
+  loadMembers();
+}
+
+// ===== 비밀번호 변경 =====
+async function changePw() {
+  const cur = $('curPw').value, np = $('newPw').value, np2 = $('newPw2').value;
+  if (!cur || !np) { setMsg($('pwMsg'), '현재/새 비밀번호를 입력하세요', 'err'); return; }
+  if (np.length < 8) { setMsg($('pwMsg'), '새 비밀번호는 8자 이상이어야 해요', 'err'); return; }
+  if (np !== np2) { setMsg($('pwMsg'), '새 비밀번호 확인이 일치하지 않아요', 'err'); return; }
+  $('pwBtn').disabled = true; setMsg($('pwMsg'), '변경 중…');
+  const r = await api('/admin/change-password', { method: 'POST', body: JSON.stringify({ currentPassword: cur, newPassword: np }) });
+  $('pwBtn').disabled = false;
+  if (r.status === 401 && r.data.error === 'admin_auth_required') { logout(); return; }
+  if (!r.ok || !r.data.ok) { setMsg($('pwMsg'), r.data.message || '변경 실패', 'err'); return; }
+  if (r.data.token) { TOKEN = r.data.token; sessionStorage.setItem(TOKEN_KEY, TOKEN); }
+  $('curPw').value = ''; $('newPw').value = ''; $('newPw2').value = '';
+  setMsg($('pwMsg'), '✓ 비밀번호가 변경되었어요', 'ok');
+}
+
+// ===== 이벤트 =====
+$('loginBtn').addEventListener('click', doLogin);
+$('password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+$('username').addEventListener('keydown', e => { if (e.key === 'Enter') $('password').focus(); });
+$('logoutBtn').addEventListener('click', logout);
+$('reloadBtn').addEventListener('click', loadMembers);
+$('search').addEventListener('input', renderMembers);
+$('pwBtn').addEventListener('click', changePw);
+
+// 시작: 토큰 있으면 대시보드 시도
+if (TOKEN) { showDash(); } else { showLogin(); }
+</script>
+</body>
+</html>
