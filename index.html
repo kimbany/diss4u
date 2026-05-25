@@ -11,6 +11,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js"></script>
+<script src="https://cdn.portone.io/v2/browser-sdk.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
@@ -273,6 +274,17 @@
     text-align: center; color: var(--text-dimmer); font-size: 11px;
     margin-top: 12px;
   }
+
+  /* === 사업자 정보 푸터 === */
+  .biz-footer {
+    margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--border);
+    text-align: center; color: var(--text-dimmer); font-size: 11px; line-height: 1.8;
+  }
+  .biz-footer .biz-brand {
+    font-family: 'Black Han Sans', sans-serif; font-size: 14px;
+    color: var(--text-dim); margin-bottom: 6px;
+  }
+  .biz-footer .biz-line { word-break: keep-all; }
 
   /* === LOADING SCREEN === */
   .loading-wrap {
@@ -715,6 +727,15 @@
     <div class="section-title">🎵 내가 만든 곡</div>
     <div class="history-list" id="myListContainer"></div>
   </div>
+
+  <!-- ===== 사업자 정보 (전자상거래법 표기) ===== -->
+  <footer class="biz-footer">
+    <div class="biz-brand">Diss4U</div>
+    <div class="biz-line">대표 김바니 · 사업자등록번호 228-70-00668</div>
+    <div class="biz-line">상호 bodyhack · 통신판매업신고 제2024-경기김포-8528호</div>
+    <div class="biz-line">주소 경기도 김포시 전원로 27, 102동 303호</div>
+    <div class="biz-line">문의 imenupp@gmail.com</div>
+  </footer>
 </div>
 
 <!-- ===== SETTINGS MODAL ===== -->
@@ -728,6 +749,18 @@
       <div class="label">🌐 Worker 주소</div>
       <input class="input" type="text" id="workerUrl" placeholder="https://...workers.dev">
     </div>
+    <div class="field" style="margin-top:12px;">
+      <div class="label">💎 PortOne storeId</div>
+      <input class="input" type="text" id="poStoreId" placeholder="store-...">
+    </div>
+    <div class="field" style="margin-top:12px;">
+      <div class="label">💳 카드 채널키</div>
+      <input class="input" type="text" id="poCardChannel" placeholder="channel-key-...">
+    </div>
+    <div class="field" style="margin-top:12px;">
+      <div class="label">카카오페이 채널키 (선택)</div>
+      <input class="input" type="text" id="poKakaoChannel" placeholder="channel-key-... (없으면 비움)">
+    </div>
     <div class="modal-desc" style="margin-top: 14px;">
       💡 일반 사용자 모드로 돌아가려면 URL에서 ?dev=1 을 빼고 새로고침하세요.
     </div>
@@ -735,6 +768,28 @@
       <button class="btn-secondary" onclick="closeSettings()">취소</button>
       <button class="btn-secondary" onclick="saveSettings()" style="background: var(--lime); color: #1a1a1f; border-color: var(--lime); font-weight: 700;">저장</button>
     </div>
+  </div>
+</div>
+
+<!-- ===== CHARGE (CREDIT TOP-UP) MODAL ===== -->
+<div class="modal-overlay" id="chargeModal">
+  <div class="modal">
+    <div class="modal-title">💎 크레딧 충전</div>
+    <div class="modal-desc">
+      충전한 크레딧으로 노래를 만들 수 있어요. <b>1곡 = 10p</b>
+    </div>
+    <div id="chargeBalance" style="font-size:13px;color:var(--text-dim);margin-bottom:16px;"></div>
+    <div id="packList" style="display:flex;flex-direction:column;gap:10px;">
+      <div style="color:var(--text-dim);text-align:center;padding:24px 0;">상품 불러오는 중...</div>
+    </div>
+    <div id="chargeMethod" style="display:none;margin-top:16px;">
+      <div class="label" style="margin-bottom:8px;">결제 수단</div>
+      <div class="action-grid">
+        <button class="btn-secondary" id="payCardBtn" onclick="setPayMethod('card')">💳 카드</button>
+        <button class="btn-secondary" id="payKakaoBtn" onclick="setPayMethod('kakaopay')">카카오페이</button>
+      </div>
+    </div>
+    <button class="btn-secondary" onclick="closeChargeModal()" style="margin-top:18px;width:100%;">닫기</button>
   </div>
 </div>
 
@@ -769,6 +824,21 @@
 
 <script>
 const DEFAULT_WORKER_URL = 'https://chinolsong-proxy.onrender.com';
+
+// === 포트원(PortOne) V2 결제 설정 ===
+// 포트원 콘솔에서 발급받은 값으로 채우세요. (storeId / channelKey는 공개돼도 됨)
+// 카카오페이를 쓰려면 카카오페이 채널키를 PORTONE_KAKAO_CHANNEL_KEY에 넣으세요. (없으면 카드만 노출)
+const PORTONE_STORE_ID = 'store-14235e27-357d-47da-83f1-edb607e47001';     // 실제 storeId
+const PORTONE_CARD_CHANNEL_KEY = 'channel-key-1a5f0653-764c-4074-8518-c92a82f240eb';      // 카드(토스페이먼츠) 채널키
+const PORTONE_KAKAO_CHANNEL_KEY = '';                                      // TODO: 카카오페이 채널키 (선택)
+// 개발 중 ?dev=1 에서 localStorage로 덮어쓸 수 있음
+function portoneCfg() {
+  return {
+    storeId: localStorage.getItem('po_storeId') || PORTONE_STORE_ID,
+    card: localStorage.getItem('po_cardChannel') || PORTONE_CARD_CHANNEL_KEY,
+    kakao: localStorage.getItem('po_kakaoChannel') || PORTONE_KAKAO_CHANNEL_KEY,
+  };
+}
 
 // === Firebase 구글 로그인 ===
 const firebaseConfig = {
@@ -870,10 +940,115 @@ function updateCreditUI() {
 }
 
 function onCreditBadgeClick() {
-  if (STATE.credits != null && STATE.credits < STATE.costPerSong) {
-    showToast('💎 크레딧이 부족해요 — 충전 기능 준비중이에요');
-  } else {
-    showToast(`💎 보유 크레딧 ${STATE.credits}p (1곡 ${STATE.costPerSong}p)`);
+  openChargeModal();
+}
+
+// ===== 충전(결제) =====
+let SELECTED_PAY_METHOD = 'card';
+
+async function openChargeModal() {
+  if (!currentUser) { showError('충전하려면 구글 로그인 먼저!'); loginGoogle(); return; }
+  document.getElementById('chargeModal').classList.add('active');
+  const bal = document.getElementById('chargeBalance');
+  if (bal) bal.textContent = (typeof STATE.credits === 'number') ? `💎 현재 보유: ${STATE.credits}p` : '';
+  // 결제수단 버튼: 카카오 채널키 있을 때만 카카오페이 노출
+  const cfg = portoneCfg();
+  const methodWrap = document.getElementById('chargeMethod');
+  const kakaoBtn = document.getElementById('payKakaoBtn');
+  if (kakaoBtn) kakaoBtn.style.display = cfg.kakao ? '' : 'none';
+  if (methodWrap) methodWrap.style.display = '';
+  setPayMethod('card');
+  await loadPacks();
+}
+
+function closeChargeModal() {
+  document.getElementById('chargeModal').classList.remove('active');
+}
+
+function setPayMethod(m) {
+  SELECTED_PAY_METHOD = m;
+  const card = document.getElementById('payCardBtn');
+  const kakao = document.getElementById('payKakaoBtn');
+  [['card', card], ['kakaopay', kakao]].forEach(([key, btn]) => {
+    if (!btn) return;
+    const on = (key === m);
+    btn.style.background = on ? 'var(--lime)' : '';
+    btn.style.color = on ? '#1a1a1f' : '';
+    btn.style.borderColor = on ? 'var(--lime)' : '';
+    btn.style.fontWeight = on ? '700' : '';
+  });
+}
+
+async function loadPacks() {
+  const list = document.getElementById('packList');
+  try {
+    const r = await fetch(getWorkerUrl() + '/packs');
+    const d = await r.json();
+    if (!d.enabled) {
+      list.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:24px 0;">결제 기능 준비 중이에요 🙏</div>';
+      return;
+    }
+    list.innerHTML = d.packs.map(p => `
+      <button class="btn-secondary pack-btn" onclick="buyPack(${p.amount}, ${p.credits})"
+        style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;text-align:left;">
+        <span><b style="font-size:15px;">${p.credits}p</b> <span style="color:var(--text-dim);font-size:12px;">· 약 ${p.songs}곡</span></span>
+        <span style="font-weight:700;color:var(--lime);">₩${p.amount.toLocaleString()}</span>
+      </button>
+    `).join('');
+  } catch (e) {
+    list.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:24px 0;">상품을 불러오지 못했어요. 잠시 후 다시 시도해주세요.</div>';
+  }
+}
+
+async function buyPack(amount, credits) {
+  if (!currentUser) { showError('로그인이 필요해요'); return; }
+  if (!window.PortOne) { showError('결제 모듈 로딩 중이에요. 잠시 후 다시 시도해주세요.'); return; }
+  const cfg = portoneCfg();
+  if (!cfg.storeId || cfg.storeId.startsWith('store-0000') || !cfg.card) {
+    showError('결제 설정이 아직 안 됐어요 (관리자 설정 필요)');
+    return;
+  }
+  const isKakao = (SELECTED_PAY_METHOD === 'kakaopay' && cfg.kakao);
+  const paymentId = 'pay-' + currentUser.uid.slice(0, 8) + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+  try {
+    const req = {
+      storeId: cfg.storeId,
+      channelKey: isKakao ? cfg.kakao : cfg.card,
+      paymentId,
+      orderName: `Diss4U 크레딧 ${credits}p`,
+      totalAmount: amount,
+      currency: 'CURRENCY_KRW',
+      payMethod: isKakao ? 'EASY_PAY' : 'CARD',
+      customData: JSON.stringify({ uid: currentUser.uid }),
+    };
+    const resp = await PortOne.requestPayment(req);
+    if (resp.code != null) {
+      // 사용자가 취소했거나 결제 실패
+      if (!/cancel|취소/i.test(resp.message || '')) showError('결제 실패: ' + (resp.message || resp.code));
+      return;
+    }
+    // 결제창 성공 → 서버에서 진위/금액 검증 후 적립
+    showToast('💎 결제 확인 중...');
+    const token = await currentUser.getIdToken();
+    const vr = await fetch(getWorkerUrl() + '/verify-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ paymentId: resp.paymentId || paymentId }),
+    });
+    const vd = await vr.json();
+    if (!vr.ok || !vd.ok) {
+      showError('결제는 됐지만 적립 확인이 안 됐어요. 잠시 후 새로고침하거나 문의해주세요.');
+      return;
+    }
+    STATE.credits = vd.credits;
+    updateCreditUI();
+    const bal = document.getElementById('chargeBalance');
+    if (bal) bal.textContent = `💎 현재 보유: ${STATE.credits}p`;
+    showToast(vd.already ? '이미 적립된 결제예요' : `✓ ${vd.credited}p 충전 완료!`);
+    setTimeout(closeChargeModal, 1200);
+  } catch (e) {
+    showError('결제 중 오류가 발생했어요: ' + (e.message || e));
   }
 }
 
@@ -1026,6 +1201,10 @@ function getWorkerUrl() {
 
 function openSettings() {
   document.getElementById('workerUrl').value = getWorkerUrl();
+  const cfg = portoneCfg();
+  document.getElementById('poStoreId').value = cfg.storeId.startsWith('store-0000') ? '' : cfg.storeId;
+  document.getElementById('poCardChannel').value = cfg.card.startsWith('channel-key-card-0000') ? '' : cfg.card;
+  document.getElementById('poKakaoChannel').value = cfg.kakao || '';
   document.getElementById('settingsModal').classList.add('active');
 }
 function closeSettings() {
@@ -1039,6 +1218,10 @@ function saveSettings() {
   } else {
     localStorage.removeItem('workerUrl');
   }
+  const setOrClear = (key, val) => { val ? localStorage.setItem(key, val) : localStorage.removeItem(key); };
+  setOrClear('po_storeId', document.getElementById('poStoreId').value.trim());
+  setOrClear('po_cardChannel', document.getElementById('poCardChannel').value.trim());
+  setOrClear('po_kakaoChannel', document.getElementById('poKakaoChannel').value.trim());
   closeSettings();
   showToast('✓ 설정이 저장되었어요');
 }
@@ -1046,7 +1229,8 @@ function saveSettings() {
 async function startGeneration() {
   if (!currentUser) { showError('노래 만들려면 구글 로그인 먼저!'); loginGoogle(); return; }
   if (STATE.creditsEnabled && STATE.credits != null && STATE.credits < STATE.costPerSong) {
-    showError('💎 크레딧이 부족해요. (충전 기능은 곧 추가돼요)');
+    showError('💎 크레딧이 부족해요. 충전 후 다시 시도해주세요.');
+    openChargeModal();
     return;
   }
   const name = document.getElementById('targetName').value.trim();
@@ -1147,7 +1331,8 @@ async function callWorker(path, body) {
   if (response.status === 402) {
     const err = await response.json().catch(() => ({}));
     if (typeof err.credits === 'number') { STATE.credits = err.credits; updateCreditUI(); }
-    throw new Error('💎 크레딧이 부족해요. (충전 기능은 곧 추가돼요)');
+    openChargeModal();
+    throw new Error('💎 크레딧이 부족해요. 충전 후 다시 시도해주세요.');
   }
 
   if (!response.ok) {
