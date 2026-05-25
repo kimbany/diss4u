@@ -963,6 +963,15 @@ auth.onAuthStateChanged(user => {
 // 서버에서 내 크레딧 잔액 조회 → UI 갱신
 async function fetchCredits() {
   if (!currentUser) { STATE.credits = null; updateCreditUI(); return; }
+  // 콜드스타트로 서버가 느릴 때를 대비해, 직전에 저장해둔 잔액을 먼저 즉시 표시
+  try {
+    const cached = localStorage.getItem('diss4u_cred_' + currentUser.uid);
+    if (cached !== null && cached !== '' && STATE.credits == null) {
+      STATE.creditsEnabled = true;
+      STATE.credits = parseInt(cached, 10);
+      updateCreditUI();
+    }
+  } catch (e) {}
   try {
     const token = await currentUser.getIdToken();
     const r = await fetch(getWorkerUrl() + '/me', { headers: { 'Authorization': 'Bearer ' + token } });
@@ -1013,6 +1022,8 @@ function updateCreditUI() {
     badge.style.display = 'flex';
     const usage = document.querySelector('.usage-info');
     if (usage) usage.textContent = `💎 보유 ${STATE.credits}p · 1곡 = ${STATE.costPerSong}p`;
+    // 다음 새로고침 때 즉시 표시할 수 있도록 잔액 저장
+    try { localStorage.setItem('diss4u_cred_' + currentUser.uid, String(STATE.credits)); } catch (e) {}
   } else {
     badge.style.display = 'none';
   }
