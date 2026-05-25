@@ -275,6 +275,13 @@
     margin-top: 12px;
   }
 
+  /* === 광고 === */
+  .ad-slot { margin-top: 28px; min-height: 0; }
+  .ad-slot .ad-label {
+    font-size: 10px; color: var(--text-dimmer); text-align: center;
+    letter-spacing: 1px; margin-bottom: 4px;
+  }
+
   /* === 사업자 정보 푸터 === */
   .biz-footer {
     margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--border);
@@ -719,6 +726,8 @@
       <button class="btn-secondary" onclick="copyLyrics()">📋 가사 복사</button>
       <button class="btn-secondary" onclick="newSong()">✨ 새 노래</button>
     </div>
+
+    <div class="ad-slot" id="adResult"></div>
   </div>
 
   <!-- ===== MY SONG LIST SCREEN ===== -->
@@ -824,6 +833,28 @@
 
 <script>
 const DEFAULT_WORKER_URL = 'https://chinolsong-proxy.onrender.com';
+
+// === 구글 애드센스 ===
+// 가입 후 게시자 ID와 광고 슬롯 ID를 채우면 자동으로 광고가 표시됩니다. (비워두면 광고 안 나옴)
+const ADSENSE_CLIENT = '';            // 예: 'ca-pub-1234567890123456'
+const AD_SLOT_RESULT = '';            // 결과 화면 광고 슬롯 ID (애드센스에서 광고 단위 생성 후)
+function adsEnabled() { return /^ca-pub-\d+$/.test(ADSENSE_CLIENT); }
+function injectAdsenseLoader() {
+  if (!adsEnabled() || document.getElementById('adsbygoogle-js')) return;
+  const s = document.createElement('script');
+  s.id = 'adsbygoogle-js'; s.async = true; s.crossOrigin = 'anonymous';
+  s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + ADSENSE_CLIENT;
+  document.head.appendChild(s);
+}
+function mountAd(containerId, slot) {
+  if (!adsEnabled() || !slot) return;
+  const c = document.getElementById(containerId);
+  if (!c || c.dataset.loaded) return;
+  c.dataset.loaded = '1';
+  c.innerHTML = `<div class="ad-label">광고</div>`
+    + `<ins class="adsbygoogle" style="display:block" data-ad-client="${ADSENSE_CLIENT}" data-ad-slot="${slot}" data-ad-format="auto" data-full-width-responsive="true"></ins>`;
+  try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch (e) {}
+}
 
 // === 포트원(PortOne) V2 결제 설정 ===
 // 포트원 콘솔에서 발급받은 값으로 채우세요. (storeId / channelKey는 공개돼도 됨)
@@ -1164,6 +1195,7 @@ const LANG_NAMES = { ko: '한국어', en: 'English', mix: '한+영' };
 const AVATAR_COLORS = ['c1', 'c2', 'c3', 'c4'];
 
 window.addEventListener('load', () => {
+  injectAdsenseLoader();
   const params = new URLSearchParams(window.location.search);
   STATE.isDev = params.get('dev') === '1';
   if (STATE.isDev) {
@@ -1493,6 +1525,7 @@ function showResult() {
     wrap.style.display = 'block';
   }
   showScreen('result');
+  mountAd('adResult', AD_SLOT_RESULT);
 }
 
 function newSong() {

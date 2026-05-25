@@ -34,6 +34,8 @@
   .site-footer-line { word-break:keep-all; }
   .site-footer a { color:var(--dim); text-decoration:none; }
   .site-footer a:hover { color:var(--lime); }
+  .ad-slot { margin:24px 0; }
+  .ad-slot .ad-label { font-size:10px; color:#5a5a65; text-align:center; letter-spacing:1px; margin-bottom:4px; }
 </style>
 </head>
 <body>
@@ -64,6 +66,28 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
+// === 구글 애드센스 (index.html과 동일한 게시자 ID 사용) ===
+const ADSENSE_CLIENT = '';            // 예: 'ca-pub-1234567890123456'
+const AD_SLOT_SHARE = '';             // 공유 페이지 광고 슬롯 ID
+function adsEnabled(){ return /^ca-pub-\d+$/.test(ADSENSE_CLIENT); }
+function injectAdsenseLoader(){
+  if(!adsEnabled() || document.getElementById('adsbygoogle-js')) return;
+  const s=document.createElement('script');
+  s.id='adsbygoogle-js'; s.async=true; s.crossOrigin='anonymous';
+  s.src='https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client='+ADSENSE_CLIENT;
+  document.head.appendChild(s);
+}
+function mountAd(containerId, slot){
+  if(!adsEnabled() || !slot) return;
+  const c=document.getElementById(containerId);
+  if(!c || c.dataset.loaded) return;
+  c.dataset.loaded='1';
+  c.innerHTML = '<div class="ad-label">광고</div>'
+    + '<ins class="adsbygoogle" style="display:block" data-ad-client="'+ADSENSE_CLIENT+'" data-ad-slot="'+slot+'" data-ad-format="auto" data-full-width-responsive="true"></ins>';
+  try{ (window.adsbygoogle=window.adsbygoogle||[]).push({}); }catch(e){}
+}
+injectAdsenseLoader();
+
 const GENRE_NAMES = { hiphop:'힙합', ballad:'발라드', trot:'트로트', kpop:'K-pop', rock:'락', kids:'동요', lofi:'로파이', random:'랜덤' };
 
 function esc(s){ const d=document.createElement('div'); d.textContent=s==null?'':s; return d.innerHTML; }
@@ -91,7 +115,9 @@ async function load() {
       <div class="sec">가사</div>
       <div class="lyrics">${esc(s.lyrics)}</div>
       <a class="cta" href="${appHomeUrl()}">🎤 나도 Diss4U 만들기</a>
+      <div class="ad-slot" id="adShare"></div>
     `;
+    mountAd('adShare', AD_SLOT_SHARE);
   } catch (e) {
     console.warn(e);
     content.innerHTML = '<div class="state">불러오기 실패 😢<br>잠시 후 다시 시도해주세요.</div>';
