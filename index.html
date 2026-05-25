@@ -1,0 +1,1818 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Diss4U 🎤 AI 친구 놀리는 노래</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Pretendard:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --bg: #0d0d10;
+    --bg-card: #1a1a1f;
+    --bg-card-2: #232329;
+    --lime: #d4ff3a;
+    --lime-dim: #a3cc2e;
+    --pink: #ffb3d9;
+    --purple: #c5a3ff;
+    --cyan: #a3e5ff;
+    --orange: #ffc89e;
+    --text: #ffffff;
+    --text-dim: #8a8a99;
+    --text-dimmer: #5a5a65;
+    --border: #2a2a32;
+    --radius-sm: 12px;
+    --radius-md: 18px;
+    --radius-lg: 24px;
+    --radius-xl: 32px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    line-height: 1.5;
+  }
+
+  /* Background ambient effect */
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 10%, rgba(212, 255, 58, 0.06) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 50% at 90% 80%, rgba(197, 163, 255, 0.05) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 30% at 50% 50%, rgba(255, 179, 217, 0.03) 0%, transparent 70%);
+  }
+
+  .container {
+    max-width: 480px; margin: 0 auto; padding: 24px 20px 60px;
+    position: relative; z-index: 1;
+  }
+
+  /* === HEADER === */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 32px; padding-top: 16px;
+  }
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .header-orb {
+    width: 44px; height: 44px; border-radius: 50%; position: relative;
+    background: conic-gradient(from 0deg,
+      var(--lime) 0deg,
+      var(--cyan) 90deg,
+      var(--purple) 180deg,
+      var(--pink) 270deg,
+      var(--lime) 360deg);
+    animation: orbSpin 8s linear infinite;
+    box-shadow: 0 0 20px rgba(212, 255, 58, 0.3);
+  }
+  .header-orb::after {
+    content: ''; position: absolute; inset: 4px; border-radius: 50%;
+    background: var(--bg);
+  }
+  .header-orb::before {
+    content: '🎤'; position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; z-index: 1;
+  }
+  @keyframes orbSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .brand {
+    font-family: 'Black Han Sans', sans-serif;
+    font-size: 24px; letter-spacing: -1px; line-height: 1;
+  }
+  .brand-en {
+    font-family: 'Inter', sans-serif; font-weight: 600;
+    font-size: 10px; letter-spacing: 2px;
+    color: var(--text-dim); margin-top: 2px;
+  }
+  .header-status {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--bg-card); border-radius: 999px;
+    padding: 6px 12px; font-size: 12px; color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+  .status-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--lime);
+    box-shadow: 0 0 8px var(--lime);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .settings-icon {
+    background: var(--bg-card); border: 1px solid var(--border);
+    width: 36px; height: 36px; border-radius: 50%;
+    display: none; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--text-dim); font-size: 16px;
+    transition: all 0.15s; position: absolute; top: 24px; right: 70px;
+  }
+  .settings-icon.show { display: flex; }
+  .settings-icon:hover { color: var(--lime); border-color: var(--lime); }
+
+  /* === HERO SECTION === */
+  .hero {
+    margin-bottom: 32px;
+  }
+  .hero-greeting {
+    font-size: 14px; color: var(--text-dim); margin-bottom: 8px;
+    font-weight: 500;
+  }
+  .hero-title {
+    font-size: 32px; line-height: 1.2; font-weight: 800;
+    background: linear-gradient(135deg, #ffffff 0%, #c5a3ff 100%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -1px;
+  }
+  .hero-emoji {
+    display: inline-block; transform-origin: 70% 70%;
+    animation: wave 2.5s ease-in-out infinite;
+  }
+  @keyframes wave {
+    0%, 60%, 100% { transform: rotate(0deg); }
+    10%, 30% { transform: rotate(14deg); }
+    20%, 40% { transform: rotate(-8deg); }
+    50% { transform: rotate(10deg); }
+  }
+
+  /* === SCREENS === */
+  .screen { display: none; animation: fadeIn 0.4s; }
+  .screen.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* === SECTION === */
+  .section-title {
+    font-size: 13px; font-weight: 600; color: var(--text-dim);
+    margin-bottom: 12px; letter-spacing: 0.5px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .section-title .see-all {
+    font-size: 12px; color: var(--lime); cursor: pointer;
+  }
+
+  /* === INPUT CARD === */
+  .input-card {
+    background: var(--bg-card); border-radius: var(--radius-lg);
+    padding: 20px; margin-bottom: 16px;
+    border: 1px solid var(--border);
+  }
+  .field { margin-bottom: 18px; }
+  .field:last-child { margin-bottom: 0; }
+  .label {
+    font-size: 12px; font-weight: 600; color: var(--text-dim);
+    margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+    letter-spacing: 0.3px;
+  }
+  .label-icon {
+    width: 20px; height: 20px; border-radius: 6px;
+    background: var(--bg-card-2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+  }
+  .input, .textarea {
+    width: 100%; background: var(--bg-card-2); border: 1px solid transparent;
+    color: var(--text); padding: 14px 16px; font-size: 15px;
+    border-radius: var(--radius-sm); font-family: inherit;
+    transition: all 0.2s;
+  }
+  .input::placeholder, .textarea::placeholder { color: var(--text-dimmer); }
+  .input:focus, .textarea:focus {
+    outline: none; border-color: var(--lime);
+    background: var(--bg);
+  }
+  .textarea { min-height: 70px; resize: vertical; line-height: 1.5; }
+
+  /* === RELATION CHIPS === */
+  .chip-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .chip {
+    background: var(--bg-card-2); border: 1px solid var(--border);
+    color: var(--text-dim); padding: 6px 12px; border-radius: 999px;
+    font-size: 12px; cursor: pointer; transition: all 0.15s;
+    font-weight: 500;
+  }
+  .chip:hover {
+    border-color: var(--lime); color: var(--lime);
+  }
+
+  /* === GENRE PILLS === */
+  .pill-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill {
+    background: var(--bg-card-2); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 999px;
+    font-size: 13px; cursor: pointer; transition: all 0.15s;
+    font-weight: 500;
+  }
+  .pill:hover { border-color: var(--text-dim); }
+  .pill.selected {
+    background: var(--lime); border-color: var(--lime); color: #1a1a1f;
+    font-weight: 700;
+    box-shadow: 0 4px 20px rgba(212, 255, 58, 0.3);
+  }
+
+  /* === LANG TOGGLE === */
+  .lang-toggle {
+    display: flex; background: var(--bg-card-2);
+    border-radius: var(--radius-sm); padding: 4px;
+  }
+  .lang-toggle button {
+    flex: 1; background: transparent; border: none;
+    color: var(--text-dim); padding: 10px; cursor: pointer;
+    border-radius: 8px; font-family: inherit; font-size: 13px;
+    font-weight: 500; transition: all 0.15s;
+  }
+  .lang-toggle button.active {
+    background: var(--lime); color: #1a1a1f; font-weight: 700;
+  }
+
+  /* === MAIN BUTTON === */
+  .btn-primary {
+    width: 100%; padding: 18px; border: none;
+    border-radius: var(--radius-md);
+    background: var(--lime); color: #1a1a1f;
+    font-family: inherit; font-weight: 800;
+    font-size: 17px; cursor: pointer;
+    box-shadow: 0 8px 30px rgba(212, 255, 58, 0.3);
+    transition: all 0.2s; margin-top: 8px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(212, 255, 58, 0.5);
+  }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-mic {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: #1a1a1f; color: var(--lime);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+
+  .btn-secondary {
+    padding: 14px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card); color: var(--text);
+    cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600;
+    transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .btn-secondary:hover { border-color: var(--lime); color: var(--lime); }
+
+  /* === USAGE INFO === */
+  .usage-info {
+    text-align: center; color: var(--text-dimmer); font-size: 11px;
+    margin-top: 12px;
+  }
+
+  /* === LOADING SCREEN === */
+  .loading-wrap {
+    text-align: center; padding: 60px 20px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .loading-orb {
+    width: 200px; height: 200px; border-radius: 50%;
+    background:
+      radial-gradient(circle at 30% 30%, var(--lime) 0%, transparent 50%),
+      radial-gradient(circle at 70% 30%, var(--cyan) 0%, transparent 50%),
+      radial-gradient(circle at 50% 70%, var(--purple) 0%, transparent 50%),
+      radial-gradient(circle at 30% 70%, var(--pink) 0%, transparent 50%);
+    filter: blur(20px);
+    animation: orbMorph 4s ease-in-out infinite;
+    margin-bottom: 32px;
+    position: relative;
+  }
+  .loading-orb::after {
+    content: ''; position: absolute; inset: -20px;
+    border-radius: 50%;
+    background: inherit; opacity: 0.3;
+    animation: orbPulse 2s ease-in-out infinite;
+  }
+  @keyframes orbMorph {
+    0%, 100% { transform: scale(1) rotate(0deg); border-radius: 50%; }
+    25% { transform: scale(1.1) rotate(90deg); border-radius: 40% 60% 60% 40%; }
+    50% { transform: scale(0.95) rotate(180deg); border-radius: 50%; }
+    75% { transform: scale(1.05) rotate(270deg); border-radius: 60% 40% 40% 60%; }
+  }
+  @keyframes orbPulse {
+    0%, 100% { transform: scale(1); opacity: 0.3; }
+    50% { transform: scale(1.2); opacity: 0.1; }
+  }
+  .loading-msg {
+    font-size: 22px; font-weight: 700; color: var(--text);
+    margin-bottom: 8px; letter-spacing: -0.5px;
+  }
+  .loading-sub {
+    color: var(--text-dim); font-size: 14px; margin-bottom: 28px;
+  }
+  .progress-track {
+    width: 100%; height: 6px;
+    background: var(--bg-card); border-radius: 3px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--lime), var(--cyan), var(--purple));
+    transition: width 0.5s ease;
+    box-shadow: 0 0 12px var(--lime);
+  }
+  .loading-note {
+    margin-top: 24px; font-size: 12px; color: var(--text-dim);
+    background: var(--bg-card); padding: 14px 18px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    text-align: left; width: 100%;
+  }
+
+  /* === RESULT SCREEN === */
+  .result-hero {
+    background: linear-gradient(135deg, var(--lime) 0%, var(--cyan) 100%);
+    border-radius: var(--radius-lg);
+    padding: 24px; margin-bottom: 16px;
+    color: #1a1a1f; position: relative; overflow: hidden;
+  }
+  .result-hero::after {
+    content: ''; position: absolute;
+    right: -40px; top: -40px;
+    width: 160px; height: 160px; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+  }
+  .result-hero::before {
+    content: '🎵'; position: absolute;
+    right: 20px; top: 20px;
+    font-size: 60px; opacity: 0.3; z-index: 1;
+  }
+  .result-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+    text-transform: uppercase; opacity: 0.6;
+    margin-bottom: 8px; position: relative; z-index: 2;
+  }
+  .result-title {
+    font-family: 'Black Han Sans', sans-serif;
+    font-size: 24px; line-height: 1.2; letter-spacing: -0.5px;
+    margin-bottom: 16px; position: relative; z-index: 2;
+  }
+  .result-meta {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    position: relative; z-index: 2;
+  }
+  .meta-tag {
+    background: rgba(26, 26, 31, 0.15); color: #1a1a1f;
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 600;
+  }
+
+  /* === AUDIO PLAYER === */
+  .audio-player {
+    background: var(--bg-card); border-radius: var(--radius-md);
+    padding: 16px; margin-bottom: 16px;
+    border: 1px solid var(--border);
+  }
+  .audio-player audio { width: 100%; }
+  audio::-webkit-media-controls-panel { background-color: var(--bg-card-2); }
+
+  /* === LYRICS === */
+  .lyrics-box {
+    background: var(--bg-card); border-radius: var(--radius-md);
+    padding: 20px; margin-bottom: 16px;
+    max-height: 320px; overflow-y: auto;
+    font-size: 15px; line-height: 1.9;
+    white-space: pre-wrap;
+    border: 1px solid var(--border);
+  }
+  .lyrics-box::-webkit-scrollbar { width: 4px; }
+  .lyrics-box::-webkit-scrollbar-thumb { background: var(--lime); border-radius: 2px; }
+
+  /* === ACTION GRID === */
+  .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  /* === HISTORY === */
+  .history-list { display: flex; flex-direction: column; gap: 8px; }
+  .history-item {
+    background: var(--bg-card); border-radius: var(--radius-sm);
+    padding: 14px 16px; cursor: pointer; transition: all 0.15s;
+    display: flex; justify-content: space-between; align-items: center;
+    border: 1px solid var(--border);
+  }
+  .history-item:hover { border-color: var(--lime); }
+  .history-content { flex: 1; min-width: 0; }
+  .history-name {
+    font-size: 14px; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .history-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .history-avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; margin-right: 12px; flex-shrink: 0;
+  }
+  .history-avatar.c1 { background: var(--lime); }
+  .history-avatar.c2 { background: var(--purple); }
+  .history-avatar.c3 { background: var(--pink); }
+  .history-avatar.c4 { background: var(--cyan); }
+  .history-delete {
+    background: transparent; border: none; color: var(--text-dimmer);
+    cursor: pointer; padding: 4px 8px; font-size: 18px;
+    margin-left: 8px;
+  }
+  .history-delete:hover { color: var(--pink); }
+
+  /* === SETTINGS MODAL === */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px);
+    z-index: 100; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: var(--bg-card); border-radius: var(--radius-lg);
+    padding: 28px; max-width: 400px; width: 100%;
+    border: 1px solid var(--border);
+  }
+  .modal-title {
+    font-size: 20px; font-weight: 700;
+    color: var(--lime); margin-bottom: 8px;
+  }
+  .modal-desc { color: var(--text-dim); font-size: 13px; margin-bottom: 20px; line-height: 1.5; }
+
+  /* === TOAST === */
+  .toast {
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+    background: var(--bg-card); border: 1px solid var(--lime);
+    color: var(--text); padding: 12px 20px; border-radius: 999px;
+    font-size: 13px; font-weight: 500; z-index: 200; display: none;
+  }
+  .toast.show { display: block; animation: toastIn 0.3s; }
+  @keyframes toastIn { from { opacity: 0; transform: translate(-50%, 20px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+  /* === ERROR === */
+  .error-box {
+    background: rgba(255, 100, 130, 0.1);
+    border: 1px solid rgba(255, 100, 130, 0.3);
+    color: #ff8095; padding: 12px 16px;
+    border-radius: var(--radius-sm); font-size: 13px;
+    margin-bottom: 16px;
+  }
+
+  /* === AUTH === */
+  .header-right { display: flex; align-items: center; gap: 8px; }
+  .auth-btn {
+    background: var(--lime); color: #1a1a1f; border: none;
+    border-radius: 999px; padding: 8px 14px;
+    font-family: inherit; font-weight: 700; font-size: 12px;
+    cursor: pointer; display: flex; align-items: center; gap: 6px;
+    transition: all 0.15s;
+  }
+  .auth-btn:hover { box-shadow: 0 4px 16px rgba(212, 255, 58, 0.4); }
+  .credit-badge {
+    display: none; align-items: center; gap: 4px;
+    background: var(--bg-card); border: 1px solid var(--lime);
+    color: var(--lime); border-radius: 999px; padding: 7px 12px;
+    font-weight: 700; font-size: 13px; cursor: pointer; flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  .credit-badge:hover { box-shadow: 0 4px 16px rgba(212, 255, 58, 0.3); }
+  .auth-user {
+    width: 34px; height: 34px; border-radius: 50%; overflow: hidden;
+    cursor: pointer; border: 2px solid var(--lime); flex-shrink: 0;
+  }
+  .auth-user img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .login-gate {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 24px 20px; text-align: center;
+    margin-bottom: 16px;
+  }
+  .login-gate p { color: var(--text-dim); font-size: 14px; margin-bottom: 16px; }
+  .btn-google {
+    width: 100%; padding: 14px; border: none; border-radius: var(--radius-sm);
+    background: #fff; color: #1a1a1f; font-family: inherit; font-weight: 700;
+    font-size: 15px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .btn-google:hover { background: #f0f0f0; }
+  .profile-menu {
+    position: absolute; top: 68px; right: 20px; z-index: 50;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 6px; min-width: 190px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  }
+  .profile-menu button {
+    width: 100%; text-align: left; background: transparent; border: none;
+    color: var(--text); padding: 12px 14px; border-radius: 10px;
+    font-family: inherit; font-size: 14px; cursor: pointer;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .profile-menu button:hover { background: var(--bg-card-2); }
+  .back-btn {
+    background: var(--bg-card); border: 1px solid var(--border);
+    color: var(--text); border-radius: 999px; padding: 10px 18px;
+    font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+    margin-bottom: 16px; transition: all 0.15s;
+  }
+  .back-btn:hover { border-color: var(--lime); color: var(--lime); }
+
+  /* Mobile tweaks */
+  @media (max-width: 380px) {
+    .hero-title { font-size: 28px; }
+    .quick-card { min-height: 110px; padding: 16px 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <div class="header-orb"></div>
+      <div>
+        <div class="brand">Diss4U</div>
+        <div class="brand-en">This Song 4 U · AI</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="credit-badge" id="creditBadge" onclick="onCreditBadgeClick()" title="내 크레딧">💎 <span id="creditCount">0</span></div>
+      <button class="auth-btn" id="loginBtn" onclick="loginGoogle()" style="display:none;">로그인</button>
+      <div class="auth-user" id="authUser" onclick="toggleProfileMenu(event)" title="내 메뉴" style="display:none;">
+        <img id="authPhoto" src="" alt="프로필">
+      </div>
+    </div>
+  </div>
+
+  <div class="profile-menu" id="profileMenu" style="display:none;">
+    <button onclick="openMyList()">🎵 만든 곡 리스트</button>
+    <button onclick="logout()">🚪 로그아웃</button>
+  </div>
+
+  <button class="settings-icon" id="settingsIcon" onclick="openSettings()">⚙️</button>
+
+  <!-- ===== INPUT SCREEN ===== -->
+  <div class="screen active" id="screen-input">
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="hero-greeting">오늘은 누구를 놀려볼까요?</div>
+      <div class="hero-title">친구한테<br>한 방 먹일<br>노래 만들기 <span class="hero-emoji">🎤</span></div>
+    </div>
+
+    <!-- Login gate (로그아웃 상태) -->
+    <div class="login-gate" id="loginGate" style="display:none;">
+      <p>노래를 만들려면 로그인하세요.<br>공유받은 노래 듣기는 로그인 없이 가능해요.</p>
+      <button class="btn-google" onclick="loginGoogle()">
+        <span style="font-weight:800;color:#4285F4;">G</span> Google로 시작하기
+      </button>
+    </div>
+
+    <!-- Form -->
+    <div class="section-title">놀릴 정보 입력</div>
+    <div class="input-card" id="formCard">
+
+      <div class="field">
+        <div class="label"><span class="label-icon">👤</span>놀릴 사람 이름</div>
+        <input class="input" id="targetName" placeholder="예: 김슬기" maxlength="20">
+      </div>
+
+      <div class="field">
+        <div class="label"><span class="label-icon">⚧</span>성별 / 종류</div>
+        <div class="pill-row" id="genderRow">
+          <div class="pill selected" data-gender="male">🚹 남자</div>
+          <div class="pill" data-gender="female">🚺 여자</div>
+          <div class="pill" data-gender="pet">🐶 반려동물</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="label"><span class="label-icon">🔗</span>나와의 관계</div>
+        <input class="input" id="relationship" placeholder="예: 직장 팀장님(윗사람), 회사 후임, 친한 동생..." maxlength="40">
+        <div style="font-size:11px;color:var(--text-dimmer);margin-top:6px;">💡 윗사람/아랫사람까지 구체적으로 적으면 호칭·말투가 정확해져요</div>
+        <div class="chip-row">
+          <div class="chip" data-rel="친한 친구">친한 친구</div>
+          <div class="chip" data-rel="직장 윗사람(팀장님)">직장 윗사람</div>
+          <div class="chip" data-rel="직장 아랫사람(후임)">직장 아랫사람</div>
+          <div class="chip" data-rel="친한 동생">친한 동생</div>
+          <div class="chip" data-rel="손위 형제(형/오빠/언니/누나)">손위 형제</div>
+          <div class="chip" data-rel="연인">연인</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="label"><span class="label-icon">📝</span>놀릴 포인트 <span style="color:var(--text-dimmer);font-weight:400;">(4개 이상 추천)</span></div>
+        <textarea class="textarea" id="keywords" placeholder="예: 머리숱 적음, 늦잠 대장, 매운거 못먹음, 길치, 폰 중독 (쉼표로 구분)" maxlength="200"></textarea>
+        <div style="font-size:11px;color:var(--text-dimmer);margin-top:6px;">💡 포인트가 적으면 관계없는 엉뚱한 가사가 나와요. 4개 이상 적어주세요</div>
+      </div>
+
+      <div class="field">
+        <div class="label"><span class="label-icon">✍️</span>꼭 넣고 싶은 문장 <span style="color:var(--text-dimmer);font-weight:400;">(선택)</span></div>
+        <textarea class="textarea" id="mustInclude" placeholder="예: 그래도 내 친구가 최고야 — 비워도 돼요" maxlength="100"></textarea>
+      </div>
+
+      <div class="field">
+        <div class="label"><span class="label-icon">🎵</span>장르 선택</div>
+        <div class="pill-row" id="genreRow">
+          <div class="pill selected" data-genre="hiphop">힙합</div>
+          <div class="pill" data-genre="ballad">발라드</div>
+          <div class="pill" data-genre="trot">트로트</div>
+          <div class="pill" data-genre="kpop">K-pop</div>
+          <div class="pill" data-genre="rock">락</div>
+          <div class="pill" data-genre="kids">동요</div>
+          <div class="pill" data-genre="lofi">로파이</div>
+          <div class="pill" data-genre="random">🎲 랜덤</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="label"><span class="label-icon">🌐</span>가사 언어</div>
+        <div class="lang-toggle">
+          <button class="active" data-lang="ko" onclick="selectLang(this)">🇰🇷 한국어</button>
+          <button data-lang="en" onclick="selectLang(this)">🇺🇸 영어</button>
+          <button data-lang="mix" onclick="selectLang(this)">🌏 섞기</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="errorBox"></div>
+
+    <button class="btn-primary" id="generateBtn" onclick="startGeneration()">
+      <span class="btn-mic">🎤</span>
+      <span>노래 만들기</span>
+    </button>
+
+    <div class="usage-info">하루 10곡까지 만들 수 있어요 · AI가 작사+작곡</div>
+
+    <!-- HISTORY -->
+    <div id="historySection" style="display: none; margin-top: 32px;">
+      <div class="section-title">
+        <span>최근 만든 노래</span>
+        <span class="see-all" onclick="clearAllHistory()">전체 삭제</span>
+      </div>
+      <div class="history-list" id="historyList"></div>
+    </div>
+  </div>
+
+  <!-- ===== LOADING SCREEN ===== -->
+  <div class="screen" id="screen-loading">
+    <div class="loading-wrap">
+      <div class="loading-orb"></div>
+      <div class="loading-msg" id="loadingMsg">가사 쓰는 중...</div>
+      <div class="loading-sub" id="loadingSub">잠시만 기다려주세요</div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="loading-note">
+        💡 보컬 노래 생성은 1-2분 정도 걸려요.<br>페이지를 닫지 마세요!
+      </div>
+      <button class="btn-secondary" style="margin-top: 20px; width: 100%;" onclick="cancelGeneration()">
+        ❌ 취소
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== RESULT SCREEN ===== -->
+  <div class="screen" id="screen-result">
+    <div class="result-hero">
+      <div class="result-label">🎤 NEW SONG</div>
+      <div class="result-title" id="resultTitle"></div>
+      <div class="result-meta">
+        <span class="meta-tag" id="resultGenre"></span>
+        <span class="meta-tag" id="resultLang"></span>
+        <span class="meta-tag" id="resultTarget"></span>
+      </div>
+    </div>
+
+    <div class="audio-player" id="audioPlayerWrap" style="display:none;">
+      <audio id="audioPlayer" controls></audio>
+    </div>
+
+    <div class="section-title">가사</div>
+    <div class="lyrics-box" id="lyricsBox"></div>
+
+    <button class="btn-primary" id="instaVideoBtn" onclick="makeInstaVideo()"
+      style="margin-bottom:12px;background:linear-gradient(135deg,var(--purple) 0%,var(--pink) 100%);color:#1a1a1f;box-shadow:0 8px 30px rgba(197,163,255,.35);">
+      <span class="btn-mic" style="color:var(--purple);">📹</span>
+      <span>인스타용 영상 만들기</span>
+    </button>
+
+    <div class="action-grid">
+      <button class="btn-secondary" onclick="downloadSong()">⬇️ MP3 받기</button>
+      <button class="btn-secondary" onclick="shareKakao()">💬 공유하기</button>
+      <button class="btn-secondary" onclick="copyLyrics()">📋 가사 복사</button>
+      <button class="btn-secondary" onclick="newSong()">✨ 새 노래</button>
+    </div>
+  </div>
+
+  <!-- ===== MY SONG LIST SCREEN ===== -->
+  <div class="screen" id="screen-mylist">
+    <button class="back-btn" onclick="goHome()">← 홈으로</button>
+    <div class="section-title">🎵 내가 만든 곡</div>
+    <div class="history-list" id="myListContainer"></div>
+  </div>
+</div>
+
+<!-- ===== SETTINGS MODAL ===== -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <div class="modal-title">🔧 개발자 설정</div>
+    <div class="modal-desc">
+      Worker 주소를 변경할 수 있어요. (기본값 사용 권장)
+    </div>
+    <div class="field">
+      <div class="label">🌐 Worker 주소</div>
+      <input class="input" type="text" id="workerUrl" placeholder="https://...workers.dev">
+    </div>
+    <div class="modal-desc" style="margin-top: 14px;">
+      💡 일반 사용자 모드로 돌아가려면 URL에서 ?dev=1 을 빼고 새로고침하세요.
+    </div>
+    <div class="action-grid" style="margin-top: 20px;">
+      <button class="btn-secondary" onclick="closeSettings()">취소</button>
+      <button class="btn-secondary" onclick="saveSettings()" style="background: var(--lime); color: #1a1a1f; border-color: var(--lime); font-weight: 700;">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== INSTA VIDEO MODAL ===== -->
+<div class="modal-overlay" id="videoModal">
+  <div class="modal" style="max-width:360px;">
+    <div class="modal-title" id="videoModalTitle">📹 인스타용 영상</div>
+    <div class="modal-desc" id="videoStatus" style="margin-bottom:14px;">준비 중...</div>
+
+    <div id="videoCanvasWrap" style="display:flex;justify-content:center;margin-bottom:14px;">
+      <canvas id="videoCanvas" style="width:200px;height:356px;border-radius:16px;background:#000;border:1px solid var(--border);"></canvas>
+    </div>
+
+    <video id="videoPreview" controls playsinline webkit-playsinline
+      style="display:none;width:100%;border-radius:16px;margin-bottom:14px;background:#000;"></video>
+
+    <div class="progress-track" id="videoProgressTrack">
+      <div class="progress-fill" id="videoProgress"></div>
+    </div>
+
+    <div class="action-grid" id="videoActions" style="margin-top:18px;display:none;">
+      <button class="btn-secondary" onclick="shareInstaVideo()"
+        style="background:var(--lime);color:#1a1a1f;border-color:var(--lime);font-weight:700;">📤 공유하기</button>
+      <button class="btn-secondary" onclick="downloadInstaVideo()">⬇️ 저장</button>
+    </div>
+
+    <button class="btn-secondary" id="videoCloseBtn" onclick="closeVideoModal()" style="margin-top:10px;width:100%;">닫기</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const DEFAULT_WORKER_URL = 'https://chinolsong-proxy.onrender.com';
+
+// === Firebase 구글 로그인 ===
+const firebaseConfig = {
+  apiKey: "AIzaSyAD2galkT_bYbtmOG6TSVIBdlLtByVbXZU",
+  authDomain: "chinolsong.firebaseapp.com",
+  projectId: "chinolsong",
+  storageBucket: "chinolsong.firebasestorage.app",
+  messagingSenderId: "167000575928",
+  appId: "1:167000575928:web:b030d86b87f15ae2c9894d"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+let currentUser = null;
+
+// 내 노래 Firestore에서 가져오기 (uid 기준, 최신순)
+async function fetchMySongs() {
+  if (!currentUser) return [];
+  try {
+    const snap = await db.collection('songs').where('uid', '==', currentUser.uid).get();
+    const arr = snap.docs.map(d => {
+      const x = d.data();
+      return { id: d.id, ...x, createdAt: (x.createdAt && x.createdAt.toDate) ? x.createdAt.toDate().toISOString() : (x.createdAt || new Date().toISOString()) };
+    });
+    arr.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    return arr;
+  } catch (e) {
+    console.warn('fetchMySongs fail', e);
+    return [];
+  }
+}
+
+// 노래 Firestore에 저장 -> 문서 id 반환
+async function saveSong(song) {
+  if (!currentUser) return null;
+  try {
+    const ref = await db.collection('songs').add({
+      uid: currentUser.uid,
+      title: song.title || '',
+      lyrics: song.lyrics || '',
+      name: song.name || '',
+      relationship: song.relationship || '',
+      keywords: song.keywords || '',
+      genre: song.genre || '',
+      gender: song.gender || '',
+      lang: song.lang || '',
+      audioUrl: song.audioUrl || '',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    return ref.id;
+  } catch (e) {
+    console.warn('saveSong fail', e);
+    return null;
+  }
+}
+
+// === 카카오 SDK 초기화 ===
+const KAKAO_JS_KEY = '16969f6e49aa409a9ebebe6af1a88554';
+if (window.Kakao && !Kakao.isInitialized()) {
+  try { Kakao.init(KAKAO_JS_KEY); } catch (e) { console.warn('Kakao init fail', e); }
+}
+
+auth.onAuthStateChanged(user => {
+  currentUser = user;
+  if (user) STATE.userId = user.uid;
+  updateAuthUI();
+  loadHistory();
+  fetchCredits();
+});
+
+// 서버에서 내 크레딧 잔액 조회 → UI 갱신
+async function fetchCredits() {
+  if (!currentUser) { STATE.credits = null; updateCreditUI(); return; }
+  try {
+    const token = await currentUser.getIdToken();
+    const r = await fetch(getWorkerUrl() + '/me', { headers: { 'Authorization': 'Bearer ' + token } });
+    if (!r.ok) return;
+    const d = await r.json();
+    STATE.creditsEnabled = !!d.enabled;
+    STATE.credits = (typeof d.credits === 'number') ? d.credits : null;
+    STATE.costPerSong = d.cost || 10;
+    updateCreditUI();
+  } catch (e) { console.warn('fetchCredits fail', e); }
+}
+
+function updateCreditUI() {
+  const badge = document.getElementById('creditBadge');
+  const count = document.getElementById('creditCount');
+  if (!badge || !count) return;
+  // 크레딧이 켜져 있고 로그인 상태일 때만 표시
+  if (currentUser && STATE.creditsEnabled && typeof STATE.credits === 'number') {
+    count.textContent = STATE.credits;
+    badge.style.display = 'flex';
+    const usage = document.querySelector('.usage-info');
+    if (usage) usage.textContent = `💎 보유 ${STATE.credits}p · 1곡 = ${STATE.costPerSong}p`;
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function onCreditBadgeClick() {
+  if (STATE.credits != null && STATE.credits < STATE.costPerSong) {
+    showToast('💎 크레딧이 부족해요 — 충전 기능 준비중이에요');
+  } else {
+    showToast(`💎 보유 크레딧 ${STATE.credits}p (1곡 ${STATE.costPerSong}p)`);
+  }
+}
+
+function loginGoogle() {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(err => {
+    showError('로그인 실패: ' + (err.message || err.code));
+  });
+}
+
+function logout() {
+  if (confirm('로그아웃 할까요?')) auth.signOut();
+}
+
+function updateAuthUI() {
+  const loginBtn = document.getElementById('loginBtn');
+  const authUser = document.getElementById('authUser');
+  const photo = document.getElementById('authPhoto');
+  const gate = document.getElementById('loginGate');
+  const formCard = document.getElementById('formCard');
+  const genBtn = document.getElementById('generateBtn');
+  if (currentUser) {
+    loginBtn.style.display = 'none';
+    authUser.style.display = 'block';
+    photo.src = currentUser.photoURL || '';
+    if (gate) gate.style.display = 'none';
+    if (formCard) formCard.style.display = '';
+    if (genBtn) genBtn.style.display = '';
+  } else {
+    loginBtn.style.display = 'flex';
+    authUser.style.display = 'none';
+    if (gate) gate.style.display = 'block';
+    if (formCard) formCard.style.display = 'none';
+    if (genBtn) genBtn.style.display = 'none';
+  }
+}
+
+function toggleProfileMenu(e) {
+  if (e) e.stopPropagation();
+  const m = document.getElementById('profileMenu');
+  m.style.display = (m.style.display === 'block') ? 'none' : 'block';
+}
+
+document.addEventListener('click', () => {
+  const m = document.getElementById('profileMenu');
+  if (m) m.style.display = 'none';
+});
+
+function openMyList() {
+  renderMyList();
+  showScreen('mylist');
+}
+
+function goHome() {
+  showScreen('input');
+  loadHistory();
+}
+
+async function renderMyList() {
+  const c = document.getElementById('myListContainer');
+  if (!c) return;
+  c.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:48px 0;">불러오는 중...</div>';
+  const history = await fetchMySongs();
+  if (history.length === 0) {
+    c.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:48px 0;">아직 만든 곡이 없어요 🎵</div>';
+    return;
+  }
+  c.innerHTML = history.map((song, idx) => `
+    <div class="history-item" onclick="loadSong('${song.id}')">
+      <div class="history-avatar ${AVATAR_COLORS[idx % 4]}">${GENRE_EMOJI[song.genre] || '🎵'}</div>
+      <div class="history-content">
+        <div class="history-name">${escapeHtml(song.title)}</div>
+        <div class="history-meta">${escapeHtml(song.name)} · ${GENRE_NAMES[song.genre] || song.genre} · ${formatDate(song.createdAt)}</div>
+      </div>
+      <button class="history-delete" onclick="event.stopPropagation(); deleteSong('${song.id}')">×</button>
+    </div>
+  `).join('');
+}
+
+const STATE = {
+  selectedGenre: 'hiphop',
+  selectedGender: 'male',
+  selectedLang: 'ko',
+  currentSong: null,
+  generationCancelled: false,
+  pollInterval: null,
+  userId: null,
+  isDev: false,
+  credits: null,        // null = 크레딧 비활성(레거시) 또는 미조회
+  costPerSong: 10,
+  creditsEnabled: false,
+};
+
+const GENRE_NAMES = {
+  hiphop: '힙합', ballad: '발라드', trot: '트로트',
+  kpop: 'K-pop', rock: '락', kids: '동요', lofi: '로파이', random: '랜덤'
+};
+const LANG_NAMES = { ko: '한국어', en: 'English', mix: '한+영' };
+const AVATAR_COLORS = ['c1', 'c2', 'c3', 'c4'];
+
+window.addEventListener('load', () => {
+  const params = new URLSearchParams(window.location.search);
+  STATE.isDev = params.get('dev') === '1';
+  if (STATE.isDev) {
+    document.getElementById('settingsIcon').classList.add('show');
+  }
+
+  STATE.userId = localStorage.getItem('userId');
+  if (!STATE.userId) {
+    STATE.userId = 'u_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
+    localStorage.setItem('userId', STATE.userId);
+  }
+
+  // 장르 선택 (장르 그룹 내에서만)
+  document.querySelectorAll('#genreRow .pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('#genreRow .pill').forEach(p => p.classList.remove('selected'));
+      pill.classList.add('selected');
+      STATE.selectedGenre = pill.dataset.genre;
+    });
+  });
+
+  // 성별 선택 (성별 그룹 내에서만)
+  document.querySelectorAll('#genderRow .pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('#genderRow .pill').forEach(p => p.classList.remove('selected'));
+      pill.classList.add('selected');
+      STATE.selectedGender = pill.dataset.gender;
+    });
+  });
+
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.getElementById('relationship').value = chip.dataset.rel;
+    });
+  });
+
+  loadHistory();
+});
+
+function selectLang(btn) {
+  document.querySelectorAll('.lang-toggle button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  STATE.selectedLang = btn.dataset.lang;
+}
+
+function getWorkerUrl() {
+  return localStorage.getItem('workerUrl') || DEFAULT_WORKER_URL;
+}
+
+function openSettings() {
+  document.getElementById('workerUrl').value = getWorkerUrl();
+  document.getElementById('settingsModal').classList.add('active');
+}
+function closeSettings() {
+  document.getElementById('settingsModal').classList.remove('active');
+}
+function saveSettings() {
+  let workerUrl = document.getElementById('workerUrl').value.trim();
+  if (workerUrl.endsWith('/')) workerUrl = workerUrl.slice(0, -1);
+  if (workerUrl) {
+    localStorage.setItem('workerUrl', workerUrl);
+  } else {
+    localStorage.removeItem('workerUrl');
+  }
+  closeSettings();
+  showToast('✓ 설정이 저장되었어요');
+}
+
+async function startGeneration() {
+  if (!currentUser) { showError('노래 만들려면 구글 로그인 먼저!'); loginGoogle(); return; }
+  if (STATE.creditsEnabled && STATE.credits != null && STATE.credits < STATE.costPerSong) {
+    showError('💎 크레딧이 부족해요. (충전 기능은 곧 추가돼요)');
+    return;
+  }
+  const name = document.getElementById('targetName').value.trim();
+  const relationship = document.getElementById('relationship').value.trim();
+  const keywords = document.getElementById('keywords').value.trim();
+  const mustInclude = document.getElementById('mustInclude').value.trim();
+
+  if (!name) { showError('놀릴 사람 이름을 입력해주세요'); return; }
+  if (!keywords) { showError('놀릴 포인트를 입력해주세요'); return; }
+
+  let genre = STATE.selectedGenre;
+  if (genre === 'random') {
+    const genres = ['hiphop', 'ballad', 'trot', 'kpop', 'rock', 'kids', 'lofi'];
+    genre = genres[Math.floor(Math.random() * genres.length)];
+  }
+
+  STATE.generationCancelled = false;
+  showScreen('loading');
+  setProgress(5, '가사 쓰는 중...', 'AI가 작사 중이에요');
+
+  try {
+    const lyricsData = await callWorker('/generate-lyrics', {
+      name, relationship, keywords, genre, lang: STATE.selectedLang,
+      gender: STATE.selectedGender, mustInclude
+    });
+
+    if (STATE.generationCancelled) return;
+    setProgress(25, '노래 생성 시작!', 'Suno AI가 작업 중...');
+
+    const submitResult = await callWorker('/generate-song', {
+      lyrics: lyricsData.lyrics,
+      title: lyricsData.title,
+      style: lyricsData.style
+    });
+
+    const jobId = submitResult.jobId || submitResult.job_id || submitResult.id;
+    if (!jobId) throw new Error('노래 생성 시작 실패: jobId 없음');
+
+    if (STATE.generationCancelled) return;
+    setProgress(35, '노래 만드는 중...', '보컬과 멜로디 합성 중 (1-2분)');
+
+    const result = await pollSongStatus(jobId);
+
+    if (STATE.generationCancelled) return;
+    setProgress(100, '완성!', '잠시만요...');
+
+    STATE.currentSong = {
+      id: null,
+      title: lyricsData.title,
+      lyrics: lyricsData.lyrics,
+      name, relationship, keywords, genre,
+      gender: STATE.selectedGender,
+      lang: STATE.selectedLang,
+      audioUrl: result.audioUrl,
+      createdAt: new Date().toISOString()
+    };
+
+    const savedId = await saveSong(STATE.currentSong);
+    if (savedId) STATE.currentSong.id = savedId;
+    fetchCredits();
+    setTimeout(() => showResult(), 600);
+  } catch (err) {
+    console.error('Generation error:', err);
+    showScreen('input');
+    showError('❌ ' + (err.message || '알 수 없는 오류'));
+  }
+}
+
+function cancelGeneration() {
+  STATE.generationCancelled = true;
+  if (STATE.pollInterval) clearInterval(STATE.pollInterval);
+  showScreen('input');
+}
+
+async function callWorker(path, body) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-User-Id': STATE.userId
+  };
+  if (currentUser) {
+    try { headers['Authorization'] = 'Bearer ' + (await currentUser.getIdToken()); } catch (e) {}
+  }
+  const response = await fetch(getWorkerUrl() + path, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body)
+  });
+
+  if (response.status === 429) {
+    const err = await response.json().catch(() => ({ message: '사용량 한도 초과' }));
+    throw new Error('⏰ ' + (err.message || '사용량 한도 초과'));
+  }
+
+  if (response.status === 401) {
+    throw new Error('로그인이 필요해요. 다시 로그인해주세요.');
+  }
+
+  if (response.status === 402) {
+    const err = await response.json().catch(() => ({}));
+    if (typeof err.credits === 'number') { STATE.credits = err.credits; updateCreditUI(); }
+    throw new Error('💎 크레딧이 부족해요. (충전 기능은 곧 추가돼요)');
+  }
+
+  if (!response.ok) {
+    const errText = await response.text();
+    let errMsg = errText.substring(0, 200);
+    try {
+      const errJson = JSON.parse(errText);
+      errMsg = errJson.message || errJson.error || errMsg;
+    } catch (e) {}
+    throw new Error('서버 오류 (' + response.status + '): ' + errMsg);
+  }
+
+  return response.json();
+}
+
+async function pollSongStatus(jobId) {
+  const startTime = Date.now();
+  const maxWait = 5 * 60 * 1000;
+
+  return new Promise((resolve, reject) => {
+    STATE.pollInterval = setInterval(async () => {
+      if (STATE.generationCancelled) {
+        clearInterval(STATE.pollInterval);
+        return;
+      }
+
+      const elapsed = Date.now() - startTime;
+      if (elapsed > maxWait) {
+        clearInterval(STATE.pollInterval);
+        reject(new Error('생성 시간이 너무 오래 걸려요.'));
+        return;
+      }
+
+      const pct = Math.min(35 + (elapsed / maxWait) * 60, 95);
+      setProgress(pct, '노래 만드는 중...', `${Math.round(elapsed / 1000)}초 경과`);
+
+      try {
+        const response = await fetch(getWorkerUrl() + '/song-status/' + jobId, {
+          headers: { 'X-User-Id': STATE.userId }
+        });
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const status = (data.status || '').toUpperCase();
+
+        if (status === 'COMPLETED' || status === 'FINISHED' || status === 'SUCCESS') {
+          const audioUrl = findAudioUrl(data);
+          if (audioUrl) {
+            clearInterval(STATE.pollInterval);
+            console.log('✅ Audio URL found:', audioUrl);
+            console.log('Full response:', data);
+            resolve({ audioUrl });
+          } else {
+            clearInterval(STATE.pollInterval);
+            console.error('❌ No audio URL in response:', data);
+            reject(new Error('audio URL을 찾을 수 없음. F12 콘솔 확인 필요.'));
+          }
+        } else if (status === 'FAILED' || status === 'ERROR') {
+          clearInterval(STATE.pollInterval);
+          reject(new Error('생성 실패: ' + (data.error || data.message || 'unknown')));
+        }
+      } catch (err) {
+        console.warn('Poll error:', err);
+      }
+    }, 5000);
+  });
+}
+
+function findAudioUrl(obj, depth = 0) {
+  if (!obj || depth > 10) return null;
+  if (typeof obj === 'string') {
+    if (/^https?:\/\/.+\.(mp3|wav|m4a|ogg|aac|flac)/i.test(obj)) return obj;
+    if (/^https?:\/\/.*audio.*/i.test(obj) && obj.length > 20) return obj;
+    return null;
+  }
+  if (typeof obj !== 'object') return null;
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      const found = findAudioUrl(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  const priorityKeys = [
+    'audio_url', 'audioUrl', 'audio', 'mp3_url', 'mp3Url',
+    'song_url', 'songUrl', 'track_url', 'trackUrl',
+    'output_url', 'outputUrl', 'file_url', 'fileUrl', 'url'
+  ];
+  for (const key of priorityKeys) {
+    if (obj[key] && typeof obj[key] === 'string' && /^https?:\/\//.test(obj[key])) {
+      if (key.toLowerCase().includes('audio') || key.toLowerCase().includes('mp3') || key.toLowerCase().includes('song') || key.toLowerCase().includes('track')) {
+        return obj[key];
+      }
+      if (/\.(mp3|wav|m4a|ogg|aac|flac)/i.test(obj[key])) {
+        return obj[key];
+      }
+    }
+  }
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      const found = findAudioUrl(obj[key], depth + 1);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function setProgress(pct, msg, sub) {
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('loadingMsg').textContent = msg;
+  document.getElementById('loadingSub').textContent = sub;
+}
+
+function showError(msg) {
+  const box = document.getElementById('errorBox');
+  box.innerHTML = `<div class="error-box">${msg}</div>`;
+  setTimeout(() => box.innerHTML = '', 8000);
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2500);
+}
+
+function showResult() {
+  const song = STATE.currentSong;
+  document.getElementById('resultTitle').textContent = song.title;
+  document.getElementById('resultGenre').textContent = GENRE_NAMES[song.genre] || song.genre;
+  document.getElementById('resultLang').textContent = LANG_NAMES[song.lang];
+  document.getElementById('resultTarget').textContent = '🎯 ' + song.name;
+  document.getElementById('lyricsBox').textContent = song.lyrics;
+  if (song.audioUrl) {
+    const wrap = document.getElementById('audioPlayerWrap');
+    const audio = document.getElementById('audioPlayer');
+    audio.src = song.audioUrl;
+    wrap.style.display = 'block';
+  }
+  showScreen('result');
+}
+
+function newSong() {
+  STATE.currentSong = null;
+  showScreen('input');
+  loadHistory();
+}
+
+const GENRE_EMOJI = {
+  hiphop: '🔥', ballad: '💧', trot: '🎙️', kpop: '⭐',
+  rock: '🎸', kids: '🌈', lofi: '☁️'
+};
+
+async function loadHistory() {
+  const section = document.getElementById('historySection');
+  const list = document.getElementById('historyList');
+  if (!section || !list) return;
+  if (!currentUser) { section.style.display = 'none'; return; }
+  const history = await fetchMySongs();
+  if (!history.length) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  list.innerHTML = history.slice(0, 5).map((song, idx) => `
+    <div class="history-item" onclick="loadSong('${song.id}')">
+      <div class="history-avatar ${AVATAR_COLORS[idx % 4]}">${GENRE_EMOJI[song.genre] || '🎵'}</div>
+      <div class="history-content">
+        <div class="history-name">${escapeHtml(song.title)}</div>
+        <div class="history-meta">${escapeHtml(song.name)} · ${GENRE_NAMES[song.genre] || song.genre} · ${formatDate(song.createdAt)}</div>
+      </div>
+      <button class="history-delete" onclick="event.stopPropagation(); deleteSong('${song.id}')">×</button>
+    </div>
+  `).join('');
+}
+
+async function loadSong(id) {
+  try {
+    const doc = await db.collection('songs').doc(id).get();
+    if (doc.exists) {
+      const x = doc.data();
+      STATE.currentSong = { id: doc.id, ...x, createdAt: (x.createdAt && x.createdAt.toDate) ? x.createdAt.toDate().toISOString() : (x.createdAt || new Date().toISOString()) };
+      showResult();
+    } else {
+      showToast('노래를 찾을 수 없어요');
+    }
+  } catch (e) {
+    console.warn('loadSong fail', e);
+    showToast('노래를 불러오지 못했어요');
+  }
+}
+
+async function deleteSong(id) {
+  if (!confirm('이 노래를 삭제할까요?')) return;
+  try { await db.collection('songs').doc(id).delete(); } catch (e) { console.warn('delete fail', e); }
+  await loadHistory();
+  const mylist = document.getElementById('screen-mylist');
+  if (mylist && mylist.classList.contains('active')) renderMyList();
+}
+
+async function clearAllHistory() {
+  if (!confirm('모든 노래 기록을 삭제할까요?')) return;
+  const songs = await fetchMySongs();
+  await Promise.all(songs.map(s => db.collection('songs').doc(s.id).delete().catch(() => {})));
+  await loadHistory();
+}
+
+function formatDate(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  const diff = (now - d) / 1000;
+  if (diff < 60) return '방금';
+  if (diff < 3600) return Math.floor(diff/60) + '분 전';
+  if (diff < 86400) return Math.floor(diff/3600) + '시간 전';
+  if (diff < 86400 * 7) return Math.floor(diff/86400) + '일 전';
+  return d.toLocaleDateString('ko-KR');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+async function downloadSong() {
+  if (!STATE.currentSong || !STATE.currentSong.audioUrl) {
+    showToast('다운로드할 노래가 없어요');
+    return;
+  }
+  try {
+    showToast('다운로드 중...');
+    const response = await fetch(STATE.currentSong.audioUrl);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${STATE.currentSong.title.replace(/[^a-zA-Z0-9가-힣]/g, '_')}.mp3`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    window.open(STATE.currentSong.audioUrl, '_blank');
+  }
+}
+
+function copyLyrics() {
+  if (!STATE.currentSong) return;
+  const text = `🎤 ${STATE.currentSong.title}\n[${GENRE_NAMES[STATE.currentSong.genre]}]\n\n${STATE.currentSong.lyrics}\n\n— Diss4U로 만들었어요`;
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('✓ 가사가 복사됐어요');
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('✓ 가사가 복사됐어요');
+  });
+}
+
+// 공유 듣기 페이지 URL (같은 폴더의 share.html?id=...)
+function getShareUrl(id) {
+  const dir = location.origin + location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
+  return dir + 'share.html?id=' + id;
+}
+
+async function shareKakao() {
+  if (!STATE.currentSong) return;
+  const s = STATE.currentSong;
+  const genreName = GENRE_NAMES[s.genre] || s.genre;
+  // 공유 링크: 노래 id 있으면 듣기 페이지, 없으면 오디오 직링크
+  const listenUrl = s.id ? getShareUrl(s.id) : s.audioUrl;
+
+  // 1순위: 카카오톡 공유창
+  if (window.Kakao && Kakao.isInitialized() && listenUrl) {
+    const snippet = (s.lyrics || '').replace(/\[.*?\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 70);
+    try {
+      Kakao.Share.sendDefault({
+        objectType: 'text',
+        text: `🎤 ${s.title}\n[${genreName} · ${s.name}에게]\n\n${snippet}...\n\nDiss4U로 만든 디스곡 🎵`,
+        link: { mobileWebUrl: listenUrl, webUrl: listenUrl },
+        buttonTitle: '🎧 노래 듣기'
+      });
+      return;
+    } catch (err) {
+      console.warn('Kakao share fail:', err);
+    }
+  }
+
+  // 폴백: Web Share API / 복사
+  const text = `🎤 ${s.title}\n[${genreName} · ${s.name}에게]\n\n${s.lyrics}\n\n🎵 노래 듣기: ${listenUrl}\n\n— Diss4U로 만들었어요`;
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: s.title, text: text });
+    } catch (err) {
+      if (err.name !== 'AbortError') copyLyrics();
+    }
+  } else {
+    copyLyrics();
+    showToast('✓ 복사완료! 카톡에 붙여넣으세요');
+  }
+}
+
+// ===================== 인스타용 영상 만들기 =====================
+const VIDEO = {
+  blob: null, blobUrl: null,
+  audioCtx: null, srcNode: null, recorder: null,
+  raf: null, drawTimer: null, stopTimer: null, active: false
+};
+const VIDEO_PALETTE = ['#d4ff3a', '#a3e5ff', '#c5a3ff', '#ffb3d9'];
+
+// 가사를 화면에 띄울 줄 단위로 정리 ([Intro] 등 섹션태그 제거)
+function parseLyricLines(raw) {
+  if (!raw) return [];
+  return raw.split('\n')
+    .map(l => l.replace(/\[[^\]]*\]/g, '').trim())
+    .filter(l => l.length > 0);
+}
+
+function pickVideoMime() {
+  if (typeof MediaRecorder === 'undefined') return null;
+  const cands = [
+    'video/mp4;codecs=h264,aac', 'video/mp4',
+    'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'
+  ];
+  for (const c of cands) {
+    try { if (MediaRecorder.isTypeSupported(c)) return c; } catch (e) {}
+  }
+  return '';
+}
+
+function setVideoStatus(msg, pct) {
+  document.getElementById('videoStatus').textContent = msg;
+  if (typeof pct === 'number') {
+    document.getElementById('videoProgress').style.width = Math.round(pct * 100) + '%';
+  }
+}
+
+function openVideoModal() {
+  document.getElementById('videoActions').style.display = 'none';
+  document.getElementById('videoPreview').style.display = 'none';
+  document.getElementById('videoCanvasWrap').style.display = 'flex';
+  document.getElementById('videoProgressTrack').style.display = 'block';
+  document.getElementById('videoProgress').style.width = '0%';
+  document.getElementById('videoModal').classList.add('active');
+}
+
+function closeVideoModal() {
+  // 생성 중이면 정리
+  VIDEO.active = false;
+  if (VIDEO.raf) cancelAnimationFrame(VIDEO.raf);
+  if (VIDEO.drawTimer) { clearInterval(VIDEO.drawTimer); VIDEO.drawTimer = null; }
+  if (VIDEO.stopTimer) clearTimeout(VIDEO.stopTimer);
+  try { if (VIDEO.recorder && VIDEO.recorder.state === 'recording') VIDEO.recorder.stop(); } catch (e) {}
+  try { if (VIDEO.srcNode) VIDEO.srcNode.stop(); } catch (e) {}
+  try { if (VIDEO.audioCtx && VIDEO.audioCtx.state !== 'closed') VIDEO.audioCtx.close(); } catch (e) {}
+  VIDEO.recorder = null; VIDEO.srcNode = null; VIDEO.audioCtx = null;
+  const v = document.getElementById('videoPreview');
+  v.pause(); v.removeAttribute('src'); v.load();
+  document.getElementById('videoModal').classList.remove('active');
+}
+
+function wrapText(ctx, text, maxWidth) {
+  const words = text.split(/\s+/);
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    const test = cur ? cur + ' ' + w : w;
+    if (ctx.measureText(test).width > maxWidth && cur) {
+      lines.push(cur); cur = w;
+    } else { cur = test; }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song) {
+  // 배경
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#0d0d10');
+  bg.addColorStop(1, '#16161c');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // 오디오 에너지
+  let bass = 0, total = 0;
+  const bins = freq.length;
+  for (let i = 0; i < bins; i++) { total += freq[i]; if (i < 10) bass += freq[i]; }
+  bass = (bass / 10) / 255;       // 0~1
+  const energy = (total / bins) / 255;
+
+  const cx = W / 2, cy = H * 0.40;
+  const rot = elapsed * 0.6;
+  const orbR = 140 * (1 + bass * 0.45);
+
+  // 외곽 글로우
+  const glow = ctx.createRadialGradient(cx, cy, orbR * 0.3, cx, cy, orbR * 2.4);
+  glow.addColorStop(0, 'rgba(197,163,255,' + (0.18 + energy * 0.25) + ')');
+  glow.addColorStop(1, 'rgba(13,13,16,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
+
+  // 원형 비주얼라이저 바
+  const bars = 48;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < bars; i++) {
+    const idx = Math.floor(i / bars * (bins * 0.7));
+    const v = freq[idx] / 255;
+    const len = 16 + v * 150;
+    const ang = (i / bars) * Math.PI * 2 + rot;
+    const r0 = orbR + 16;
+    const x0 = cx + Math.cos(ang) * r0, y0 = cy + Math.sin(ang) * r0;
+    const x1 = cx + Math.cos(ang) * (r0 + len), y1 = cy + Math.sin(ang) * (r0 + len);
+    ctx.strokeStyle = VIDEO_PALETTE[i % VIDEO_PALETTE.length];
+    ctx.lineWidth = 5;
+    ctx.globalAlpha = 0.45 + v * 0.55;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // 중앙 오브
+  const og = ctx.createRadialGradient(
+    cx - orbR * 0.3, cy - orbR * 0.3, orbR * 0.1, cx, cy, orbR);
+  og.addColorStop(0, '#eaffb0');
+  og.addColorStop(0.45, '#a3e5ff');
+  og.addColorStop(1, '#c5a3ff');
+  ctx.fillStyle = og;
+  ctx.beginPath(); ctx.arc(cx, cy, orbR, 0, Math.PI * 2); ctx.fill();
+  // 안쪽 어둠 + 이모지
+  ctx.font = (orbR * 0.9) + 'px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('🎤', cx, cy + orbR * 0.04);
+
+  // 상단 제목
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '700 44px "Black Han Sans", Pretendard, sans-serif';
+  const titleLines = wrapText(ctx, song.title || '', W * 0.86);
+  let ty = 70;
+  for (const tl of titleLines.slice(0, 2)) { ctx.fillText(tl, cx, ty); ty += 54; }
+  ctx.font = '600 22px Pretendard, sans-serif';
+  ctx.fillStyle = '#8a8a99';
+  ctx.fillText('🎯 ' + (song.name || '') + ' 에게', cx, ty + 6);
+
+  // 현재 가사 한 줄 (곡 길이에 맞춰 고르게 전환)
+  if (lines.length) {
+    const slot = duration / lines.length;
+    const li = Math.min(Math.floor(elapsed / slot), lines.length - 1);
+    const within = (elapsed - li * slot) / slot;
+    let alpha = 1;
+    if (within < 0.15) alpha = within / 0.15;
+    else if (within > 0.85) alpha = (1 - within) / 0.15;
+    alpha = Math.max(0, Math.min(1, alpha));
+
+    const text = lines[li];
+    let fs = text.length > 24 ? 40 : 50;
+    ctx.font = '800 ' + fs + 'px Pretendard, sans-serif';
+    let wrapped = wrapText(ctx, text, W * 0.84);
+    if (wrapped.length > 3) { fs = 34; ctx.font = '800 ' + fs + 'px Pretendard, sans-serif'; wrapped = wrapText(ctx, text, W * 0.84); }
+
+    const lineH = fs * 1.3;
+    const blockH = wrapped.length * lineH;
+    let lyY = H * 0.74 - blockH / 2;
+    ctx.globalAlpha = alpha;
+    ctx.textBaseline = 'top';
+    for (const wl of wrapped) {
+      ctx.lineWidth = 8; ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.strokeText(wl, cx, lyY);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(wl, cx, lyY);
+      lyY += lineH;
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // 워터마크
+  ctx.font = '700 26px "Black Han Sans", Pretendard, sans-serif';
+  ctx.fillStyle = '#d4ff3a';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('🎤 Diss4U', cx, H - 44);
+
+  // 진행 바
+  const p = Math.min(elapsed / duration, 1);
+  ctx.fillStyle = '#2a2a32';
+  ctx.fillRect(0, H - 8, W, 8);
+  ctx.fillStyle = '#d4ff3a';
+  ctx.fillRect(0, H - 8, W * p, 8);
+}
+
+async function makeInstaVideo() {
+  const song = STATE.currentSong;
+  if (!song || !song.audioUrl) { showToast('오디오가 없어요'); return; }
+
+  const mime = pickVideoMime();
+  if (mime === null) {
+    showToast('이 브라우저는 영상 생성을 지원하지 않아요 (최신 Chrome/Safari 권장)');
+    return;
+  }
+  const canvasEl = document.getElementById('videoCanvas');
+  if (!canvasEl.captureStream) {
+    showToast('이 브라우저는 영상 캡처를 지원하지 않아요');
+    return;
+  }
+
+  openVideoModal();
+  setVideoStatus('오디오 불러오는 중...', 0);
+
+  try { await (document.fonts && document.fonts.ready); } catch (e) {}
+
+  const lines = parseLyricLines(song.lyrics);
+
+  // 1) 오디오 받아서 디코딩
+  let audioBuffer;
+  try {
+    const resp = await fetch(song.audioUrl);
+    const arr = await resp.arrayBuffer();
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    VIDEO.audioCtx = new AudioCtx();
+    audioBuffer = await VIDEO.audioCtx.decodeAudioData(arr);
+  } catch (e) {
+    console.warn('audio load fail', e);
+    setVideoStatus('❌ 오디오를 불러오지 못했어요. 다시 시도해주세요.');
+    return;
+  }
+  if (!document.getElementById('videoModal').classList.contains('active')) return; // 닫힘
+
+  const duration = audioBuffer.duration;
+  const ctxA = VIDEO.audioCtx;
+
+  // 2) 오디오 그래프: source -> analyser -> mediaStreamDestination (+ 스피커)
+  const srcNode = ctxA.createBufferSource();
+  srcNode.buffer = audioBuffer;
+  const analyser = ctxA.createAnalyser();
+  analyser.fftSize = 256;
+  const freq = new Uint8Array(analyser.frequencyBinCount);
+  const dest = ctxA.createMediaStreamDestination();
+  srcNode.connect(analyser);
+  analyser.connect(dest);
+  srcNode.connect(ctxA.destination);
+  VIDEO.srcNode = srcNode;
+
+  // 3) 캔버스 + 스트림 합치기 (모바일 부하 줄이려 540x960)
+  const W = 540, H = 960;
+  canvasEl.width = W; canvasEl.height = H;
+  const ctx = canvasEl.getContext('2d');
+  const videoStream = canvasEl.captureStream(30);
+  const mixed = new MediaStream([
+    ...videoStream.getVideoTracks(),
+    ...dest.stream.getAudioTracks()
+  ]);
+
+  let recorder;
+  try {
+    recorder = mime ? new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 3000000 })
+                    : new MediaRecorder(mixed);
+  } catch (e) {
+    recorder = new MediaRecorder(mixed);
+  }
+  VIDEO.recorder = recorder;
+  const chunks = [];
+  recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  const finished = new Promise(res => { recorder.onstop = res; });
+
+  // 4) 그리기 루프 — rAF 대신 setInterval + 오디오 시계.
+  //    모바일에서 rAF가 중간에 멈춰 화면이 얼어붙는 문제를 피하고,
+  //    한 프레임이 에러나도 try/catch로 루프가 죽지 않게 한다.
+  VIDEO.active = true;
+  try { await ctxA.resume(); } catch (e) {}
+  recorder.start();
+  srcNode.start();
+  const startAudioTime = ctxA.currentTime;
+
+  function stopDraw() {
+    if (VIDEO.drawTimer) { clearInterval(VIDEO.drawTimer); VIDEO.drawTimer = null; }
+  }
+  VIDEO.drawTimer = setInterval(() => {
+    if (!VIDEO.active) { stopDraw(); return; }
+    const elapsed = ctxA.currentTime - startAudioTime;
+    try {
+      analyser.getByteFrequencyData(freq);
+      drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song);
+    } catch (e) { console.warn('frame err', e); }
+    const pct = Math.min(elapsed / duration, 1);
+    setVideoStatus('영상 만드는 중... ' + Math.round(pct * 100) + '% (' + Math.ceil(duration) + '초)', pct);
+    if (elapsed >= duration) stopDraw();
+  }, 33);
+
+  srcNode.onended = () => {
+    stopDraw();
+    if (recorder.state === 'recording') { try { recorder.stop(); } catch (e) {} }
+  };
+  // 안전 타이머
+  VIDEO.stopTimer = setTimeout(() => {
+    stopDraw();
+    if (recorder.state === 'recording') { try { recorder.stop(); } catch (e) {} }
+  }, (duration + 2) * 1000);
+
+  await finished;
+  VIDEO.active = false;
+  try { if (ctxA.state !== 'closed') ctxA.close(); } catch (e) {}
+
+  if (!document.getElementById('videoModal').classList.contains('active')) return; // 닫힘
+
+  const outType = (mime || recorder.mimeType || 'video/webm');
+  const blob = new Blob(chunks, { type: outType });
+  VIDEO.blob = blob;
+  if (VIDEO.blobUrl) URL.revokeObjectURL(VIDEO.blobUrl);
+  VIDEO.blobUrl = URL.createObjectURL(blob);
+
+  // 결과 표시
+  document.getElementById('videoCanvasWrap').style.display = 'none';
+  document.getElementById('videoProgressTrack').style.display = 'none';
+  const v = document.getElementById('videoPreview');
+  v.src = VIDEO.blobUrl;
+  v.style.display = 'block';
+  document.getElementById('videoActions').style.display = 'grid';
+  const isMp4 = outType.includes('mp4');
+  setVideoStatus(isMp4 ? '✅ 완성! 공유하거나 저장하세요.'
+    : '✅ 완성! (webm 형식) 인스타가 안 받으면 저장 후 올려주세요.');
+}
+
+function videoFileName() {
+  const t = (STATE.currentSong && STATE.currentSong.title) || 'diss4u';
+  return t.replace(/[^a-zA-Z0-9가-힣]/g, '_') || 'diss4u';
+}
+
+async function shareInstaVideo() {
+  if (!VIDEO.blob) return;
+  const ext = VIDEO.blob.type.includes('mp4') ? 'mp4' : 'webm';
+  const file = new File([VIDEO.blob], videoFileName() + '.' + ext, { type: VIDEO.blob.type });
+  const song = STATE.currentSong || {};
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: song.title || 'Diss4U',
+        text: '🎤 ' + (song.title || '') + ' — Diss4U로 만든 디스곡'
+      });
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      console.warn('video share fail', e);
+    }
+  }
+  showToast('공유시트 미지원 — 저장 후 인스타에 올려주세요');
+  downloadInstaVideo();
+}
+
+function downloadInstaVideo() {
+  if (!VIDEO.blobUrl) return;
+  const ext = VIDEO.blob.type.includes('mp4') ? 'mp4' : 'webm';
+  const a = document.createElement('a');
+  a.href = VIDEO.blobUrl;
+  a.download = videoFileName() + '.' + ext;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast('⬇️ 저장 완료');
+}
+</script>
+
+</body>
+</html>
