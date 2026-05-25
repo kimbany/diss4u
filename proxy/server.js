@@ -315,6 +315,26 @@ async function lookupPortonePayment(paymentId) {
   }
 }
 
+// 포트원 V2 결제 취소(환불). amount 생략 시 전액 취소.
+async function cancelPortonePayment(paymentId, amount, reason) {
+  const secret = process.env.PORTONE_V2_API_SECRET;
+  if (!secret) return { ok: false, error: 'portone_not_configured' };
+  const body = { reason: reason || '고객 환불 요청' };
+  if (amount && amount > 0) body.amount = amount;
+  try {
+    const r = await fetch(`https://api.portone.io/payments/${encodeURIComponent(paymentId)}/cancel`, {
+      method: 'POST',
+      headers: { 'Authorization': `PortOne ${secret}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const text = await r.text();
+    if (!r.ok) return { ok: false, error: `portone_http_${r.status}`, detail: text.slice(0, 300) };
+    return { ok: true, data: text ? JSON.parse(text) : {} };
+  } catch (e) {
+    return { ok: false, error: 'portone_unreachable', detail: e.message };
+  }
+}
+
 // 결제 1건당 1회만 크레딧 적립 (중복 호출 방지). { credits, already }
 async function creditPaymentOnce(uid, paymentId, credits, amount) {
   const pref = fdb.collection('payments').doc(paymentId);
@@ -811,6 +831,82 @@ const server = http.createServer(async (req, res) => {
     await ADMIN_DOC().set(next, { merge: true });
     // 비번이 바뀌면 서명키도 바뀌어 기존 토큰 무효 → 새 토큰 발급
     return send(res, 200, { ok: true, token: issueAdminToken(next), message: '비밀번호가 변경되었어요' });
+  }
+
+  // [관리자] 특정 회원의 결제 내역 (uid 기준)
+  if (path === '/admin/payments') {
+    if (!(await verifyAdmin(req))) return send(res, 401, { error: 'admin_auth_required', message: '관리자 인증이 필요해요' });
+    const uid = url.searchParams.get('uid');
+    if (!uid) return send(res, 400, { error: 'no_uid', message: '회원 정보가 없어요' });
+    const qs = await fdb.collection('payments').where('uid', '==', uid).get();
+    const payments = qs.docs.map(d => {
+      const x = d.data();
+      return {
+        paymentId: x.paymentId || d.id,
+        amount: x.amount || 0,
+        credits: x.credits || 0,
+        status: x.status || 'completed',
+        refundedAmount: x.refundedAmount || 0,
+        refundedCredits: x.refundedCredits || 0,
+        createdAt: (x.createdAt && x.createdAt.toDate) ? x.createdAt.toDate().toISOString() : null
+      };
+    });
+    payments.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    return send(res, 200, { ok: true, payments });
+  }
+
+  // [관리자] 자동 환불: 포트원 취소(부분/전액) + 유료 크레딧 차감 + 기록
+  if (path === '/refund-payment' && req.method === 'POST') {
+    if (!(await verifyAdmin(req))) return send(res, 401, { error: 'admin_auth_required', message: '관리자 인증이 필요해요' });
+    const { paymentId, amount, reason } = await readBody(req);
+    if (!paymentId) return send(res, 400, { error: 'no_payment_id', message: '결제 정보가 없어요' });
+
+    const pref = fdb.collection('payments').doc(String(paymentId));
+    const psnap = await pref.get();
+    if (!psnap.exists) return send(res, 404, { error: 'payment_not_found', message: '결제 기록이 없어요' });
+    const pd = psnap.data();
+    const originalAmount = pd.amount || 0;
+    const originalCredits = pd.credits || 0;
+    const alreadyAmount = pd.refundedAmount || 0;
+    const remaining = originalAmount - alreadyAmount;
+    if (remaining <= 0) return send(res, 400, { error: 'already_refunded', message: '이미 전액 환불된 결제예요' });
+
+    let refundAmount = (typeof amount === 'number' && amount > 0) ? Math.floor(amount) : remaining;
+    if (refundAmount > remaining) {
+      return send(res, 400, { error: 'amount_exceeds', message: `환불 가능액(${remaining}원)을 초과했어요`, remaining });
+    }
+    const creditsToDeduct = originalAmount > 0 ? Math.round(originalCredits * refundAmount / originalAmount) : 0;
+
+    // 1) 포트원 취소 (외부 처리 먼저)
+    const c = await cancelPortonePayment(String(paymentId), refundAmount, reason);
+    if (!c.ok) return send(res, 502, { error: 'cancel_failed', message: '포트원 취소에 실패했어요', detail: c.error, raw: c.detail });
+
+    // 2) 유료 풀에서 차감 + 환불내역 기록
+    try {
+      const result = await fdb.runTransaction(async (t) => {
+        const uref = fdb.collection('users').doc(pd.uid);
+        const us = await t.get(uref);
+        const ps = await t.get(pref);
+        const p = us.exists ? splitPools(us.data()) : { free: 0, paid: 0, freeGranted: 0, paidGranted: 0 };
+        const deducted = Math.min(creditsToDeduct, p.paid);
+        p.paid -= deducted;
+        p.paidGranted = Math.max(p.paid, p.paidGranted - deducted);
+        const newRefundedAmount = (ps.data().refundedAmount || 0) + refundAmount;
+        const newRefundedCredits = (ps.data().refundedCredits || 0) + deducted;
+        t.set(uref, poolPatch(p), { merge: true });
+        t.set(pref, {
+          refundedAmount: newRefundedAmount,
+          refundedCredits: newRefundedCredits,
+          status: newRefundedAmount >= originalAmount ? 'refunded' : 'partial_refunded',
+          refundedAt: admin.firestore.FieldValue.serverTimestamp(),
+          refundReason: reason || ''
+        }, { merge: true });
+        return { credits: p.free + p.paid, deducted, fullyRefunded: newRefundedAmount >= originalAmount };
+      });
+      return send(res, 200, { ok: true, refundAmount, deductedCredits: result.deducted, credits: result.credits, fullyRefunded: result.fullyRefunded });
+    } catch (e) {
+      return send(res, 200, { ok: true, warning: '포트원 환불은 됐지만 크레딧 차감 기록에 실패했어요. Firebase에서 수동 확인이 필요해요.', refundAmount, detail: e.message });
+    }
   }
 
   // 결제 검증 + 크레딧 적립. body: { paymentId }

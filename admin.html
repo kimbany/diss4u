@@ -53,6 +53,22 @@
   .pill { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); color: var(--dim); }
   .free { color: var(--accent); } .paid { color: var(--accent2); }
   @media (max-width: 560px) { .wrap { padding: 16px 10px 60px; } }
+  /* 결제/환불 모달 */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex;
+    align-items: flex-start; justify-content: center; padding: 40px 16px; z-index: 50; overflow-y: auto; }
+  .modal { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; width: 100%; max-width: 520px; }
+  .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 12px; }
+  .modal-head h2 { font-size: 15px; margin: 0; color: var(--accent); word-break: break-all; }
+  .pay-item { border: 1px solid var(--line); border-radius: 12px; padding: 13px; margin-bottom: 10px; }
+  .pay-item .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; gap: 8px; }
+  .pay-item .amt { font-size: 15px; font-weight: 800; }
+  .pay-item .meta { font-size: 11px; color: var(--dim); word-break: break-all; }
+  .refbox { margin-top: 10px; display: flex; gap: 6px; }
+  .refbox input { flex: 1; }
+  .statpill { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+  .statpill.completed { color: var(--accent); border-color: var(--accent); }
+  .statpill.refunded { color: var(--danger); border-color: var(--danger); }
+  .statpill.partial_refunded { color: #ffb35a; border-color: #ffb35a; }
 </style>
 </head>
 <body>
@@ -127,6 +143,17 @@
       <button class="btn" id="pwBtn">비밀번호 변경</button>
       <div class="msg" id="pwMsg"></div>
     </div>
+  </div>
+</div>
+
+<!-- 결제/환불 모달 -->
+<div id="payModal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="payTitle">결제 내역</h2>
+      <button class="btn secondary small" id="payClose">닫기</button>
+    </div>
+    <div id="payBody"></div>
   </div>
 </div>
 
@@ -218,10 +245,17 @@ function renderMembers() {
       <td class="num free">${m.freeCredits}</td>
       <td class="num paid">${m.paidGranted}</td>
       <td class="num paid">${m.paidCredits}</td>
-      <td style="text-align:right"><button class="btn small" data-uid="${m.uid}" data-email="${escapeHtml(m.email || '')}">크레딧 증정</button></td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn small" data-act="grant" data-uid="${m.uid}" data-email="${escapeHtml(m.email || '')}">크레딧 증정</button>
+        <button class="btn small secondary" data-act="pay" data-uid="${m.uid}" data-email="${escapeHtml(m.email || '')}" style="margin-left:6px;">결제/환불</button>
+      </td>
     </tr>`).join('');
   document.querySelectorAll('#memberRows button[data-uid]').forEach(b => {
-    b.addEventListener('click', () => grant(b.getAttribute('data-uid'), b.getAttribute('data-email')));
+    b.addEventListener('click', () => {
+      const uid = b.getAttribute('data-uid'), email = b.getAttribute('data-email');
+      if (b.getAttribute('data-act') === 'pay') openPayments(uid, email);
+      else grant(uid, email);
+    });
   });
 }
 
@@ -254,6 +288,62 @@ async function grant(uid, email) {
   loadMembers();
 }
 
+// ===== 결제/환불 =====
+function won(n) { return (Number(n) || 0).toLocaleString('ko-KR') + '원'; }
+
+async function openPayments(uid, email) {
+  $('payTitle').textContent = (email || uid) + ' · 결제 내역';
+  $('payBody').innerHTML = '<div class="msg">불러오는 중…</div>';
+  $('payModal').classList.remove('hidden');
+  $('payModal').dataset.uid = uid;
+  $('payModal').dataset.email = email || '';
+  const r = await api('/admin/payments?uid=' + encodeURIComponent(uid));
+  if (r.status === 401) { logout(); return; }
+  if (!r.ok || !r.data.ok) { $('payBody').innerHTML = '<div class="msg err">' + escapeHtml(r.data.message || '조회 실패') + '</div>'; return; }
+  renderPayments(r.data.payments || []);
+}
+
+function renderPayments(payments) {
+  if (!payments.length) { $('payBody').innerHTML = '<div class="msg">결제 내역이 없어요.</div>'; return; }
+  const label = { completed: '결제완료', refunded: '환불완료', partial_refunded: '부분환불' };
+  $('payBody').innerHTML = payments.map(p => {
+    const remaining = (p.amount || 0) - (p.refundedAmount || 0);
+    let h = '<div class="pay-item" id="pi-' + p.paymentId + '">'
+      + '<div class="top"><span class="amt">' + won(p.amount) + ' <span class="sub">· ' + p.credits + 'p</span></span>'
+      + '<span class="statpill ' + p.status + '">' + (label[p.status] || p.status) + '</span></div>'
+      + '<div class="meta">' + fmtDate(p.createdAt) + '<br>' + escapeHtml(p.paymentId) + '</div>';
+    if (p.refundedAmount > 0) h += '<div class="meta" style="color:var(--danger);margin-top:4px;">환불됨 ' + won(p.refundedAmount) + ' (-' + p.refundedCredits + 'p) · 잔여 ' + won(remaining) + '</div>';
+    if (remaining > 0) h += '<div class="refbox"><input type="number" min="1" max="' + remaining + '" placeholder="부분환불 금액(원), 비우면 전액" id="amt-' + p.paymentId + '"><button class="btn danger small" data-pid="' + p.paymentId + '" data-amt="' + p.amount + '" data-cr="' + p.credits + '">환불</button></div>';
+    return h + '</div>';
+  }).join('');
+  $('payBody').querySelectorAll('button[data-pid]').forEach(b => {
+    b.addEventListener('click', () => doRefund(b.getAttribute('data-pid'), Number(b.getAttribute('data-amt')), Number(b.getAttribute('data-cr'))));
+  });
+}
+
+async function doRefund(paymentId, amount, credits) {
+  const amtEl = $('amt-' + paymentId);
+  const raw = amtEl ? amtEl.value.trim() : '';
+  const refundAmount = raw ? Number(raw) : null;
+  if (refundAmount !== null && (!Number.isFinite(refundAmount) || refundAmount <= 0)) { alert('환불 금액이 올바르지 않아요'); return; }
+  const estCredits = refundAmount ? Math.round(credits * refundAmount / amount) : credits;
+  const text = refundAmount ? (won(refundAmount) + ' 부분환불') : (won(amount) + ' 전액환불');
+  if (!confirm(text + ' 할까요?\n예상 차감 크레딧: -' + estCredits + 'p\n되돌릴 수 없어요.')) return;
+  const body = { paymentId, reason: '고객 환불 요청' };
+  if (refundAmount) body.amount = refundAmount;
+  const item = $('pi-' + paymentId);
+  const r = await api('/refund-payment', { method: 'POST', body: JSON.stringify(body) });
+  if (r.status === 401) { logout(); return; }
+  if (!r.ok || !r.data.ok) {
+    item.insertAdjacentHTML('beforeend', '<div class="msg err">' + escapeHtml(r.data.message || '환불 실패') + (r.data.detail ? ' (' + escapeHtml(r.data.detail) + ')' : '') + '</div>');
+    return;
+  }
+  let m = '✓ 환불 완료: ' + won(r.data.refundAmount) + ' · 크레딧 -' + r.data.deductedCredits + 'p (잔여 ' + r.data.credits + 'p)';
+  if (r.data.warning) m = '⚠️ ' + r.data.warning;
+  item.insertAdjacentHTML('beforeend', '<div class="msg ok">' + escapeHtml(m) + '</div>');
+  setTimeout(() => { openPayments($('payModal').dataset.uid, $('payModal').dataset.email); loadMembers(); }, 1300);
+}
+
 // ===== 비밀번호 변경 =====
 async function changePw() {
   const cur = $('curPw').value, np = $('newPw').value, np2 = $('newPw2').value;
@@ -278,6 +368,8 @@ $('logoutBtn').addEventListener('click', logout);
 $('reloadBtn').addEventListener('click', loadMembers);
 $('search').addEventListener('input', renderMembers);
 $('pwBtn').addEventListener('click', changePw);
+$('payClose').addEventListener('click', () => $('payModal').classList.add('hidden'));
+$('payModal').addEventListener('click', (e) => { if (e.target.id === 'payModal') $('payModal').classList.add('hidden'); });
 
 // 시작: 토큰 있으면 대시보드 시도
 if (TOKEN) { showDash(); } else { showLogin(); }
