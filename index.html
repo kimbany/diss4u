@@ -12,6 +12,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js"></script>
 <script src="https://cdn.portone.io/v2/browser-sdk.js"></script>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1822729436086485" crossorigin="anonymous" id="adsbygoogle-js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
@@ -836,8 +837,8 @@ const DEFAULT_WORKER_URL = 'https://chinolsong-proxy.onrender.com';
 
 // === 구글 애드센스 ===
 // 가입 후 게시자 ID와 광고 슬롯 ID를 채우면 자동으로 광고가 표시됩니다. (비워두면 광고 안 나옴)
-const ADSENSE_CLIENT = '';            // 예: 'ca-pub-1234567890123456'
-const AD_SLOT_RESULT = '';            // 결과 화면 광고 슬롯 ID (애드센스에서 광고 단위 생성 후)
+const ADSENSE_CLIENT = 'ca-pub-1822729436086485';
+const AD_SLOT_RESULT = '';            // 결과 화면 광고 슬롯 ID (애드센스 승인 후 광고 단위 생성해서 입력)
 function adsEnabled() { return /^ca-pub-\d+$/.test(ADSENSE_CLIENT); }
 function injectAdsenseLoader() {
   if (!adsEnabled() || document.getElementById('adsbygoogle-js')) return;

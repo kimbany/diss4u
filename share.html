@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Pretendard:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1822729436086485" crossorigin="anonymous" id="adsbygoogle-js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root { --bg:#0d0d10; --card:#1a1a1f; --lime:#d4ff3a; --cyan:#a3e5ff; --text:#fff; --dim:#8a8a99; --border:#2a2a32; }
@@ -67,8 +68,8 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
 // === 구글 애드센스 (index.html과 동일한 게시자 ID 사용) ===
-const ADSENSE_CLIENT = '';            // 예: 'ca-pub-1234567890123456'
-const AD_SLOT_SHARE = '';             // 공유 페이지 광고 슬롯 ID
+const ADSENSE_CLIENT = 'ca-pub-1822729436086485';
+const AD_SLOT_SHARE = '';             // 공유 페이지 광고 슬롯 ID (애드센스 승인 후 입력)
 function adsEnabled(){ return /^ca-pub-\d+$/.test(ADSENSE_CLIENT); }
 function injectAdsenseLoader(){
   if(!adsEnabled() || document.getElementById('adsbygoogle-js')) return;
