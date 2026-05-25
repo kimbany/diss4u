@@ -1464,6 +1464,21 @@ const VIDEO = {
 };
 const VIDEO_PALETTE = ['#d4ff3a', '#a3e5ff', '#c5a3ff', '#ffb3d9'];
 
+// 가운데에 띄울 로고 (같은 폴더의 logo.png). 없으면 기존 마이크 오브로 폴백.
+let LOGO_IMG = null;
+function loadLogo() {
+  return new Promise((resolve) => {
+    if (LOGO_IMG && LOGO_IMG.complete && LOGO_IMG.naturalWidth) return resolve(LOGO_IMG);
+    const img = new Image();
+    let done = false;
+    const finish = (ok) => { if (done) return; done = true; LOGO_IMG = ok ? img : null; resolve(LOGO_IMG); };
+    img.onload = () => finish(true);
+    img.onerror = () => finish(false);
+    setTimeout(() => finish(!!(img.complete && img.naturalWidth)), 3000);
+    img.src = 'logo.png?v=1';
+  });
+}
+
 // 가사를 화면에 띄울 줄 단위로 정리 ([Intro] 등 섹션태그 제거)
 function parseLyricLines(raw) {
   if (!raw) return [];
@@ -1573,18 +1588,28 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song) {
   }
   ctx.globalAlpha = 1;
 
-  // 중앙 오브
-  const og = ctx.createRadialGradient(
-    cx - orbR * 0.3, cy - orbR * 0.3, orbR * 0.1, cx, cy, orbR);
-  og.addColorStop(0, '#eaffb0');
-  og.addColorStop(0.45, '#a3e5ff');
-  og.addColorStop(1, '#c5a3ff');
-  ctx.fillStyle = og;
-  ctx.beginPath(); ctx.arc(cx, cy, orbR, 0, Math.PI * 2); ctx.fill();
-  // 안쪽 어둠 + 이모지
-  ctx.font = (orbR * 0.9) + 'px sans-serif';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('🎤', cx, cy + orbR * 0.04);
+  // 중앙: 로고 이미지(있으면) — 비트에 맞춰 둠칫둠칫. 없으면 오브+🎤 폴백.
+  if (LOGO_IMG && LOGO_IMG.naturalWidth) {
+    const lw = orbR * 2.2;                                  // 베이스에 따라 커졌다 작아짐(둠칫)
+    const lh = lw * (LOGO_IMG.naturalHeight / LOGO_IMG.naturalWidth);
+    const bob = Math.sin(elapsed * 5) * (3 + bass * 14);    // 살짝 위아래 바운스
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,179,217,0.5)';
+    ctx.shadowBlur = 20 + bass * 30;
+    ctx.drawImage(LOGO_IMG, cx - lw / 2, cy - lh / 2 + bob, lw, lh);
+    ctx.restore();
+  } else {
+    const og = ctx.createRadialGradient(
+      cx - orbR * 0.3, cy - orbR * 0.3, orbR * 0.1, cx, cy, orbR);
+    og.addColorStop(0, '#eaffb0');
+    og.addColorStop(0.45, '#a3e5ff');
+    og.addColorStop(1, '#c5a3ff');
+    ctx.fillStyle = og;
+    ctx.beginPath(); ctx.arc(cx, cy, orbR, 0, Math.PI * 2); ctx.fill();
+    ctx.font = (orbR * 0.9) + 'px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('🎤', cx, cy + orbR * 0.04);
+  }
 
   // 상단 제목
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
@@ -1661,6 +1686,7 @@ async function makeInstaVideo() {
   setVideoStatus('오디오 불러오는 중...', 0);
 
   try { await (document.fonts && document.fonts.ready); } catch (e) {}
+  await loadLogo();
 
   const lines = parseLyricLines(song.lyrics);
 
