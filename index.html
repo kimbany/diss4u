@@ -1848,6 +1848,26 @@ function loadLogo() {
   });
 }
 
+// 레이어별 PNG (레포 루트에 추가하면 자동 사용). 없으면 logo.png로 폴백.
+const LAYER_SRCS = { wave: 'wave.png', mascot: 'mascot.png', wordmark: 'wordmark.png', badge: 'badge.png' };
+const LAYERS = {};
+let LAYERS_READY = false;
+function loadLayers() {
+  const entries = Object.entries(LAYER_SRCS);
+  return Promise.all(entries.map(([key, src]) => new Promise((resolve) => {
+    const img = new Image();
+    let done = false;
+    const finish = (ok) => { if (done) return; done = true; LAYERS[key] = ok ? img : null; resolve(); };
+    img.onload = () => finish(true);
+    img.onerror = () => finish(false);
+    setTimeout(() => finish(!!(img.complete && img.naturalWidth)), 3000);
+    img.src = src + '?v=1';
+  }))).then(() => {
+    LAYERS_READY = !!(LAYERS.mascot && LAYERS.mascot.naturalWidth);
+    return LAYERS_READY;
+  });
+}
+
 // 가사를 화면에 띄울 줄 단위로 정리 ([Intro] 등 섹션태그 제거)
 function parseLyricLines(raw) {
   if (!raw) return [];
@@ -1913,6 +1933,52 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
+function drawImgCentered(ctx, img, x, y, w) {
+  if (!img || !img.naturalWidth) return 0;
+  const h = w * (img.naturalHeight / img.naturalWidth);
+  ctx.drawImage(img, x - w / 2, y - h / 2, w, h);
+  return h;
+}
+
+// 중앙을 4개 레이어로 합성: 사운드웨이브(회전) + 마스코트(비트 바운스) + 워드마크 + 배지
+function drawLayeredCenter(ctx, cx, cy, orbR, bass, elapsed) {
+  const beat = 1 + bass * 0.18;
+  const bob = Math.sin(elapsed * 5) * (3 + bass * 12);
+
+  // 1) 사운드웨이브 프레임 — 천천히 회전 + 베이스에 따라 확대
+  if (LAYERS.wave) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(elapsed * 0.25);
+    ctx.globalAlpha = 0.85;
+    ctx.shadowColor = 'rgba(163,229,255,0.5)';
+    ctx.shadowBlur = 18 + bass * 26;
+    drawImgCentered(ctx, LAYERS.wave, 0, 0, orbR * 2.7 * (1 + bass * 0.12));
+    ctx.restore();
+  }
+
+  // 2) 마스코트 — 비트에 맞춰 둠칫둠칫
+  if (LAYERS.mascot) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,179,217,0.55)';
+    ctx.shadowBlur = 20 + bass * 30;
+    drawImgCentered(ctx, LAYERS.mascot, cx, cy - orbR * 0.25 + bob, orbR * 1.6 * beat);
+    ctx.restore();
+  }
+
+  // 3) Diss4U 워드마크
+  let belowY = cy + orbR * 0.72;
+  if (LAYERS.wordmark) {
+    const lh = drawImgCentered(ctx, LAYERS.wordmark, cx, belowY, orbR * 2.2);
+    belowY += lh * 0.5 + orbR * 0.12;
+  }
+
+  // 4) THIS 4 U 배지
+  if (LAYERS.badge) {
+    drawImgCentered(ctx, LAYERS.badge, cx, belowY + orbR * 0.18, orbR * 1.1);
+  }
+}
+
 function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song) {
   // 배경
   const bg = ctx.createLinearGradient(0, 0, 0, H);
@@ -1957,8 +2023,10 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song) {
   }
   ctx.globalAlpha = 1;
 
-  // 중앙: 로고 이미지(있으면) — 비트에 맞춰 둠칫둠칫. 없으면 오브+🎤 폴백.
-  if (LOGO_IMG && LOGO_IMG.naturalWidth) {
+  // 중앙: 레이어 합성(있으면) → 단일 로고(logo.png) → 오브+🎤 순으로 폴백.
+  if (LAYERS_READY) {
+    drawLayeredCenter(ctx, cx, cy, orbR, bass, elapsed);
+  } else if (LOGO_IMG && LOGO_IMG.naturalWidth) {
     const lw = orbR * 2.2;                                  // 베이스에 따라 커졌다 작아짐(둠칫)
     const lh = lw * (LOGO_IMG.naturalHeight / LOGO_IMG.naturalWidth);
     const bob = Math.sin(elapsed * 5) * (3 + bass * 14);    // 살짝 위아래 바운스
@@ -2056,6 +2124,7 @@ async function makeInstaVideo() {
 
   try { await (document.fonts && document.fonts.ready); } catch (e) {}
   await loadLogo();
+  await loadLayers();
 
   const lines = parseLyricLines(song.lyrics);
 
