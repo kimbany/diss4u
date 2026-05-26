@@ -865,7 +865,7 @@
       </div>
     </div>
     <div style="font-size:11px;color:var(--text-dimmer);margin-bottom:14px;">* 곡을 만들 때는 무료 크레딧부터 차감됩니다.</div>
-    <div class="label" style="margin-bottom:8px;">적립 내역</div>
+    <div class="label" style="margin-bottom:8px;">크레딧 내역 (적립 · 사용)</div>
     <div id="chList" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
       <div style="color:var(--text-dim);text-align:center;padding:20px 0;">불러오는 중...</div>
     </div>
@@ -1300,10 +1300,11 @@ function openMyList() {
   showScreen('mylist');
 }
 
-// ===== 크레딧 확인 (적립 내역) =====
+// ===== 크레딧 확인 (적립/사용 내역) =====
 const CREDIT_REASON_LABEL = {
   signup: '가입 보너스', purchase: '충전', referral: '친구 추천',
-  share: '공유 보상', admin: '관리자 지급'
+  share: '공유 보상', admin: '관리자 지급',
+  song: '곡 생성', refund: '생성 실패 환불'
 };
 
 async function openCreditHistory() {
@@ -1324,23 +1325,29 @@ async function openCreditHistory() {
     renderCreditSummary(d.credits, d.freeCredits, d.paidCredits);
     const items = d.items || [];
     if (!items.length) {
-      list.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px 0;">아직 적립 내역이 없어요.</div>';
+      list.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px 0;">아직 내역이 없어요.</div>';
       return;
     }
     list.innerHTML = items.map(it => {
-      const isFree = (it.type !== 'paid');
-      const tag = isFree ? '무료' : '유료';
-      const tagColor = isFree ? 'var(--cyan)' : 'var(--lime)';
-      const label = CREDIT_REASON_LABEL[it.reason] || '적립';
+      const isSpend = (it.amount < 0);
+      const label = CREDIT_REASON_LABEL[it.reason] || (isSpend ? '사용' : '적립');
       const date = it.at ? new Date(it.at).toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' }) : '';
+      // 칩(무료/유료/사용/환불)
+      let chip = '', chipColor = 'var(--text-dim)';
+      if (it.reason === 'song') { chip = '사용'; chipColor = 'var(--text-dim)'; }
+      else if (it.reason === 'refund') { chip = '환불'; chipColor = 'var(--cyan)'; }
+      else if (it.type === 'paid') { chip = '유료'; chipColor = 'var(--lime)'; }
+      else { chip = '무료'; chipColor = 'var(--cyan)'; }
+      const amtColor = isSpend ? '#ff8a8a' : 'var(--lime)';
+      const amtText = isSpend ? `${it.amount}p` : `+${it.amount}p`;
       return `<div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:11px 13px;">
         <div>
           <div style="font-size:11px;color:var(--text-dim);">${date}</div>
           <div style="font-size:13px;margin-top:1px;">${label}</div>
         </div>
         <div style="text-align:right;">
-          <div style="font-weight:800;color:var(--lime);">+${it.amount}p</div>
-          <div style="font-size:11px;font-weight:700;color:${tagColor};">${tag}</div>
+          <div style="font-weight:800;color:${amtColor};">${amtText}</div>
+          <div style="font-size:11px;font-weight:700;color:${chipColor};">${chip}</div>
         </div>
       </div>`;
     }).join('');

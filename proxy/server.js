@@ -195,7 +195,7 @@ async function onSongMade(uid) {
 // 트랜잭션으로 크레딧 차감 — 무료 먼저, 부족분은 충전에서 ({ ok, credits })
 async function chargeCredits(uid, amount) {
   const ref = fdb.collection('users').doc(uid);
-  return fdb.runTransaction(async (t) => {
+  const result = await fdb.runTransaction(async (t) => {
     const snap = await t.get(ref);
     const p = snap.exists
       ? splitPools(snap.data())
@@ -208,6 +208,8 @@ async function chargeCredits(uid, amount) {
     t.set(ref, poolPatch(p), { merge: true });
     return { ok: true, credits: p.free + p.paid };
   });
+  if (result.ok) await logCredit(uid, -amount, 'spend', 'song');  // 사용 내역 기록
+  return result;
 }
 
 // 크레딧 환불 — 차감 역순(충전 풀부터 복원, 나머지는 무료로)
@@ -223,6 +225,7 @@ async function refundCredits(uid, amount) {
       p.free += (amount - restorePaid);
       t.set(ref, poolPatch(p), { merge: true });
     });
+    await logCredit(uid, amount, 'refund', 'refund');  // 환불 내역 기록
   } catch (e) { console.warn('refund fail', e.message); }
 }
 
@@ -384,6 +387,7 @@ async function recordJob(jobId, uid, cost) {
 async function settleJob(jobId, outcome) {
   if (!fdb || !jobId) return;
   const ref = fdb.collection('jobs').doc(String(jobId));
+  let refunded = null;  // { uid, amount } — 환불 발생 시
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(ref);
@@ -402,10 +406,12 @@ async function settleJob(jobId, outcome) {
         p.free += (amount - restorePaid);
         t.set(uref, poolPatch(p), { merge: true });
         t.update(ref, { status: 'refunded' });
+        refunded = { uid: j.uid, amount };
       } else {
         t.update(ref, { status: 'done' });
       }
     });
+    if (refunded && refunded.amount) await logCredit(refunded.uid, refunded.amount, 'refund', 'refund');
   } catch (e) { console.warn('settleJob fail', e.message); }
 }
 
