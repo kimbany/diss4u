@@ -735,10 +735,14 @@
     <div class="lyrics-box" id="lyricsBox"></div>
 
     <button class="btn-primary" id="instaVideoBtn" onclick="makeInstaVideo()"
-      style="margin-bottom:12px;background:linear-gradient(135deg,var(--purple) 0%,var(--pink) 100%);color:#1a1a1f;box-shadow:0 8px 30px rgba(197,163,255,.35);">
+      style="margin-bottom:6px;background:linear-gradient(135deg,var(--purple) 0%,var(--pink) 100%);color:#1a1a1f;box-shadow:0 8px 30px rgba(197,163,255,.35);">
       <span class="btn-mic" style="color:var(--purple);">📹</span>
-      <span>인스타용 영상 만들기</span>
+      <span style="display:flex;flex-direction:column;align-items:center;line-height:1.25;">
+        <span>인스타용 영상 만들기</span>
+        <span style="font-size:11px;font-weight:600;opacity:.85;">인스타 공유 시 +2크레딧 증정 🎁</span>
+      </span>
     </button>
+    <div style="text-align:center;font-size:11px;color:var(--text-dim);margin-bottom:14px;">곡당 공유 1회만 크레딧이 증정돼요</div>
 
     <div class="action-grid">
       <button class="btn-secondary" onclick="downloadSong()">⬇️ MP3 받기</button>
