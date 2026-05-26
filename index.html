@@ -2186,6 +2186,7 @@ async function shareInstaVideo() {
   const ext = VIDEO.blob.type.includes('mp4') ? 'mp4' : 'webm';
   const file = new File([VIDEO.blob], videoFileName() + '.' + ext, { type: VIDEO.blob.type });
   const song = STATE.currentSong || {};
+  claimShareReward(song.id);   // 공유 의도 = 즉시 지급(곡당 1회, 서버에서 중복 차단)
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({
@@ -2193,7 +2194,6 @@ async function shareInstaVideo() {
         title: song.title || 'Diss4U',
         text: '🎤 ' + (song.title || '') + ' — Diss4U로 만든 디스곡'
       });
-      claimShareReward(song.id);   // 곡당 1회 +2크레딧
       return;
     } catch (e) {
       if (e.name === 'AbortError') return;
@@ -2202,7 +2202,6 @@ async function shareInstaVideo() {
   }
   showToast('공유시트 미지원 — 저장 후 인스타에 올려주세요');
   downloadInstaVideo();
-  claimShareReward(song.id);   // 저장(=인스타에 올리려는 의도)도 곡당 1회 +2크레딧
 }
 
 function downloadInstaVideo() {
@@ -2215,6 +2214,7 @@ function downloadInstaVideo() {
   a.click();
   document.body.removeChild(a);
   showToast('⬇️ 저장 완료');
+  claimShareReward((STATE.currentSong || {}).id);   // 저장도 곡당 1회 +2p
 }
 </script>
 
