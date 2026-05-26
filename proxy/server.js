@@ -128,6 +128,7 @@ async function getOrCreateUser(uid, email) {
       refCode,
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     }), { merge: true });
+    await logCredit(uid, SIGNUP_BONUS, 'free', 'signup');
     return { credits: SIGNUP_BONUS, refCode, ...p };
   }
   const data = snap.data();
@@ -141,6 +142,17 @@ async function getOrCreateUser(uid, email) {
   if (!data.refCode) patch.refCode = genRefCode();
   if (Object.keys(patch).length) { try { await ref.set(patch, { merge: true }); } catch (e) {} }
   return { ...data, ...p, credits: p.free + p.paid, refCode: data.refCode || patch.refCode || null };
+}
+
+// 크레딧 적립 내역(원장) 1건 기록. type: 'free' | 'paid', reason: signup|purchase|referral|share|admin
+async function logCredit(uid, amount, type, reason) {
+  if (!fdb || !uid || !amount) return;
+  try {
+    await fdb.collection('creditLog').add({
+      uid, amount, type: type || 'free', reason: reason || null,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (e) { console.warn('logCredit fail', e.message); }
 }
 
 // 곡 생성 성공 시: songsMade 증가 + (첫 곡 & 추천 귀속됐으면) 추천인 보상 지급(무료 풀)
@@ -163,17 +175,19 @@ async function onSongMade(uid) {
     });
     if (payTo && payTo !== uid) {
       const rref = fdb.collection('users').doc(payTo);
-      await fdb.runTransaction(async (t) => {
+      const paid = await fdb.runTransaction(async (t) => {
         const rsnap = await t.get(rref);
-        if (!rsnap.exists) return;
+        if (!rsnap.exists) return false;
         const rd = rsnap.data();
         const cnt = rd.referralCount || 0;
-        if (cnt >= REFERRAL_MAX) return; // 누적 상한 초과 시 보상 없음
+        if (cnt >= REFERRAL_MAX) return false; // 누적 상한 초과 시 보상 없음
         const p = splitPools(rd);
         p.free += REFERRAL_REWARD;
         p.freeGranted += REFERRAL_REWARD;
         t.set(rref, poolPatch(p, { referralCount: cnt + 1 }), { merge: true });
+        return true;
       });
+      if (paid) await logCredit(payTo, REFERRAL_REWARD, 'free', 'referral');
     }
   } catch (e) { console.warn('onSongMade fail', e.message); }
 }
@@ -232,6 +246,7 @@ async function grantCredits(uid, amount, adminUser) {
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
   } catch (e) { console.warn('grant log fail', e.message); }
+  await logCredit(uid, amount, 'free', 'admin');
   return result;
 }
 
@@ -702,6 +717,41 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  // 크레딧 적립 내역 + 현재 잔액(무료/유료). 날짜 내림차순.
+  if (path === '/credit-history') {
+    if (!CREDITS_ENABLED) return send(res, 200, { enabled: false, items: [] });
+    const a = await verifyAuthFull(req);
+    if (!a) return send(res, 401, { error: 'auth_required', message: '로그인이 필요해요' });
+    const u = await getOrCreateUser(a.uid, a.email);
+    let items = [];
+    try {
+      // 복합 색인 회피: uid 단일 조건으로 가져와 메모리에서 정렬
+      const snap = await fdb.collection('creditLog').where('uid', '==', a.uid).limit(300).get();
+      items = snap.docs.map(d => {
+        const x = d.data();
+        return {
+          amount: x.amount || 0,
+          type: x.type || 'free',
+          reason: x.reason || null,
+          at: (x.createdAt && x.createdAt.toDate) ? x.createdAt.toDate().toISOString() : null
+        };
+      });
+    } catch (e) { console.warn('credit-history fail', e.message); }
+    // 원장이 비어있는 기존 유저: 가입 보너스 1건만 합성해서 보여줌
+    if (items.length === 0) {
+      const at = (u.createdAt && u.createdAt.toDate) ? u.createdAt.toDate().toISOString() : null;
+      items.push({ amount: SIGNUP_BONUS, type: 'free', reason: 'signup', at });
+    }
+    items.sort((x, y) => String(y.at || '').localeCompare(String(x.at || '')));
+    return send(res, 200, {
+      enabled: true,
+      credits: u.credits || 0,
+      freeCredits: u.free || 0,
+      paidCredits: u.paid || 0,
+      items
+    });
+  }
+
   // 추천 귀속: body { ref }. 신규(첫 곡 만들기 전) 유저만 1회 귀속. 보상은 첫 곡 생성 시 지급.
   if (path === '/claim-referral' && req.method === 'POST') {
     if (!CREDITS_ENABLED) return send(res, 200, { ok: false, reason: 'disabled' });
@@ -757,6 +807,7 @@ const server = http.createServer(async (req, res) => {
       if (!result.ok) {
         return send(res, result.code || 400, { error: result.reason, message: result.message, credits: result.credits });
       }
+      await logCredit(uid, SHARE_REWARD, 'free', 'share');
       return send(res, 200, { ok: true, credits: result.credits, credited: SHARE_REWARD });
     } catch (e) {
       return send(res, 500, { error: 'share_reward_fail', message: '잠시 후 다시 시도해주세요' });
@@ -1063,6 +1114,7 @@ const server = http.createServer(async (req, res) => {
     if (!credits) return send(res, 400, { error: 'unknown_amount', message: '알 수 없는 결제 금액이에요', amount: paidAmount });
 
     const result = await creditPaymentOnce(uid, String(paymentId), credits, paidAmount);
+    if (!result.already) await logCredit(uid, credits, 'paid', 'purchase');
     return send(res, 200, {
       ok: true,
       credited: result.already ? 0 : credits,

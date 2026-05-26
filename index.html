@@ -589,6 +589,7 @@
 
   <div class="profile-menu" id="profileMenu" style="display:none;">
     <button onclick="openMyList()">🎵 만든 곡 리스트</button>
+    <button onclick="openCreditHistory()">💎 크레딧 확인</button>
     <button onclick="logout()">🚪 로그아웃</button>
   </div>
 
@@ -845,6 +846,33 @@
   </div>
 </div>
 
+<!-- ===== CREDIT HISTORY MODAL ===== -->
+<div class="modal-overlay" id="creditHistoryModal">
+  <div class="modal">
+    <div class="modal-title">💎 크레딧 확인</div>
+    <div style="background:var(--bg-card-2);border-radius:14px;padding:16px;margin:14px 0 10px;">
+      <div style="font-size:13px;color:var(--text-dim);">현재 보유</div>
+      <div style="font-size:28px;font-weight:800;color:var(--lime);margin:2px 0 10px;"><span id="chTotal">-</span>p</div>
+      <div style="display:flex;gap:10px;">
+        <div style="flex:1;background:var(--bg-card);border-radius:10px;padding:10px 12px;">
+          <div style="font-size:11px;color:var(--text-dim);">무료</div>
+          <div style="font-size:17px;font-weight:700;"><span id="chFree">-</span>p</div>
+        </div>
+        <div style="flex:1;background:var(--bg-card);border-radius:10px;padding:10px 12px;">
+          <div style="font-size:11px;color:var(--text-dim);">유료(충전)</div>
+          <div style="font-size:17px;font-weight:700;"><span id="chPaid">-</span>p</div>
+        </div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text-dimmer);margin-bottom:14px;">* 곡을 만들 때는 무료 크레딧부터 차감됩니다.</div>
+    <div class="label" style="margin-bottom:8px;">적립 내역</div>
+    <div id="chList" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
+      <div style="color:var(--text-dim);text-align:center;padding:20px 0;">불러오는 중...</div>
+    </div>
+    <button class="btn-secondary" onclick="closeCreditHistory()" style="margin-top:18px;width:100%;">닫기</button>
+  </div>
+</div>
+
 <!-- ===== INSTA VIDEO MODAL ===== -->
 <div class="modal-overlay" id="videoModal">
   <div class="modal" style="max-width:360px;">
@@ -1004,6 +1032,8 @@ async function fetchCredits() {
     STATE.credits = (typeof d.credits === 'number') ? d.credits : null;
     STATE.costPerSong = d.cost || 10;
     STATE.refCode = d.refCode || null;
+    if (typeof d.freeCredits === 'number') STATE.freeCredits = d.freeCredits;
+    if (typeof d.paidCredits === 'number') STATE.paidCredits = d.paidCredits;
     updateCreditUI();
     maybeClaimReferral();
   } catch (e) { console.warn('fetchCredits fail', e); }
@@ -1270,6 +1300,69 @@ function openMyList() {
   showScreen('mylist');
 }
 
+// ===== 크레딧 확인 (적립 내역) =====
+const CREDIT_REASON_LABEL = {
+  signup: '가입 보너스', purchase: '충전', referral: '친구 추천',
+  share: '공유 보상', admin: '관리자 지급'
+};
+
+async function openCreditHistory() {
+  if (!currentUser) { showError('로그인이 필요해요'); loginGoogle(); return; }
+  document.getElementById('creditHistoryModal').classList.add('active');
+  // 우선 캐시/현재값으로 요약 즉시 표시
+  renderCreditSummary(STATE.credits, STATE.freeCredits, STATE.paidCredits);
+  const list = document.getElementById('chList');
+  list.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px 0;">불러오는 중...</div>';
+  try {
+    const token = await currentUser.getIdToken();
+    const r = await fetch(getWorkerUrl() + '/credit-history', { headers: { 'Authorization': 'Bearer ' + token } });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.enabled) {
+      list.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px 0;">내역을 불러오지 못했어요.</div>';
+      return;
+    }
+    renderCreditSummary(d.credits, d.freeCredits, d.paidCredits);
+    const items = d.items || [];
+    if (!items.length) {
+      list.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px 0;">아직 적립 내역이 없어요.</div>';
+      return;
+    }
+    list.innerHTML = items.map(it => {
+      const isFree = (it.type !== 'paid');
+      const tag = isFree ? '무료' : '유료';
+      const tagColor = isFree ? 'var(--cyan)' : 'var(--lime)';
+      const label = CREDIT_REASON_LABEL[it.reason] || '적립';
+      const date = it.at ? new Date(it.at).toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' }) : '';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:11px 13px;">
+        <div>
+          <div style="font-size:11px;color:var(--text-dim);">${date}</div>
+          <div style="font-size:13px;margin-top:1px;">${label}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-weight:800;color:var(--lime);">+${it.amount}p</div>
+          <div style="font-size:11px;font-weight:700;color:${tagColor};">${tag}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    console.warn('credit history fail', e);
+    list.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px 0;">내역을 불러오지 못했어요.</div>';
+  }
+}
+
+function renderCreditSummary(total, free, paid) {
+  const t = document.getElementById('chTotal');
+  const f = document.getElementById('chFree');
+  const p = document.getElementById('chPaid');
+  if (t) t.textContent = (typeof total === 'number') ? total : '-';
+  if (f) f.textContent = (typeof free === 'number') ? free : '-';
+  if (p) p.textContent = (typeof paid === 'number') ? paid : '-';
+}
+
+function closeCreditHistory() {
+  document.getElementById('creditHistoryModal').classList.remove('active');
+}
+
 function goHome() {
   showScreen('input');
   loadHistory();
@@ -1309,6 +1402,8 @@ const STATE = {
   costPerSong: 10,
   creditsEnabled: false,
   refCode: null,        // 내 추천 코드
+  freeCredits: null,    // 무료 크레딧 잔액
+  paidCredits: null,    // 유료(충전) 크레딧 잔액
 };
 
 const GENRE_NAMES = {
