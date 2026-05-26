@@ -770,6 +770,7 @@
     <div class="biz-line">주소 경기도 김포시 전원로 27, 102동 303호</div>
     <div class="biz-line">문의 imenupp@gmail.com</div>
     <div class="biz-line" style="margin-top:6px;"><a href="privacy.html" style="color:var(--text-dim);text-decoration:underline;">개인정보처리방침</a> · <a href="refund.html" style="color:var(--text-dim);text-decoration:underline;">환불정책</a></div>
+    <div class="biz-line" id="withdrawFooter" style="margin-top:10px;display:none;"><a href="#" onclick="deleteAccount(event)" style="color:var(--text-dimmer);text-decoration:underline;font-size:11px;">회원 탈퇴</a></div>
   </footer>
 </div>
 
@@ -1268,6 +1269,7 @@ function updateAuthUI() {
   const gate = document.getElementById('loginGate');
   const formCard = document.getElementById('formCard');
   const genBtn = document.getElementById('generateBtn');
+  const withdraw = document.getElementById('withdrawFooter');
   if (currentUser) {
     loginBtn.style.display = 'none';
     authUser.style.display = 'block';
@@ -1275,12 +1277,36 @@ function updateAuthUI() {
     if (gate) gate.style.display = 'none';
     if (formCard) formCard.style.display = '';
     if (genBtn) genBtn.style.display = '';
+    if (withdraw) withdraw.style.display = 'block';
   } else {
     loginBtn.style.display = 'flex';
     authUser.style.display = 'none';
     if (gate) gate.style.display = 'block';
     if (formCard) formCard.style.display = 'none';
     if (genBtn) genBtn.style.display = 'none';
+    if (withdraw) withdraw.style.display = 'none';
+  }
+}
+
+async function deleteAccount(e) {
+  if (e) e.preventDefault();
+  if (!currentUser) { showError('로그인이 필요해요'); return; }
+  if (!confirm('정말 회원 탈퇴할까요?\n\n만든 노래와 보유 크레딧이 모두 삭제되며 복구할 수 없어요.')) return;
+  if (!confirm('마지막 확인이에요. 정말 탈퇴하시겠어요?')) return;
+  try {
+    const token = await currentUser.getIdToken();
+    const r = await fetch(getWorkerUrl() + '/delete-account', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) { showError(d.message || '탈퇴 처리에 실패했어요'); return; }
+    try { localStorage.removeItem('diss4u_cred_' + currentUser.uid); } catch (_) {}
+    await auth.signOut();
+    alert('회원 탈퇴가 완료되었어요. 그동안 이용해주셔서 감사합니다.');
+    location.reload();
+  } catch (err) {
+    showError('탈퇴 처리 중 오류가 발생했어요. 잠시 후 다시 시도해주세요');
   }
 }
 
