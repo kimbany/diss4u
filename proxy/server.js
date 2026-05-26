@@ -253,6 +253,44 @@ async function grantCredits(uid, amount, adminUser) {
   return result;
 }
 
+// 회원 비활성화(탈퇴/차단): 같은 구글 계정으로 재로그인/재가입 불가. 남은 크레딧 소멸.
+async function disableUserAccount(uid, opts) {
+  const by = (opts && opts.by) || 'self';
+  const ref = fdb.collection('users').doc(uid);
+  let lost = 0;
+  try {
+    lost = await fdb.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      const p = snap.exists ? splitPools(snap.data()) : { free: 0, paid: 0, freeGranted: 0, paidGranted: 0 };
+      const total = p.free + p.paid;
+      p.free = 0; p.paid = 0;
+      t.set(ref, poolPatch(p, {
+        disabled: true,
+        disabledAt: admin.firestore.FieldValue.serverTimestamp(),
+        disabledBy: by
+      }), { merge: true });
+      return total;
+    });
+    if (lost > 0) await logCredit(uid, -lost, 'spend', 'withdrawal'); // 소멸 기록
+  } catch (e) { console.warn('disable forfeit fail', e.message); }
+  // Auth 계정 비활성화 + 기존 토큰 무효화 (재로그인 차단)
+  await admin.auth().updateUser(uid, { disabled: true });
+  try { await admin.auth().revokeRefreshTokens(uid); } catch (e) {}
+  return { forfeited: lost };
+}
+
+// 회원 복구(잘못 차단 해제): 계정 재활성화. 소멸된 크레딧은 복원하지 않음.
+async function restoreUserAccount(uid) {
+  await admin.auth().updateUser(uid, { disabled: false });
+  try {
+    await fdb.collection('users').doc(uid).set({
+      disabled: false,
+      restoredAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  } catch (e) { console.warn('restore doc fail', e.message); }
+  return { ok: true };
+}
+
 // ===== 관리자 인증 =====
 // admin/config 문서: { username, salt, hash, updatedAt }
 // 비밀번호는 scrypt 해시로만 저장(평문 저장/코드 하드코딩 없음).
@@ -852,7 +890,7 @@ const server = http.createServer(async (req, res) => {
       do {
         const list = await admin.auth().listUsers(1000, pageToken);
         for (const ur of list.users) {
-          users.push({ uid: ur.uid, email: ur.email || null, signupAt: ur.metadata && ur.metadata.creationTime ? ur.metadata.creationTime : null });
+          users.push({ uid: ur.uid, email: ur.email || null, signupAt: ur.metadata && ur.metadata.creationTime ? ur.metadata.creationTime : null, disabled: !!ur.disabled });
         }
         pageToken = list.pageToken;
       } while (pageToken);
@@ -875,6 +913,7 @@ const server = http.createServer(async (req, res) => {
       out.push({
         uid: u.uid,
         email: u.email,
+        disabled: u.disabled,                        // 차단(탈퇴) 여부
         signupAt: createdAt || u.signupAt,           // 가입 일자
         totalCredits: p.freeGranted + p.paidGranted, // 총 크레딧(누적 지급)
         availableCredits: p.free + p.paid,           // 가용 가능 크레딧(현재 잔액)
@@ -1025,29 +1064,71 @@ const server = http.createServer(async (req, res) => {
 
   // 회원 탈퇴: 본인 계정/데이터 삭제(내가 만든 곡 + 유저 문서 + 인증 계정).
   // 결제 기록(payments)은 전자상거래법상 보존 의무가 있어 삭제하지 않는다.
+  // 회원 탈퇴(본인). 계정 비활성화 → 같은 구글 계정 재가입 불가. 남은 크레딧 소멸.
   if (path === '/delete-account' && req.method === 'POST') {
     if (!CREDITS_ENABLED) return send(res, 400, { error: 'disabled', message: '잠시 후 다시 시도해주세요' });
     const uid = await verifyAuth(req);
     if (!uid) return send(res, 401, { error: 'auth_required', message: '로그인이 필요해요' });
     try {
-      // 내가 만든 곡 삭제 (Firestore 배치 한도 500 고려해 400개씩 커밋)
-      const qs = await fdb.collection('songs').where('uid', '==', uid).get();
-      let batch = fdb.batch();
-      let n = 0;
-      for (const doc of qs.docs) {
-        batch.delete(doc.ref);
-        if (++n % 400 === 0) { await batch.commit(); batch = fdb.batch(); }
-      }
-      if (n % 400 !== 0) await batch.commit();
-      // 유저 문서 삭제
-      await fdb.collection('users').doc(uid).delete();
-      // 인증 계정 삭제
-      try { await admin.auth().deleteUser(uid); } catch (e) { console.warn('auth delete fail', e.message); }
+      const r = await disableUserAccount(uid, { by: 'self' });
+      return send(res, 200, { ok: true, forfeited: r.forfeited });
     } catch (e) {
-      console.warn('delete-account fail', e.message);
+      console.warn('withdraw fail', e.message);
       return send(res, 500, { error: 'delete_fail', message: '탈퇴 처리에 실패했어요. 잠시 후 다시 시도해주세요' });
     }
-    return send(res, 200, { ok: true });
+  }
+
+  // [관리자] 회원 차단(탈퇴 처리). body: { uid }. 재가입 불가 + 남은 크레딧 소멸.
+  if (path === '/admin/ban' && req.method === 'POST') {
+    if (!(await verifyAdmin(req))) return send(res, 401, { error: 'admin_auth_required', message: '관리자 인증이 필요해요' });
+    const { uid } = await readBody(req);
+    if (!uid) return send(res, 400, { error: 'no_uid', message: '대상 회원이 없어요' });
+    try {
+      const r = await disableUserAccount(String(uid), { by: 'admin' });
+      return send(res, 200, { ok: true, forfeited: r.forfeited });
+    } catch (e) {
+      return send(res, 500, { error: 'ban_failed', message: '회원 차단 처리 실패', detail: e.message });
+    }
+  }
+
+  // [관리자] 회원 복구(차단 해제). body: { uid }. 계정 재활성화(크레딧은 복원하지 않음).
+  if (path === '/admin/restore' && req.method === 'POST') {
+    if (!(await verifyAdmin(req))) return send(res, 401, { error: 'admin_auth_required', message: '관리자 인증이 필요해요' });
+    const { uid } = await readBody(req);
+    if (!uid) return send(res, 400, { error: 'no_uid', message: '대상 회원이 없어요' });
+    try {
+      await restoreUserAccount(String(uid));
+      return send(res, 200, { ok: true });
+    } catch (e) {
+      return send(res, 500, { error: 'restore_failed', message: '회원 복구 처리 실패', detail: e.message });
+    }
+  }
+
+  // [관리자] 특정 회원의 크레딧 내역(원장). query: uid
+  if (path === '/admin/credit-history') {
+    if (!(await verifyAdmin(req))) return send(res, 401, { error: 'admin_auth_required', message: '관리자 인증이 필요해요' });
+    const uid = url.searchParams.get('uid');
+    if (!uid) return send(res, 400, { error: 'no_uid', message: '대상 회원이 없어요' });
+    let items = [];
+    try {
+      const snap = await fdb.collection('creditLog').where('uid', '==', uid).limit(300).get();
+      items = snap.docs.map(d => {
+        const x = d.data();
+        return {
+          amount: x.amount || 0,
+          type: x.type || 'free',
+          reason: x.reason || null,
+          at: (x.createdAt && x.createdAt.toDate) ? x.createdAt.toDate().toISOString() : null
+        };
+      });
+    } catch (e) { console.warn('admin credit-history fail', e.message); }
+    items.sort((x, y) => String(y.at || '').localeCompare(String(x.at || '')));
+    let credits = 0, free = 0, paid = 0;
+    try {
+      const usnap = await fdb.collection('users').doc(uid).get();
+      if (usnap.exists) { const p = splitPools(usnap.data()); free = p.free; paid = p.paid; credits = p.free + p.paid; }
+    } catch (e) {}
+    return send(res, 200, { ok: true, credits, freeCredits: free, paidCredits: paid, items });
   }
 
   // [관리자] 특정 회원이 만든 곡 목록
