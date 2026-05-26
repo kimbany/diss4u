@@ -276,6 +276,25 @@
     margin-top: 12px;
   }
 
+  /* === 안전 문구 === */
+  .safety-notice {
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 14px;
+    padding: 16px 18px;
+  }
+  .safety-title {
+    font-size: 13px; font-weight: 700; color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+  .safety-list {
+    margin: 0; padding-left: 18px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .safety-list li {
+    font-size: 12px; line-height: 1.55; color: var(--text-dimmer);
+  }
+
   /* === 광고 === */
   .ad-slot { margin-top: 28px; min-height: 0; }
   .ad-slot .ad-label {
@@ -668,13 +687,13 @@
 
     <div class="usage-info">하루 10곡까지 만들 수 있어요 · AI가 작사+작곡</div>
 
-    <!-- HISTORY -->
-    <div id="historySection" style="display: none; margin-top: 32px;">
-      <div class="section-title">
-        <span>최근 만든 노래</span>
-        <span class="see-all" onclick="clearAllHistory()">전체 삭제</span>
-      </div>
-      <div class="history-list" id="historyList"></div>
+    <!-- SAFETY NOTICE -->
+    <div class="safety-notice" style="margin-top: 32px;">
+      <div class="safety-title">🙏 안전하게 즐겨주세요</div>
+      <ul class="safety-list">
+        <li>심한 욕설·비하 내용은 지양해 주세요. 신고가 접수되면 해당 노래는 삭제될 수 있어요.</li>
+        <li>타인을 괴롭히거나 상처 주는 용도로 악용하면 안 돼요. 가볍게 웃고 즐기는 용도로만!</li>
+      </ul>
     </div>
   </div>
 
