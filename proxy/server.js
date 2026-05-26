@@ -966,6 +966,33 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
 
+  // 회원 탈퇴: 본인 계정/데이터 삭제(내가 만든 곡 + 유저 문서 + 인증 계정).
+  // 결제 기록(payments)은 전자상거래법상 보존 의무가 있어 삭제하지 않는다.
+  if (path === '/delete-account' && req.method === 'POST') {
+    if (!CREDITS_ENABLED) return send(res, 400, { error: 'disabled', message: '잠시 후 다시 시도해주세요' });
+    const uid = await verifyAuth(req);
+    if (!uid) return send(res, 401, { error: 'auth_required', message: '로그인이 필요해요' });
+    try {
+      // 내가 만든 곡 삭제 (Firestore 배치 한도 500 고려해 400개씩 커밋)
+      const qs = await fdb.collection('songs').where('uid', '==', uid).get();
+      let batch = fdb.batch();
+      let n = 0;
+      for (const doc of qs.docs) {
+        batch.delete(doc.ref);
+        if (++n % 400 === 0) { await batch.commit(); batch = fdb.batch(); }
+      }
+      if (n % 400 !== 0) await batch.commit();
+      // 유저 문서 삭제
+      await fdb.collection('users').doc(uid).delete();
+      // 인증 계정 삭제
+      try { await admin.auth().deleteUser(uid); } catch (e) { console.warn('auth delete fail', e.message); }
+    } catch (e) {
+      console.warn('delete-account fail', e.message);
+      return send(res, 500, { error: 'delete_fail', message: '탈퇴 처리에 실패했어요. 잠시 후 다시 시도해주세요' });
+    }
+    return send(res, 200, { ok: true });
+  }
+
   // [관리자] 특정 회원이 만든 곡 목록
   if (path === '/admin/songs') {
     if (!(await verifyAdmin(req))) return send(res, 401, { error: 'admin_auth_required', message: '관리자 인증이 필요해요' });
