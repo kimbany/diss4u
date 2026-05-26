@@ -37,6 +37,9 @@
   .site-footer a:hover { color:var(--lime); }
   .ad-slot { margin:24px 0; }
   .ad-slot .ad-label { font-size:10px; color:#5a5a65; text-align:center; letter-spacing:1px; margin-bottom:4px; }
+  .report-btn { display:block; margin:20px auto 0; background:transparent; border:none; color:var(--dim); font-size:12px; cursor:pointer; text-decoration:underline; font-family:inherit; }
+  .report-btn:hover:not(:disabled) { color:#ff6b6b; }
+  .report-btn:disabled { opacity:.7; cursor:default; text-decoration:none; }
 </style>
 </head>
 <body>
@@ -91,9 +94,33 @@ function mountAd(containerId, slot){
 injectAdsenseLoader();
 
 const GENRE_NAMES = { hiphop:'힙합', ballad:'발라드', trot:'트로트', kpop:'K-pop', rock:'락', kids:'동요', lofi:'로파이', random:'랜덤' };
+const WORKER_URL = 'https://chinolsong-proxy.onrender.com';
 
 function esc(s){ const d=document.createElement('div'); d.textContent=s==null?'':s; return d.innerHTML; }
 function appHomeUrl(){ const dir=location.origin+location.pathname.substring(0,location.pathname.lastIndexOf('/')+1); const ref=new URLSearchParams(location.search).get('ref'); return dir+'index.html'+(ref?('?ref='+encodeURIComponent(ref)):''); }
+
+async function reportSong(id, btn) {
+  if (!confirm('이 노래를 신고할까요?\n부적절하거나 불쾌한 내용이면 신고해주세요.\n관리자가 검토 후 조치합니다.')) return;
+  const reason = prompt('신고 사유를 적어주세요 (선택)', '') || '';
+  if (btn) { btn.disabled = true; btn.textContent = '신고 접수 중...'; }
+  try {
+    const r = await fetch(WORKER_URL + '/report-song', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ songId: id, reason })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d.ok) {
+      if (btn) { btn.textContent = '✓ 신고가 접수됐어요'; }
+      alert('신고가 접수되었어요. 검토 후 조치할게요. 감사합니다 🙏');
+    } else {
+      if (btn) { btn.disabled = false; btn.textContent = '🚩 이 노래 신고하기'; }
+      alert('신고 접수 실패: ' + (d.message || '잠시 후 다시 시도해주세요'));
+    }
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = '🚩 이 노래 신고하기'; }
+    alert('신고 접수 실패. 잠시 후 다시 시도해주세요');
+  }
+}
 
 async function load() {
   const content = document.getElementById('content');
@@ -103,6 +130,7 @@ async function load() {
     const doc = await db.collection('songs').doc(id).get();
     if (!doc.exists) { content.innerHTML = '<div class="state">노래를 찾을 수 없어요.<br>삭제됐거나 잘못된 링크예요.</div>'; return; }
     const s = doc.data();
+    if (s.blocked) { content.innerHTML = '<div class="state">🚫 신고로 인해 비공개 처리된 노래예요.</div>'; return; }
     const genreName = GENRE_NAMES[s.genre] || s.genre || '';
     content.innerHTML = `
       <div class="hero">
@@ -118,6 +146,7 @@ async function load() {
       <div class="lyrics">${esc(s.lyrics)}</div>
       <a class="cta" href="${appHomeUrl()}">🎤 나도 Diss4U로 복수하기</a>
       <div class="ad-slot" id="adShare"></div>
+      <button class="report-btn" onclick="reportSong('${esc(id)}', this)">🚩 이 노래 신고하기</button>
     `;
     mountAd('adShare', AD_SLOT_SHARE);
   } catch (e) {

@@ -940,6 +940,94 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // [공개] 곡 신고 접수. body: { songId, reason }  (공유받은 누구나 신고 가능)
+  if (path === '/report-song' && req.method === 'POST') {
+    if (!CREDITS_ENABLED) return send(res, 400, { error: 'disabled', message: '잠시 후 다시 시도해주세요' });
+    const { songId, reason } = await readBody(req);
+    if (!songId || typeof songId !== 'string') return send(res, 400, { error: 'no_song', message: '곡 정보가 없어요' });
+    const songRef = fdb.collection('songs').doc(songId);
+    const snap = await songRef.get();
+    if (!snap.exists) return send(res, 404, { error: 'no_song', message: '곡을 찾을 수 없어요' });
+    const sd = snap.data();
+    const reasonText = (typeof reason === 'string' ? reason : '').slice(0, 500);
+    try {
+      await fdb.collection('reports').add({
+        songId, ownerUid: sd.uid || null, songTitle: sd.title || '',
+        reason: reasonText, status: 'pending',
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      await songRef.set({
+        reportCount: admin.firestore.FieldValue.increment(1),
+        lastReportedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    } catch (e) {
+      return send(res, 500, { error: 'report_fail', message: '신고 접수에 실패했어요' });
+    }
+    return send(res, 200, { ok: true });
+  }
+
+  // [관리자] 특정 회원이 만든 곡 목록
+  if (path === '/admin/songs') {
+    if (!(await verifyAdmin(req))) return send(res, 401, { error: 'admin_auth_required', message: '관리자 인증이 필요해요' });
+    const uid = url.searchParams.get('uid');
+    if (!uid) return send(res, 400, { error: 'no_uid', message: '회원 정보가 없어요' });
+    const qs = await fdb.collection('songs').where('uid', '==', uid).get();
+    const songs = qs.docs.map(d => {
+      const x = d.data();
+      return {
+        id: d.id, title: x.title || '', genre: x.genre || '', name: x.name || '',
+        blocked: !!x.blocked, reportCount: x.reportCount || 0, hasAudio: !!x.audioUrl,
+        createdAt: (x.createdAt && x.createdAt.toDate) ? x.createdAt.toDate().toISOString() : null
+      };
+    });
+    songs.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    return send(res, 200, { ok: true, songs });
+  }
+
+  // [관리자] 대기중 신고 목록
+  if (path === '/admin/reports') {
+    if (!(await verifyAdmin(req))) return send(res, 401, { error: 'admin_auth_required', message: '관리자 인증이 필요해요' });
+    const qs = await fdb.collection('reports').where('status', '==', 'pending').get();
+    const reports = qs.docs.map(d => {
+      const x = d.data();
+      return {
+        id: d.id, songId: x.songId, ownerUid: x.ownerUid || null,
+        songTitle: x.songTitle || '', reason: x.reason || '',
+        createdAt: (x.createdAt && x.createdAt.toDate) ? x.createdAt.toDate().toISOString() : null
+      };
+    });
+    reports.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    return send(res, 200, { ok: true, reports });
+  }
+
+  // [관리자] 곡 차단/해제. body: { songId, blocked }  (차단 시 해당 곡 대기 신고는 처리완료 처리)
+  if (path === '/admin/block-song' && req.method === 'POST') {
+    if (!(await verifyAdmin(req))) return send(res, 401, { error: 'admin_auth_required', message: '관리자 인증이 필요해요' });
+    const { songId, blocked } = await readBody(req);
+    if (!songId) return send(res, 400, { error: 'no_song', message: '곡 정보가 없어요' });
+    const songRef = fdb.collection('songs').doc(String(songId));
+    const snap = await songRef.get();
+    if (!snap.exists) return send(res, 404, { error: 'no_song', message: '곡을 찾을 수 없어요' });
+    await songRef.set({
+      blocked: !!blocked,
+      blockedAt: blocked ? admin.firestore.FieldValue.serverTimestamp() : null
+    }, { merge: true });
+    // 해당 곡의 대기중 신고를 처리완료로 마킹
+    try {
+      const rq = await fdb.collection('reports').where('songId', '==', String(songId)).get();
+      const batch = fdb.batch();
+      let n = 0;
+      rq.docs.forEach(d => {
+        if ((d.data().status || 'pending') === 'pending') {
+          batch.update(d.ref, { status: 'resolved', resolvedAt: admin.firestore.FieldValue.serverTimestamp() });
+          n++;
+        }
+      });
+      if (n) await batch.commit();
+    } catch (e) {}
+    return send(res, 200, { ok: true, blocked: !!blocked });
+  }
+
   // 결제 검증 + 크레딧 적립. body: { paymentId }
   if (path === '/verify-payment' && req.method === 'POST') {
     if (!CREDITS_ENABLED) return send(res, 400, { error: 'credits_disabled', message: '크레딧 시스템이 꺼져 있어요' });

@@ -98,6 +98,16 @@
       <button class="btn secondary small" id="logoutBtn">로그아웃</button>
     </div>
 
+    <!-- 신고 들어온 곡 -->
+    <div class="card">
+      <h2>🚩 신고 들어온 곡</h2>
+      <div class="toolbar">
+        <button class="btn secondary small" id="reloadReports">새로고침</button>
+        <span class="stat" id="reportStat"></span>
+      </div>
+      <div id="reportList"><div class="msg" style="color:var(--dim)">불러오는 중…</div></div>
+    </div>
+
     <!-- 회원 관리 -->
     <div class="card">
       <h2>회원 관리</h2>
@@ -187,6 +197,7 @@ function showDash() {
   $('dash').classList.remove('hidden');
   $('whoami').textContent = '관리자: ' + (ADMIN_USER || '');
   loadMembers();
+  loadReports();
 }
 function showLogin() {
   $('dash').classList.add('hidden');
@@ -237,7 +248,7 @@ function renderMembers() {
     return;
   }
   $('memberRows').innerHTML = rows.map(m => `
-    <tr>
+    <tr id="m-${m.uid}">
       <td><div class="email">${escapeHtml(m.email || '(이메일 없음)')}</div><div class="sub">${m.uid}</div></td>
       <td>${fmtDate(m.signupAt)}</td>
       <td class="num">${m.totalCredits}</td>
@@ -246,14 +257,17 @@ function renderMembers() {
       <td class="num paid">${m.paidGranted}</td>
       <td class="num paid">${m.paidCredits}</td>
       <td style="text-align:right;white-space:nowrap">
-        <button class="btn small" data-act="grant" data-uid="${m.uid}" data-email="${escapeHtml(m.email || '')}">크레딧 증정</button>
+        <button class="btn small secondary" data-act="songs" data-uid="${m.uid}" data-email="${escapeHtml(m.email || '')}">제작물</button>
+        <button class="btn small" data-act="grant" data-uid="${m.uid}" data-email="${escapeHtml(m.email || '')}" style="margin-left:6px;">크레딧 증정</button>
         <button class="btn small secondary" data-act="pay" data-uid="${m.uid}" data-email="${escapeHtml(m.email || '')}" style="margin-left:6px;">결제/환불</button>
       </td>
     </tr>`).join('');
   document.querySelectorAll('#memberRows button[data-uid]').forEach(b => {
     b.addEventListener('click', () => {
       const uid = b.getAttribute('data-uid'), email = b.getAttribute('data-email');
-      if (b.getAttribute('data-act') === 'pay') openPayments(uid, email);
+      const act = b.getAttribute('data-act');
+      if (act === 'pay') openPayments(uid, email);
+      else if (act === 'songs') toggleSongs(uid, email);
       else grant(uid, email);
     });
   });
@@ -271,6 +285,105 @@ async function loadMembers() {
   if (!r.ok || !r.data.ok) { setMsg($('memberMsg'), r.data.message || '회원 목록을 불러오지 못했어요', 'err'); $('memberRows').innerHTML = ''; return; }
   MEMBERS = r.data.users || [];
   renderMembers();
+}
+
+// ===== 신고/제작물(콘텐츠 모더레이션) =====
+async function loadReports() {
+  const box = $('reportList');
+  const r = await api('/admin/reports');
+  if (r.status === 401) { logout(); return; }
+  if (!r.ok || !r.data.ok) { box.innerHTML = '<div class="msg err">' + escapeHtml((r.data && r.data.message) || '신고 목록 조회 실패') + '</div>'; return; }
+  renderReports(r.data.reports || []);
+}
+
+function renderReports(reports) {
+  $('reportStat').textContent = reports.length ? ('대기 ' + reports.length + '건') : '';
+  if (!reports.length) { $('reportList').innerHTML = '<div class="msg" style="color:var(--dim)">대기중인 신고가 없어요 🎉</div>'; return; }
+  const bySong = {};
+  reports.forEach(rp => {
+    const g = bySong[rp.songId] || (bySong[rp.songId] = { songId: rp.songId, songTitle: rp.songTitle, count: 0, reasons: [], latest: rp.createdAt });
+    g.count++;
+    if (rp.reason) g.reasons.push(rp.reason);
+    if ((rp.createdAt || '') > (g.latest || '')) g.latest = rp.createdAt;
+  });
+  const groups = Object.values(bySong).sort((a, b) => (b.latest || '').localeCompare(a.latest || ''));
+  $('reportList').innerHTML = groups.map(g => {
+    const reasons = g.reasons.length ? '<div class="meta" style="margin-top:4px;">사유: ' + escapeHtml(g.reasons.slice(0, 3).join(' / ')) + '</div>' : '';
+    return '<div class="pay-item">'
+      + '<div class="top"><span class="amt" style="font-size:14px;">' + escapeHtml(g.songTitle || '(제목 없음)') + '</span>'
+      + '<span class="statpill" style="color:#ffb35a;border-color:#ffb35a;">신고 ' + g.count + '건</span></div>'
+      + '<div class="meta">' + fmtDate(g.latest) + ' · 곡ID ' + escapeHtml(g.songId) + '</div>'
+      + reasons
+      + '<div class="refbox" style="margin-top:8px;">'
+      + '<a class="btn small secondary" href="share.html?id=' + encodeURIComponent(g.songId) + '" target="_blank" style="text-decoration:none;">듣기</a>'
+      + '<button class="btn danger small" data-block="' + g.songId + '">차단</button>'
+      + '<button class="btn small secondary" data-dismiss="' + g.songId + '">무시</button>'
+      + '</div></div>';
+  }).join('');
+  $('reportList').querySelectorAll('button[data-block]').forEach(b => b.addEventListener('click', () => blockSong(b.getAttribute('data-block'), true, b)));
+  $('reportList').querySelectorAll('button[data-dismiss]').forEach(b => b.addEventListener('click', () => dismissReports(b.getAttribute('data-dismiss'), b)));
+}
+
+async function toggleSongs(uid, email) {
+  const existing = document.getElementById('songs-' + uid);
+  if (existing) { existing.remove(); return; }
+  const mrow = document.getElementById('m-' + uid);
+  if (!mrow) return;
+  const tr = document.createElement('tr');
+  tr.id = 'songs-' + uid;
+  tr.innerHTML = '<td colspan="8" style="background:var(--panel2);"><div class="msg" style="color:var(--dim)">제작물 불러오는 중…</div></td>';
+  mrow.after(tr);
+  const r = await api('/admin/songs?uid=' + encodeURIComponent(uid));
+  if (r.status === 401) { logout(); return; }
+  const cell = tr.firstElementChild;
+  if (!r.ok || !r.data.ok) { cell.innerHTML = '<div class="msg err">' + escapeHtml(r.data.message || '제작물 조회 실패') + '</div>'; return; }
+  renderSongsInline(cell, r.data.songs || [], email);
+}
+
+function renderSongsInline(cell, songs, email) {
+  if (!songs.length) { cell.innerHTML = '<div class="msg" style="color:var(--dim)">만든 곡이 없어요.</div>'; return; }
+  cell.innerHTML = '<div style="font-size:12px;color:var(--dim);margin-bottom:8px;">' + escapeHtml(email || '') + ' · 제작물 ' + songs.length + '곡</div>'
+    + songs.map(s => {
+      const rep = s.reportCount > 0 ? '<span class="statpill" style="color:#ffb35a;border-color:#ffb35a;">신고 ' + s.reportCount + '</span> ' : '';
+      const status = s.blocked ? '<span class="statpill refunded">차단됨</span>' : '<span class="statpill completed">정상</span>';
+      return '<div class="pay-item">'
+        + '<div class="top"><span class="amt" style="font-size:14px;">' + escapeHtml(s.title || '(제목 없음)') + '</span><span>' + rep + status + '</span></div>'
+        + '<div class="meta">' + escapeHtml(s.genre || '') + ' · 🎯 ' + escapeHtml(s.name || '') + ' · ' + fmtDate(s.createdAt) + '</div>'
+        + '<div class="refbox" style="margin-top:8px;">'
+        + '<a class="btn small secondary" href="share.html?id=' + encodeURIComponent(s.id) + '" target="_blank" style="text-decoration:none;">듣기</a>'
+        + (s.blocked
+            ? '<button class="btn small secondary" data-unblock="' + s.id + '">차단 해제</button>'
+            : '<button class="btn danger small" data-block="' + s.id + '">차단</button>')
+        + '</div></div>';
+    }).join('');
+  cell.querySelectorAll('button[data-block]').forEach(b => b.addEventListener('click', () => blockSong(b.getAttribute('data-block'), true, b)));
+  cell.querySelectorAll('button[data-unblock]').forEach(b => b.addEventListener('click', () => blockSong(b.getAttribute('data-unblock'), false, b)));
+}
+
+async function blockSong(songId, blocked, btn) {
+  const action = blocked ? '차단' : '차단 해제';
+  if (!confirm('이 곡을 ' + action + '할까요?' + (blocked ? '\n공유/재생이 즉시 막혀요.' : ''))) return;
+  if (btn) btn.disabled = true;
+  const r = await api('/admin/block-song', { method: 'POST', body: JSON.stringify({ songId, blocked }) });
+  if (r.status === 401) { logout(); return; }
+  if (!r.ok || !r.data.ok) { alert((r.data && r.data.message) || (action + ' 실패')); if (btn) btn.disabled = false; return; }
+  loadReports();
+  // 열려있는 제작물 목록 새로고침해서 상태 반영
+  document.querySelectorAll('tr[id^="songs-"]').forEach(tr => {
+    const uid = tr.id.replace('songs-', '');
+    const m = MEMBERS.find(x => x.uid === uid);
+    tr.remove();
+    if (m) toggleSongs(uid, m.email);
+  });
+}
+
+async function dismissReports(songId, btn) {
+  if (!confirm('이 곡의 신고를 무시(처리완료)할까요?\n곡은 그대로 유지됩니다.')) return;
+  if (btn) btn.disabled = true;
+  const r = await api('/admin/block-song', { method: 'POST', body: JSON.stringify({ songId, blocked: false }) });
+  if (r.status === 401) { logout(); return; }
+  if (!r.ok || !r.data.ok) { alert((r.data && r.data.message) || '처리 실패'); if (btn) btn.disabled = false; return; }
+  loadReports();
 }
 
 // ===== 크레딧 증정 =====
@@ -366,6 +479,7 @@ $('password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(
 $('username').addEventListener('keydown', e => { if (e.key === 'Enter') $('password').focus(); });
 $('logoutBtn').addEventListener('click', logout);
 $('reloadBtn').addEventListener('click', loadMembers);
+$('reloadReports').addEventListener('click', loadReports);
 $('search').addEventListener('input', renderMembers);
 $('pwBtn').addEventListener('click', changePw);
 $('payClose').addEventListener('click', () => $('payModal').classList.add('hidden'));
