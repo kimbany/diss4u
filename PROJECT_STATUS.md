@@ -161,6 +161,14 @@ service cloud.firestore {
 - 구버전 문서(단일 `credits`)는 조회 시 전액 무료로 간주해 자동 백필.
 - 새 Firestore 컬렉션: `admin`(관리자 설정), `creditGrants`(증정 감사 로그). 둘 다 **서버 admin SDK 전용**(클라 접근은 규칙 기본 거부로 차단됨 — 규칙 변경 불필요).
 
+## 10-3. 회원 탈퇴/차단/복구 — v9.x
+- **방식 = 계정 비활성화(disable)**: `admin.auth().updateUser(uid,{disabled:true})` + `revokeRefreshTokens`. → 같은 구글 계정 **재로그인/재가입 불가**(Firebase `auth/user-disabled`). 곡·결제기록은 보존(삭제 아님).
+- 차단/탈퇴 시 **남은 크레딧 전액 소멸**(무료+유료), `creditLog`에 `reason:'withdrawal'`(음수) 기록. 유저 문서에 `disabled/disabledAt/disabledBy`.
+- **복구(차단 해제)**: `POST /admin/restore` → 계정 재활성화(`disabled:false`). **소멸된 크레딧은 복원하지 않음**(정책 확정).
+- **사용자 본인 탈퇴**: 푸터 '회원 탈퇴' → 안내 팝업(①재가입 불가 ②크레딧 소멸·유료 환불불가, 환불은 사전신청) → **동의 체크해야 '탈퇴하기' 활성화** → `POST /delete-account`(이제 삭제가 아니라 **비활성화**) → 로그아웃. 로그인 화면은 `auth/user-disabled` 안내.
+- **관리자**: 회원 행에 `크레딧 내역`(원장 펼침, `GET /admin/credit-history?uid=`) · `차단`(`/admin/ban`) · 차단 시 `복구`(`/admin/restore`) 버튼. `차단됨` 표시(`/admin/users`가 `disabled` 반환).
+- **곡(제작물) 차단/복구는 별개**: 기존 `/admin/block-song`(신고 모더레이션). 회원→제작물→차단/차단해제로 운영. (이미 존재)
+
 ## 11. 완성된 기능
 - 노래 생성(가사+곡), 입력 폼(이름/성별/관계/키워드/꼭넣을문장/장르/언어)
 - 욕설 마스킹(서버 `maskProfanity`)
