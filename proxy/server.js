@@ -1206,6 +1206,10 @@ const server = http.createServer(async (req, res) => {
     if (!v.ok) return send(res, 502, { error: 'verify_failed', message: '결제 확인에 실패했어요', detail: v.error });
 
     const p = v.payment;
+    // 페이팔 등은 즉시 승인되지 않고 '승인 대기' 상태가 있을 수 있다 → 적립 보류, 클라가 나중에 재확인
+    if (p.status === 'PENDING' || p.status === 'READY' || p.status === 'PAY_PENDING') {
+      return send(res, 202, { error: 'pending', message: '결제 승인 대기 중이에요. 승인되면 적립돼요.', status: p.status });
+    }
     if (p.status !== 'PAID') {
       return send(res, 402, { error: 'not_paid', message: '결제가 완료되지 않았어요', status: p.status });
     }

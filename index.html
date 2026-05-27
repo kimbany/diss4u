@@ -823,6 +823,10 @@
       <div class="label">카카오페이 채널키 (선택)</div>
       <input class="input" type="text" id="poKakaoChannel" placeholder="channel-key-... (없으면 비움)">
     </div>
+    <div class="field" style="margin-top:12px;">
+      <div class="label">PayPal 채널키 (선택)</div>
+      <input class="input" type="text" id="poPaypalChannel" placeholder="channel-key-... (없으면 비움)">
+    </div>
     <div class="modal-desc" style="margin-top: 14px;">
       💡 일반 사용자 모드로 돌아가려면 URL에서 ?dev=1 을 빼고 새로고침하세요.
     </div>
@@ -883,8 +887,17 @@
       <div class="action-grid">
         <button class="btn-secondary" id="payCardBtn" onclick="setPayMethod('card')">💳 카드</button>
         <button class="btn-secondary" id="payKakaoBtn" onclick="setPayMethod('kakaopay')">카카오페이</button>
+        <button class="btn-secondary" id="payPaypalBtn" onclick="setPayMethod('paypal')">PayPal</button>
       </div>
     </div>
+
+    <!-- 페이팔 SPB 결제 버튼 영역 (페이팔은 팝업이 아니라 버튼 렌더 방식) -->
+    <div id="paypalArea" style="display:none;margin-top:14px;">
+      <div class="label" style="margin-bottom:8px;">PayPal 결제</div>
+      <div class="portone-ui-container" id="paypalContainer" style="min-height:48px;"></div>
+    </div>
+
+    <button class="btn-secondary" id="pendingCheckBtn" style="display:none;margin-top:10px;width:100%;" onclick="recheckPending()">⏳ 대기 중인 결제 확인하기</button>
     <div style="margin-top:16px;font-size:11px;color:var(--text-dimmer);line-height:1.6;">
       이미 사용한 크레딧은 환불되지 않으며, 미사용 크레딧은 결제일로부터 7일 이내 환불 가능합니다.
       <a href="refund.html" target="_blank" style="color:var(--text-dim);text-decoration:underline;">환불정책</a>
@@ -980,12 +993,14 @@ function mountAd(containerId, slot) {
 const PORTONE_STORE_ID = 'store-14235e27-357d-47da-83f1-edb607e47001';     // 실제 storeId
 const PORTONE_CARD_CHANNEL_KEY = 'channel-key-1a5f0653-764c-4074-8518-c92a82f240eb';      // 카드(토스페이먼츠) 채널키
 const PORTONE_KAKAO_CHANNEL_KEY = 'channel-key-9c1429fd-e8d3-47a4-a945-05785ba4e6ea';   // 카카오페이 채널키
+const PORTONE_PAYPAL_CHANNEL_KEY = '';   // 페이팔 SPB 채널키 (포트원 콘솔에서 발급, 없으면 페이팔 미노출)
 // 개발 중 ?dev=1 에서 localStorage로 덮어쓸 수 있음
 function portoneCfg() {
   return {
     storeId: localStorage.getItem('po_storeId') || PORTONE_STORE_ID,
     card: localStorage.getItem('po_cardChannel') || PORTONE_CARD_CHANNEL_KEY,
     kakao: localStorage.getItem('po_kakaoChannel') || PORTONE_KAKAO_CHANNEL_KEY,
+    paypal: localStorage.getItem('po_paypalChannel') || PORTONE_PAYPAL_CHANNEL_KEY,
   };
 }
 
@@ -1145,10 +1160,17 @@ async function openChargeModal() {
   const cfg = portoneCfg();
   const methodWrap = document.getElementById('chargeMethod');
   const kakaoBtn = document.getElementById('payKakaoBtn');
+  const paypalBtn = document.getElementById('payPaypalBtn');
   if (kakaoBtn) kakaoBtn.style.display = cfg.kakao ? '' : 'none';
+  if (paypalBtn) paypalBtn.style.display = cfg.paypal ? '' : 'none';
   if (methodWrap) methodWrap.style.display = '';
   setPayMethod('card');
   updateFreeCreditUI();
+  // 승인 대기 중인 페이팔 결제가 있으면 "확인하기" 버튼 노출
+  let pendingPid = null;
+  try { pendingPid = localStorage.getItem('diss4u_pending_pay'); } catch (e) {}
+  const pendBtn = document.getElementById('pendingCheckBtn');
+  if (pendBtn) pendBtn.style.display = pendingPid ? '' : 'none';
   await loadPacks();
 }
 
@@ -1200,7 +1222,8 @@ function setPayMethod(m) {
   SELECTED_PAY_METHOD = m;
   const card = document.getElementById('payCardBtn');
   const kakao = document.getElementById('payKakaoBtn');
-  [['card', card], ['kakaopay', kakao]].forEach(([key, btn]) => {
+  const paypal = document.getElementById('payPaypalBtn');
+  [['card', card], ['kakaopay', kakao], ['paypal', paypal]].forEach(([key, btn]) => {
     if (!btn) return;
     const on = (key === m);
     btn.style.background = on ? 'var(--lime)' : '';
@@ -1208,6 +1231,17 @@ function setPayMethod(m) {
     btn.style.borderColor = on ? 'var(--lime)' : '';
     btn.style.fontWeight = on ? '700' : '';
   });
+  const area = document.getElementById('paypalArea');
+  const container = document.getElementById('paypalContainer');
+  if (m === 'paypal') {
+    if (area) area.style.display = '';
+    if (container && !container.innerHTML.trim()) {
+      container.innerHTML = '<div style="color:var(--text-dim);font-size:12px;text-align:center;padding:8px 0;">👆 위에서 상품을 선택하면 PayPal 결제 버튼이 나타나요</div>';
+    }
+  } else {
+    if (area) area.style.display = 'none';
+    if (container) container.innerHTML = '';
+  }
 }
 
 async function loadPacks() {
@@ -1239,6 +1273,10 @@ async function buyPack(amount, credits) {
     showError('결제 설정이 아직 안 됐어요 (관리자 설정 필요)');
     return;
   }
+  // 페이팔은 팝업이 아니라 버튼 렌더 방식(SPB)이라 별도 처리
+  if (SELECTED_PAY_METHOD === 'paypal' && cfg.paypal) {
+    return renderPaypalButton(amount, credits);
+  }
   const isKakao = (SELECTED_PAY_METHOD === 'kakaopay' && cfg.kakao);
   const paymentId = 'pay-' + currentUser.uid.slice(0, 8) + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
@@ -1260,33 +1298,90 @@ async function buyPack(amount, credits) {
       return;
     }
     // 결제창 성공 → 서버에서 진위/금액 검증 후 적립
-    chargeMsg('💎 결제 확인 중...');
-    const token = await currentUser.getIdToken();
-    let vr, vd;
-    try {
-      vr = await fetch(getWorkerUrl() + '/verify-payment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({ paymentId: resp.paymentId || paymentId }),
-      });
-      vd = await vr.json().catch(() => ({}));
-    } catch (netErr) {
-      chargeMsg('서버 연결 실패: ' + (netErr.message || netErr), true);
-      return;
-    }
-    if (!vr.ok || !vd.ok) {
-      const detail = vd.message || vd.error || ('HTTP ' + vr.status);
-      const extra = vd.detail ? (' / ' + vd.detail) : (vd.status ? (' / ' + vd.status) : '');
-      chargeMsg('적립 실패: ' + detail + extra, true);
-      return;
-    }
-    STATE.credits = vd.credits;
-    updateCreditUI();
-    chargeMsg(vd.already ? '이미 적립된 결제예요' : `✓ ${vd.credited}p 충전 완료! (보유 ${vd.credits}p)`);
-    setTimeout(closeChargeModal, 1500);
+    await verifyAndCredit(resp.paymentId || paymentId);
   } catch (e) {
     chargeMsg('결제 중 오류: ' + (e.message || e), true);
   }
+}
+
+// 페이팔 SPB 결제 버튼을 컨테이너에 렌더 (선택한 상품 금액으로)
+async function renderPaypalButton(amount, credits) {
+  const cfg = portoneCfg();
+  const area = document.getElementById('paypalArea');
+  const container = document.getElementById('paypalContainer');
+  if (!area || !container) return;
+  container.innerHTML = '';
+  area.style.display = '';
+  const paymentId = 'pay-' + currentUser.uid.slice(0, 8) + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  chargeMsg(`PayPal로 ${credits}p (₩${amount.toLocaleString()}) — 아래 버튼을 눌러주세요`);
+  try {
+    await PortOne.loadPaymentUI({
+      uiType: 'PAYPAL_SPB',
+      storeId: cfg.storeId,
+      channelKey: cfg.paypal,
+      paymentId,
+      orderName: `Diss4U 크레딧 ${credits}p`,
+      totalAmount: amount,
+      currency: 'CURRENCY_KRW',
+      customData: JSON.stringify({ uid: currentUser.uid }),
+    }, {
+      onPaymentSuccess: (resp) => { verifyAndCredit((resp && resp.paymentId) || paymentId); },
+      onPaymentFail: (err) => { chargeMsg('결제 실패: ' + ((err && err.message) || ''), true); },
+    });
+  } catch (e) {
+    chargeMsg('PayPal 버튼 로딩 실패: ' + (e.message || e), true);
+  }
+}
+
+// 결제 검증 → 적립 (카드/카카오/페이팔 공용). 페이팔 승인 대기(pending)는 안내 후 수동 재확인.
+async function verifyAndCredit(paymentId) {
+  chargeMsg('💎 결제 확인 중...');
+  let vr, vd;
+  try {
+    const token = await currentUser.getIdToken();
+    vr = await fetch(getWorkerUrl() + '/verify-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ paymentId }),
+    });
+    vd = await vr.json().catch(() => ({}));
+  } catch (netErr) {
+    chargeMsg('서버 연결 실패: ' + (netErr.message || netErr), true);
+    return;
+  }
+  // 승인 대기 상태: 적립하지 않고 안내 + 수동 재확인 버튼 노출
+  if (vd && vd.error === 'pending') {
+    try { localStorage.setItem('diss4u_pending_pay', paymentId); } catch (e) {}
+    const btn = document.getElementById('pendingCheckBtn');
+    if (btn) btn.style.display = '';
+    chargeMsg('⏳ 결제 승인 대기 중이에요. 승인되면 적립돼요. 잠시 후 "대기 중인 결제 확인하기"를 눌러주세요.');
+    return;
+  }
+  if (!vr.ok || !vd.ok) {
+    const detail = vd.message || vd.error || ('HTTP ' + vr.status);
+    const extra = vd.detail ? (' / ' + vd.detail) : (vd.status ? (' / ' + vd.status) : '');
+    chargeMsg('적립 실패: ' + detail + extra, true);
+    return;
+  }
+  try { localStorage.removeItem('diss4u_pending_pay'); } catch (e) {}
+  const btn = document.getElementById('pendingCheckBtn');
+  if (btn) btn.style.display = 'none';
+  STATE.credits = vd.credits;
+  updateCreditUI();
+  chargeMsg(vd.already ? '이미 적립된 결제예요' : `✓ ${vd.credited}p 충전 완료! (보유 ${vd.credits}p)`);
+  setTimeout(closeChargeModal, 1500);
+}
+
+// 승인 대기 중이던 결제를 사용자가 수동으로 다시 확인
+function recheckPending() {
+  let pid = null;
+  try { pid = localStorage.getItem('diss4u_pending_pay'); } catch (e) {}
+  if (!pid) {
+    const btn = document.getElementById('pendingCheckBtn');
+    if (btn) btn.style.display = 'none';
+    return;
+  }
+  verifyAndCredit(pid);
 }
 
 // 충전 모달 안에 메시지 표시 (모달이 errorBox를 가려서 별도로 보여줌)
@@ -1585,6 +1680,7 @@ function openSettings() {
   document.getElementById('poStoreId').value = cfg.storeId.startsWith('store-0000') ? '' : cfg.storeId;
   document.getElementById('poCardChannel').value = cfg.card.startsWith('channel-key-card-0000') ? '' : cfg.card;
   document.getElementById('poKakaoChannel').value = cfg.kakao || '';
+  document.getElementById('poPaypalChannel').value = cfg.paypal || '';
   document.getElementById('settingsModal').classList.add('active');
 }
 function closeSettings() {
@@ -1602,6 +1698,7 @@ function saveSettings() {
   setOrClear('po_storeId', document.getElementById('poStoreId').value.trim());
   setOrClear('po_cardChannel', document.getElementById('poCardChannel').value.trim());
   setOrClear('po_kakaoChannel', document.getElementById('poKakaoChannel').value.trim());
+  setOrClear('po_paypalChannel', document.getElementById('poPaypalChannel').value.trim());
   closeSettings();
   showToast('✓ 설정이 저장되었어요');
 }
