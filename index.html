@@ -1281,6 +1281,19 @@ async function buyPack(amount, credits) {
   const isKakao = (SELECTED_PAY_METHOD === 'kakaopay' && cfg.kakao);
   const paymentId = 'pay-' + currentUser.uid.slice(0, 8) + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
+  // KG이니시스(카드)는 구매자 휴대폰 번호가 필수 → 한 번 입력받아 저장해두고 재사용
+  let buyerPhone = '';
+  if (!isKakao) {
+    buyerPhone = (localStorage.getItem('diss4u_phone') || '').replace(/[^0-9]/g, '');
+    if (!/^01\d{8,9}$/.test(buyerPhone)) {
+      const input = prompt('카드 결제를 위해 휴대폰 번호를 입력해주세요 (예: 010-1234-5678)', '');
+      if (input === null) { chargeMsg('결제가 취소됐어요'); return; }
+      buyerPhone = input.replace(/[^0-9]/g, '');
+      if (!/^01\d{8,9}$/.test(buyerPhone)) { chargeMsg('휴대폰 번호 형식이 올바르지 않아요 (예: 01012345678)', true); return; }
+      try { localStorage.setItem('diss4u_phone', buyerPhone); } catch (e) {}
+    }
+  }
+
   try {
     const req = {
       storeId: cfg.storeId,
@@ -1293,6 +1306,7 @@ async function buyPack(amount, credits) {
       customer: {
         email: currentUser.email || undefined,
         fullName: currentUser.displayName || undefined,
+        phoneNumber: buyerPhone || undefined,
       },
       customData: JSON.stringify({ uid: currentUser.uid }),
     };
