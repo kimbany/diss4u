@@ -1290,6 +1290,10 @@ async function buyPack(amount, credits) {
       totalAmount: amount,
       currency: 'CURRENCY_KRW',
       payMethod: isKakao ? 'EASY_PAY' : 'CARD',
+      customer: {
+        email: currentUser.email || undefined,
+        fullName: currentUser.displayName || undefined,
+      },
       customData: JSON.stringify({ uid: currentUser.uid }),
     };
     const resp = await PortOne.requestPayment(req);
