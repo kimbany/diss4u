@@ -744,11 +744,39 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  // 카카오 로그인: { accessToken } → Firebase Custom Token 발급
-  // 카카오 access token으로 kapi.kakao.com/v2/user/me 호출해 검증 후, uid="kakao_<id>" 로 토큰 발급.
+  // 카카오 로그인: { code, redirectUri } 또는 { accessToken } → Firebase Custom Token 발급
+  // code면 REST API 키로 access token 교환 후, /v2/user/me 검증, uid="kakao_<id>" 로 토큰 발급.
   if (path === '/auth/kakao' && req.method === 'POST') {
     if (!CREDITS_ENABLED) return send(res, 400, { error: 'auth_disabled', message: '인증 시스템이 비활성 상태예요' });
-    const { accessToken } = await readBody(req);
+    const body = await readBody(req);
+    let accessToken = body.accessToken;
+
+    // code → access_token 교환
+    if (!accessToken && body.code) {
+      const restKey = process.env.KAKAO_REST_API_KEY;
+      if (!restKey) return send(res, 500, { error: 'kakao_not_configured', message: '서버에 KAKAO_REST_API_KEY가 설정되지 않았어요' });
+      const form = new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: restKey,
+        redirect_uri: String(body.redirectUri || ''),
+        code: String(body.code)
+      });
+      if (process.env.KAKAO_CLIENT_SECRET) form.set('client_secret', process.env.KAKAO_CLIENT_SECRET);
+      try {
+        const tr = await fetch('https://kauth.kakao.com/oauth/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' },
+          body: form.toString()
+        });
+        const tt = await tr.text();
+        if (!tr.ok) return send(res, 401, { error: 'code_exchange_fail', message: '카카오 인증코드 교환 실패', detail: tt.slice(0, 300) });
+        const tj = JSON.parse(tt);
+        accessToken = tj.access_token;
+      } catch (e) {
+        return send(res, 502, { error: 'kakao_token_unreachable', message: '카카오 토큰 교환 서버 연결 실패', detail: e.message });
+      }
+    }
+
     if (!accessToken) return send(res, 400, { error: 'no_token', message: '카카오 액세스 토큰이 없어요' });
     let kakaoUser;
     try {

@@ -1428,31 +1428,39 @@ function loginGoogle() {
 async function loginKakao() {
   if (!window.Kakao || !Kakao.Auth) { showError('카카오 SDK 로딩 중이에요. 잠시 후 다시 시도해주세요.'); return; }
   try {
-    const tokenResp = await new Promise((resolve, reject) => {
-      Kakao.Auth.login({
-        scope: 'profile_nickname,profile_image,account_email',
-        success: resolve,
-        fail: reject
-      });
+    // Kakao JS SDK v2는 팝업 login이 제거돼 리다이렉트 방식만 지원.
+    // 카카오 로그인 후 ?code= 로 redirectUri로 돌아옴 → 로드 핸들러에서 서버 교환 처리.
+    const redirectUri = location.origin + '/';
+    Kakao.Auth.authorize({
+      redirectUri,
+      scope: 'profile_nickname,profile_image,account_email'
     });
-    const accessToken = tokenResp && tokenResp.access_token;
-    if (!accessToken) { showError('카카오 로그인 실패: 토큰이 없어요'); return; }
+  } catch (err) {
+    showError('카카오 로그인 호출 실패: ' + ((err && (err.message || err.error)) || ''));
+  }
+}
+
+// 카카오 리다이렉트(?code=)에서 돌아오면 서버에 코드 전달 → Firebase 로그인
+async function exchangeKakaoCode(code) {
+  try {
+    const redirectUri = location.origin + '/';
     const r = await fetch(getWorkerUrl() + '/auth/kakao', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accessToken })
+      body: JSON.stringify({ code, redirectUri })
     });
     const d = await r.json().catch(() => ({}));
-    if (!r.ok || !d.token) { showError('카카오 로그인 실패: ' + (d.message || '서버 응답 오류')); return; }
+    if (!r.ok || !d.token) {
+      showError('카카오 로그인 실패: ' + (d.message || '서버 응답 오류'));
+      return;
+    }
     await auth.signInWithCustomToken(d.token);
   } catch (err) {
-    // 사용자가 취소한 경우는 조용히 무시
-    if (err && (err.error === 'access_denied' || err.error === 'cancel' || err === 'cancel')) return;
     if (err && err.code === 'auth/user-disabled') {
       showError('탈퇴한 계정이에요. 이 카카오 계정으로는 다시 가입할 수 없습니다.');
       return;
     }
-    showError('카카오 로그인 실패: ' + ((err && (err.error_description || err.message || err.error)) || ''));
+    showError('카카오 로그인 실패: ' + ((err && (err.message || err.error)) || ''));
   }
 }
 
@@ -1683,6 +1691,15 @@ window.addEventListener('load', () => {
   // 추천 코드(?ref=)가 있으면 저장해뒀다가 로그인 후 귀속 시도
   const ref = params.get('ref');
   if (ref) { try { localStorage.setItem('diss4u_ref', ref); } catch (e) {} }
+
+  // 카카오 OAuth 리다이렉트로 돌아온 경우(?code=) → 서버에 교환 요청
+  const kakaoCode = params.get('code');
+  if (kakaoCode) {
+    exchangeKakaoCode(kakaoCode);
+    // URL에서 code/state 제거 (새로고침 시 재요청 방지)
+    const clean = location.origin + location.pathname + (ref ? ('?ref=' + encodeURIComponent(ref)) : '');
+    history.replaceState({}, '', clean);
+  }
 
   STATE.userId = localStorage.getItem('userId');
   if (!STATE.userId) {
