@@ -892,6 +892,12 @@
       </div>
     </div>
 
+    <div id="phoneArea" style="display:none;margin-top:14px;">
+      <div class="label" style="margin-bottom:6px;">📱 휴대폰 번호 <span style="color:var(--text-dimmer);font-weight:400;">(카드 결제 시 필요)</span></div>
+      <input class="input" id="buyerPhoneInput" type="tel" inputmode="numeric" autocomplete="tel"
+        maxlength="13" placeholder="010-1234-5678" oninput="onPhoneInput(this)">
+    </div>
+
     <!-- 페이팔 SPB 결제 버튼 영역 (페이팔은 팝업이 아니라 버튼 렌더 방식) -->
     <div id="paypalArea" style="display:none;margin-top:14px;">
       <div class="label" style="margin-bottom:8px;">PayPal 결제</div>
@@ -1184,6 +1190,13 @@ async function openChargeModal() {
   if (kakaoBtn) kakaoBtn.style.display = cfg.kakao ? '' : 'none';
   if (paypalBtn) paypalBtn.style.display = cfg.paypal ? '' : 'none';
   if (methodWrap) methodWrap.style.display = '';
+  // 저장해둔 휴대폰 번호 있으면 입력란에 미리 채워줌
+  const phoneInput = document.getElementById('buyerPhoneInput');
+  if (phoneInput) {
+    let saved = '';
+    try { saved = localStorage.getItem('diss4u_phone') || ''; } catch (e) {}
+    phoneInput.value = formatPhone(saved);
+  }
   setPayMethod('card');
   updateFreeCreditUI();
   // 승인 대기 중인 페이팔 결제가 있으면 "확인하기" 버튼 노출
@@ -1251,6 +1264,10 @@ function setPayMethod(m) {
     btn.style.borderColor = on ? 'var(--lime)' : '';
     btn.style.fontWeight = on ? '700' : '';
   });
+  // 카드 결제 시에만 휴대폰 번호 입력란 노출 (이니시스 필수)
+  const phoneArea = document.getElementById('phoneArea');
+  if (phoneArea) phoneArea.style.display = (m === 'card') ? '' : 'none';
+
   const area = document.getElementById('paypalArea');
   const container = document.getElementById('paypalContainer');
   if (m === 'paypal') {
@@ -1285,6 +1302,19 @@ async function loadPacks() {
   }
 }
 
+// 휴대폰 번호 자동 하이픈 포맷 (010-1234-5678 / 10자리는 010-123-4567)
+function formatPhone(value) {
+  const d = String(value || '').replace(/[^0-9]/g, '').slice(0, 11);
+  if (d.length < 4) return d;
+  if (d.length < 8) return d.slice(0, 3) + '-' + d.slice(3);
+  if (d.length === 10) return d.slice(0, 3) + '-' + d.slice(3, 6) + '-' + d.slice(6);
+  return d.slice(0, 3) + '-' + d.slice(3, 7) + '-' + d.slice(7);
+}
+function onPhoneInput(el) {
+  if (!el) return;
+  el.value = formatPhone(el.value);
+}
+
 async function buyPack(amount, credits) {
   if (!currentUser) { showError('로그인이 필요해요'); return; }
   if (!window.PortOne) { showError('결제 모듈 로딩 중이에요. 잠시 후 다시 시도해주세요.'); return; }
@@ -1300,17 +1330,18 @@ async function buyPack(amount, credits) {
   const isKakao = (SELECTED_PAY_METHOD === 'kakaopay' && cfg.kakao);
   const paymentId = 'pay-' + currentUser.uid.slice(0, 8) + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-  // KG이니시스(카드)는 구매자 휴대폰 번호가 필수 → 한 번 입력받아 저장해두고 재사용
+  // KG이니시스(카드)는 구매자 휴대폰 번호가 필수 → 모달의 입력란에서 직접 가져옴
   let buyerPhone = '';
   if (!isKakao) {
-    buyerPhone = (localStorage.getItem('diss4u_phone') || '').replace(/[^0-9]/g, '');
+    const phoneInput = document.getElementById('buyerPhoneInput');
+    const raw = (phoneInput ? phoneInput.value : '') || '';
+    buyerPhone = raw.replace(/[^0-9]/g, '');
     if (!/^01\d{8,9}$/.test(buyerPhone)) {
-      const input = prompt('카드 결제를 위해 휴대폰 번호를 입력해주세요 (예: 010-1234-5678)', '');
-      if (input === null) { chargeMsg('결제가 취소됐어요'); return; }
-      buyerPhone = input.replace(/[^0-9]/g, '');
-      if (!/^01\d{8,9}$/.test(buyerPhone)) { chargeMsg('휴대폰 번호 형식이 올바르지 않아요 (예: 01012345678)', true); return; }
-      try { localStorage.setItem('diss4u_phone', buyerPhone); } catch (e) {}
+      chargeMsg('휴대폰 번호를 정확히 입력해주세요 (예: 010-1234-5678)', true);
+      if (phoneInput) phoneInput.focus();
+      return;
     }
+    try { localStorage.setItem('diss4u_phone', buyerPhone); } catch (e) {}
   }
 
   // 모바일은 외부 결제 페이지로 떠났다가 돌아오므로 paymentId를 미리 저장해 둠
