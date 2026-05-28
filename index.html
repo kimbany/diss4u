@@ -2540,11 +2540,16 @@ function drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed) {
     ctx.fillText('🎤', cx, cy + bob);
   }
 
-  // 5) 워드마크(logo1.png) — 오브 아래
-  let belowY = cy + orbR * 1.35;
+  // 5) 배지(badge2.png) — THIS 4 U: 오브 바로 아래, 워드마크 위에 배치
+  let belowY = cy + orbR * 1.25;
+  if (LAYERS.badge) {
+    const bh = drawImgCentered(ctx, LAYERS.badge, cx, belowY, orbR * 1.1);
+    belowY += bh * 0.55 + orbR * 0.08;
+  }
+
+  // 6) 워드마크(logo1.png) — Diss4U: 배지 아래
   if (LAYERS.wordmark) {
-    const lh = drawImgCentered(ctx, LAYERS.wordmark, cx, belowY, orbR * 2.2);
-    belowY += lh * 0.55 + orbR * 0.1;
+    drawImgCentered(ctx, LAYERS.wordmark, cx, belowY, orbR * 2.2);
   } else {
     // 폴백: 캔버스 텍스트로 Diss4U
     ctx.font = '900 64px "Black Han Sans", Pretendard, sans-serif';
@@ -2557,12 +2562,6 @@ function drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed) {
     ctx.fillStyle = '#ffffff'; ctx.fillText('Diss', x, belowY); x += dW + gap;
     ctx.fillStyle = '#ff40af'; ctx.fillText('4', x, belowY); x += fW + gap;
     ctx.fillStyle = '#1ad1ff'; ctx.fillText('U', x, belowY);
-    belowY += 50;
-  }
-
-  // 6) 배지(badge2.png) — 워드마크 아래 THIS 4 U
-  if (LAYERS.badge) {
-    drawImgCentered(ctx, LAYERS.badge, cx, belowY + orbR * 0.15, orbR * 1.15);
   }
 }
 
