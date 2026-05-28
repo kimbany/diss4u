@@ -1587,7 +1587,7 @@ async function loginKakao() {
     const redirectUri = location.origin + '/';
     Kakao.Auth.authorize({
       redirectUri,
-      scope: 'profile_nickname'
+      scope: 'profile_nickname,account_email'
     });
   } catch (err) {
     showError('카카오 로그인 호출 실패: ' + ((err && (err.message || err.error)) || ''));
