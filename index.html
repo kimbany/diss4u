@@ -432,6 +432,19 @@
 
   /* === ACTION GRID === */
   .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pack-btn.selected {
+    border-color: var(--lime) !important;
+    background: rgba(212, 255, 58, 0.08) !important;
+    box-shadow: 0 0 0 2px rgba(212, 255, 58, 0.25);
+  }
+  .pay-now-btn {
+    width: 100%; margin-top: 6px;
+    background: var(--lime); color: #1a1a1f; border: none;
+    border-radius: var(--radius-md); padding: 14px;
+    font-size: 15px; font-weight: 800; cursor: pointer;
+    box-shadow: 0 6px 20px rgba(212, 255, 58, 0.25);
+  }
+  .pay-now-btn:disabled { opacity: 0.45; box-shadow: none; cursor: not-allowed; }
 
   /* === HISTORY === */
   .history-list { display: flex; flex-direction: column; gap: 8px; }
@@ -918,7 +931,8 @@
       이미 사용한 크레딧은 환불되지 않으며, 미사용 크레딧은 결제일로부터 7일 이내 환불 가능합니다.
       <a href="refund.html" target="_blank" style="color:var(--text-dim);text-decoration:underline;">환불정책</a>
     </div>
-    <button class="btn-secondary" onclick="closeChargeModal()" style="margin-top:14px;width:100%;">닫기</button>
+    <button class="pay-now-btn" id="payNowBtn" disabled onclick="payNow()" style="margin-top:14px;">💳 결제하기</button>
+    <button class="btn-secondary" onclick="closeChargeModal()" style="margin-top:10px;width:100%;">닫기</button>
   </div>
 </div>
 
@@ -1099,8 +1113,7 @@ async function maybeResumePayment() {
   params.delete('paid');
   const qs = params.toString();
   history.replaceState(null, '', location.origin + location.pathname + (qs ? '?' + qs : '') + location.hash);
-  let pid = null;
-  try { pid = localStorage.getItem('diss4u_pending_pay'); } catch (e) {}
+  const pid = getPendingPay();
   if (!pid) return;
   // 충전 모달을 열어 결제 상태/결과를 표시
   const m = document.getElementById('chargeModal');
@@ -1179,6 +1192,32 @@ function updateCreditUI() {
   }
 }
 
+// 보류 결제(pendingPid) 헬퍼: 저장 시 타임스탬프도 같이, 24시간 지나면 자동 정리
+function setPendingPay(pid) {
+  try {
+    localStorage.setItem('diss4u_pending_pay', pid);
+    localStorage.setItem('diss4u_pending_pay_at', String(Date.now()));
+  } catch (e) {}
+}
+function getPendingPay() {
+  let pid = null, at = 0;
+  try {
+    pid = localStorage.getItem('diss4u_pending_pay');
+    at = parseInt(localStorage.getItem('diss4u_pending_pay_at') || '0', 10);
+  } catch (e) {}
+  if (!pid) return null;
+  // 레거시(타임스탬프 없는) 항목은 지금부터 24h 카운트 시작
+  if (!at) { try { localStorage.setItem('diss4u_pending_pay_at', String(Date.now())); } catch (e) {} return pid; }
+  if ((Date.now() - at) > 24 * 3600 * 1000) { clearPendingPay(); return null; }
+  return pid;
+}
+function clearPendingPay() {
+  try {
+    localStorage.removeItem('diss4u_pending_pay');
+    localStorage.removeItem('diss4u_pending_pay_at');
+  } catch (e) {}
+}
+
 function onCreditBadgeClick() {
   openChargeModal();
 }
@@ -1206,11 +1245,13 @@ async function openChargeModal() {
     try { saved = localStorage.getItem('diss4u_phone') || ''; } catch (e) {}
     phoneInput.value = formatPhone(saved);
   }
+  // 모달 열 때 상품 선택 초기화 (결제하기 버튼 비활성)
+  SELECTED_PACK = null;
+  updatePayNowBtn();
   setPayMethod('card');
   updateFreeCreditUI();
-  // 승인 대기 중인 페이팔 결제가 있으면 "확인하기" 버튼 노출
-  let pendingPid = null;
-  try { pendingPid = localStorage.getItem('diss4u_pending_pay'); } catch (e) {}
+  // 승인 대기 중인 결제가 있으면 "확인하기" 버튼 노출 (24h 지나면 자동 정리)
+  const pendingPid = getPendingPay();
   const pendBtn = document.getElementById('pendingCheckBtn');
   if (pendBtn) pendBtn.style.display = pendingPid ? '' : 'none';
   await loadPacks();
@@ -1300,7 +1341,8 @@ async function loadPacks() {
       return;
     }
     list.innerHTML = d.packs.map(p => `
-      <button class="btn-secondary pack-btn" onclick="buyPack(${p.amount}, ${p.credits})"
+      <button class="btn-secondary pack-btn" data-amount="${p.amount}" data-credits="${p.credits}"
+        onclick="selectPack(${p.amount}, ${p.credits})"
         style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;text-align:left;">
         <span><b style="font-size:15px;">${p.credits}p</b> <span style="color:var(--text-dim);font-size:12px;">· 약 ${p.songs}곡</span></span>
         <span style="font-weight:700;color:var(--lime);">₩${p.amount.toLocaleString()}</span>
@@ -1309,6 +1351,34 @@ async function loadPacks() {
   } catch (e) {
     list.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:24px 0;">상품을 불러오지 못했어요. 잠시 후 다시 시도해주세요.</div>';
   }
+}
+
+// 충전 모달에서 사용자가 고른 상품 (amount, credits)
+let SELECTED_PACK = null;
+
+function selectPack(amount, credits) {
+  SELECTED_PACK = { amount, credits };
+  document.querySelectorAll('#packList .pack-btn').forEach(b => b.classList.remove('selected'));
+  const el = document.querySelector(`#packList .pack-btn[data-amount="${amount}"]`);
+  if (el) el.classList.add('selected');
+  updatePayNowBtn();
+}
+
+function updatePayNowBtn() {
+  const btn = document.getElementById('payNowBtn');
+  if (!btn) return;
+  if (!SELECTED_PACK) {
+    btn.disabled = true;
+    btn.textContent = '💳 결제하기';
+  } else {
+    btn.disabled = false;
+    btn.textContent = `💳 ₩${SELECTED_PACK.amount.toLocaleString()} 결제하기`;
+  }
+}
+
+async function payNow() {
+  if (!SELECTED_PACK) return;
+  await buyPack(SELECTED_PACK.amount, SELECTED_PACK.credits);
 }
 
 // 휴대폰 번호 자동 하이픈 포맷 (010-1234-5678 / 10자리는 010-123-4567)
@@ -1354,7 +1424,7 @@ async function buyPack(amount, credits) {
   }
 
   // 모바일은 외부 결제 페이지로 떠났다가 돌아오므로 paymentId를 미리 저장해 둠
-  try { localStorage.setItem('diss4u_pending_pay', paymentId); } catch (e) {}
+  setPendingPay(paymentId);
   // 결제 완료 후 돌아올 주소 (?paid=1 마커로 자동 검증 트리거)
   const returnUrl = location.origin + location.pathname + '?paid=1';
 
@@ -1378,7 +1448,7 @@ async function buyPack(amount, credits) {
     const resp = await PortOne.requestPayment(req);
     if (resp.code != null) {
       // 사용자가 취소했거나 결제 실패 → 보류 결제 정리
-      try { localStorage.removeItem('diss4u_pending_pay'); } catch (e) {}
+      clearPendingPay();
       if (!/cancel|취소/i.test(resp.message || '')) showError('결제 실패: ' + (resp.message || resp.code));
       return;
     }
@@ -1436,7 +1506,7 @@ async function verifyAndCredit(paymentId) {
   }
   // 승인 대기 상태: 적립하지 않고 안내 + 수동 재확인 버튼 노출
   if (vd && vd.error === 'pending') {
-    try { localStorage.setItem('diss4u_pending_pay', paymentId); } catch (e) {}
+    setPendingPay(paymentId);
     const btn = document.getElementById('pendingCheckBtn');
     if (btn) btn.style.display = '';
     chargeMsg('⏳ 결제 승인 대기 중이에요. 승인되면 적립돼요. 잠시 후 "대기 중인 결제 확인하기"를 눌러주세요.');
@@ -1444,7 +1514,7 @@ async function verifyAndCredit(paymentId) {
   }
   // 결제가 진행되지 않음(취소/미완료): 보류 결제 정리 후 부드럽게 안내
   if (vd && vd.error === 'not_paid') {
-    try { localStorage.removeItem('diss4u_pending_pay'); } catch (e) {}
+    clearPendingPay();
     const btn = document.getElementById('pendingCheckBtn');
     if (btn) btn.style.display = 'none';
     chargeMsg('결제가 취소되었거나 완료되지 않았어요');
@@ -1456,7 +1526,7 @@ async function verifyAndCredit(paymentId) {
     chargeMsg('적립 실패: ' + detail + extra, true);
     return;
   }
-  try { localStorage.removeItem('diss4u_pending_pay'); } catch (e) {}
+  clearPendingPay();
   const btn = document.getElementById('pendingCheckBtn');
   if (btn) btn.style.display = 'none';
   STATE.credits = vd.credits;
@@ -1467,8 +1537,7 @@ async function verifyAndCredit(paymentId) {
 
 // 승인 대기 중이던 결제를 사용자가 수동으로 다시 확인
 function recheckPending() {
-  let pid = null;
-  try { pid = localStorage.getItem('diss4u_pending_pay'); } catch (e) {}
+  const pid = getPendingPay();
   if (!pid) {
     const btn = document.getElementById('pendingCheckBtn');
     if (btn) btn.style.display = 'none';
