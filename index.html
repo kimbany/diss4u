@@ -1622,6 +1622,17 @@ function logout() {
   if (confirm('로그아웃 할까요?')) auth.signOut();
 }
 
+function avatarDataUrl(seed) {
+  const raw = (seed || '').trim();
+  let letter = raw.charAt(0).toUpperCase() || '?';
+  letter = letter.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let h = 0; const s = raw || 'u';
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  const hue = Math.abs(h) % 360;
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='32' fill='hsl(${hue},70%,45%)'/><text x='32' y='44' font-family='-apple-system,Pretendard,sans-serif' font-size='32' font-weight='700' fill='white' text-anchor='middle'>${letter}</text></svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
 function updateAuthUI() {
   const loginBtn = document.getElementById('loginBtn');
   const authUser = document.getElementById('authUser');
@@ -1633,7 +1644,10 @@ function updateAuthUI() {
   if (currentUser) {
     loginBtn.style.display = 'none';
     authUser.style.display = 'block';
-    photo.src = currentUser.photoURL || '';
+    const seed = currentUser.displayName || currentUser.email || currentUser.uid || '';
+    const fallback = avatarDataUrl(seed);
+    photo.src = currentUser.photoURL || fallback;
+    photo.onerror = () => { photo.onerror = null; photo.src = fallback; };
     if (gate) gate.style.display = 'none';
     if (formCard) formCard.style.display = '';
     if (genBtn) genBtn.style.display = '';
