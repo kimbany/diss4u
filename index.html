@@ -475,6 +475,12 @@
     background: var(--bg-card); border-radius: var(--radius-lg);
     padding: 28px; max-width: 400px; width: 100%;
     border: 1px solid var(--border);
+    /* iOS에서 모달 내부만 스크롤되고 뒤 배경은 안 움직이게 */
+    max-height: calc(100vh - 40px);
+    max-height: calc(100dvh - 40px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
   .modal-title {
     font-size: 20px; font-weight: 700;
