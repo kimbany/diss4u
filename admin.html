@@ -74,6 +74,18 @@
   .statpill.completed { color: var(--accent); border-color: var(--accent); }
   .statpill.refunded { color: var(--danger); border-color: var(--danger); }
   .statpill.partial_refunded { color: #ffb35a; border-color: #ffb35a; }
+  /* 탭 */
+  .tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .tab { background: transparent; color: var(--dim); border: none; border-bottom: 2px solid transparent;
+    padding: 10px 16px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: -1px; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  /* 매출 */
+  .sales-summary { display: flex; gap: 18px; flex-wrap: wrap; padding: 10px 0 14px; font-size: 14px; color: var(--text); }
+  .sales-summary span b { font-size: 16px; margin-left: 4px; }
+  input[type="date"] { max-width: 180px; }
 </style>
 </head>
 <body>
@@ -103,60 +115,104 @@
       <button class="btn secondary small" id="logoutBtn">로그아웃</button>
     </div>
 
-    <!-- 신고 들어온 곡 -->
-    <div class="card">
-      <h2>🚩 신고 들어온 곡</h2>
-      <div class="toolbar">
-        <button class="btn secondary small" id="reloadReports">새로고침</button>
-        <span class="stat" id="reportStat"></span>
-      </div>
-      <div id="reportList"><div class="msg" style="color:var(--dim)">불러오는 중…</div></div>
+    <!-- 탭 -->
+    <div class="tabs">
+      <button class="tab active" data-tab="customers">👥 고객관리</button>
+      <button class="tab" data-tab="sales">💰 매출</button>
+      <button class="tab" data-tab="settings">⚙️ 설정</button>
     </div>
 
-    <!-- 회원 관리 -->
-    <div class="card">
-      <h2>회원 관리</h2>
-      <div class="toolbar">
-        <input class="search" id="search" placeholder="이메일 검색…" />
-        <button class="btn secondary small" id="reloadBtn">새로고침</button>
-        <span class="stat" id="memberStat"></span>
+    <!-- 고객관리 탭 -->
+    <div class="tab-panel active" data-panel="customers">
+      <!-- 신고 들어온 곡 -->
+      <div class="card">
+        <h2>🚩 신고 들어온 곡</h2>
+        <div class="toolbar">
+          <button class="btn secondary small" id="reloadReports">새로고침</button>
+          <span class="stat" id="reportStat"></span>
+        </div>
+        <div id="reportList"><div class="msg" style="color:var(--dim)">불러오는 중…</div></div>
       </div>
-      <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>구글 아이디</th>
-              <th>가입 일자</th>
-              <th style="text-align:right">총 크레딧</th>
-              <th style="text-align:right">가용 가능</th>
-              <th style="text-align:right">무료 보유</th>
-              <th style="text-align:right">충전(누적)</th>
-              <th style="text-align:right">충전 가용</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="memberRows">
-            <tr><td colspan="8" style="color:var(--dim)">불러오는 중…</td></tr>
-          </tbody>
-        </table>
+
+      <!-- 회원 관리 -->
+      <div class="card">
+        <h2>회원 관리</h2>
+        <div class="toolbar">
+          <input class="search" id="search" placeholder="이메일 검색…" />
+          <button class="btn secondary small" id="reloadBtn">새로고침</button>
+          <span class="stat" id="memberStat"></span>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>구글 아이디</th>
+                <th>가입 일자</th>
+                <th style="text-align:right">총 크레딧</th>
+                <th style="text-align:right">가용 가능</th>
+                <th style="text-align:right">무료 보유</th>
+                <th style="text-align:right">충전(누적)</th>
+                <th style="text-align:right">충전 가용</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="memberRows">
+              <tr><td colspan="8" style="color:var(--dim)">불러오는 중…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="msg" id="memberMsg"></div>
       </div>
-      <div class="msg" id="memberMsg"></div>
     </div>
 
-    <!-- 비밀번호 변경 -->
-    <div class="card" style="max-width:420px;">
-      <h2>관리자 비밀번호 변경</h2>
-      <label for="curPw">현재 비밀번호</label>
-      <input id="curPw" type="password" autocomplete="current-password" />
-      <div style="height:12px"></div>
-      <label for="newPw">새 비밀번호 (8자 이상)</label>
-      <input id="newPw" type="password" autocomplete="new-password" />
-      <div style="height:12px"></div>
-      <label for="newPw2">새 비밀번호 확인</label>
-      <input id="newPw2" type="password" autocomplete="new-password" />
-      <div style="height:16px"></div>
-      <button class="btn" id="pwBtn">비밀번호 변경</button>
-      <div class="msg" id="pwMsg"></div>
+    <!-- 매출 탭 -->
+    <div class="tab-panel" data-panel="sales">
+      <div class="card">
+        <h2>💰 매출</h2>
+        <div class="toolbar">
+          <label for="salesDate" style="margin:0;">날짜</label>
+          <input type="date" id="salesDate" />
+          <button class="btn small" id="loadSalesBtn">조회</button>
+          <span class="stat" id="salesStat"></span>
+        </div>
+        <div class="sales-summary" id="salesSummary"></div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>날짜</th>
+                <th>시간</th>
+                <th>고객(이메일/UID)</th>
+                <th style="text-align:right">금액</th>
+                <th style="text-align:right">크레딧</th>
+                <th>상태</th>
+              </tr>
+            </thead>
+            <tbody id="salesRows">
+              <tr><td colspan="6" style="color:var(--dim)">날짜를 선택하고 '조회'를 눌러주세요</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="msg" id="salesMsg"></div>
+      </div>
+    </div>
+
+    <!-- 설정 탭 -->
+    <div class="tab-panel" data-panel="settings">
+      <div class="card" style="max-width:420px;">
+        <h2>관리자 비밀번호 변경</h2>
+        <label for="curPw">현재 비밀번호</label>
+        <input id="curPw" type="password" autocomplete="current-password" />
+        <div style="height:12px"></div>
+        <label for="newPw">새 비밀번호 (8자 이상)</label>
+        <input id="newPw" type="password" autocomplete="new-password" />
+        <div style="height:12px"></div>
+        <label for="newPw2">새 비밀번호 확인</label>
+        <input id="newPw2" type="password" autocomplete="new-password" />
+        <div style="height:16px"></div>
+        <button class="btn" id="pwBtn">비밀번호 변경</button>
+        <div class="msg" id="pwMsg"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -567,6 +623,61 @@ $('search').addEventListener('input', renderMembers);
 $('pwBtn').addEventListener('click', changePw);
 $('payClose').addEventListener('click', () => $('payModal').classList.add('hidden'));
 $('payModal').addEventListener('click', (e) => { if (e.target.id === 'payModal') $('payModal').classList.add('hidden'); });
+
+// ===== 탭 전환 =====
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.getAttribute('data-panel') === name));
+  if (name === 'sales') loadSales();
+}
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => switchTab(b.getAttribute('data-tab'))));
+
+// ===== 매출 =====
+function todayKST() {
+  // 브라우저 TZ와 무관하게 KST 기준 YYYY-MM-DD
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+}
+async function loadSales() {
+  const dateInput = $('salesDate');
+  if (!dateInput.value) dateInput.value = todayKST();
+  const date = dateInput.value;
+  $('salesRows').innerHTML = '<tr><td colspan="6" style="color:var(--dim)">조회 중…</td></tr>';
+  $('salesSummary').innerHTML = '';
+  setMsg($('salesMsg'), '');
+  const r = await api('/admin/sales?date=' + encodeURIComponent(date));
+  if (r.status === 401) { logout(); return; }
+  if (!r.ok || !r.data.ok) { setMsg($('salesMsg'), (r.data && r.data.message) || '매출 조회 실패', 'err'); $('salesRows').innerHTML = ''; return; }
+  renderSales(r.data);
+}
+function renderSales(d) {
+  $('salesSummary').innerHTML =
+    '<span>건수 <b>' + d.count + '</b></span>'
+    + '<span>총 결제 <b style="color:var(--accent)">' + won(d.gross) + '</b></span>'
+    + '<span>환불 <b style="color:var(--danger)">' + won(d.refunded) + '</b></span>'
+    + '<span>순매출 <b>' + won(d.net) + '</b></span>';
+  const rows = d.payments || [];
+  if (!rows.length) { $('salesRows').innerHTML = '<tr><td colspan="6" style="color:var(--dim)">해당 날짜의 결제가 없어요</td></tr>'; return; }
+  $('salesRows').innerHTML = rows.map(p => {
+    const dt = p.createdAt ? new Date(p.createdAt) : null;
+    const day = dt ? dt.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }) : '-';
+    const time = dt ? dt.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false, hour: '2-digit', minute: '2-digit' }) : '-';
+    const statusCls = p.status === 'refunded' ? 'refunded' : (p.status === 'partial_refunded' ? 'partial_refunded' : 'completed');
+    const statusText = p.status === 'refunded' ? '환불' : (p.status === 'partial_refunded' ? '부분환불' : '완료');
+    const refundText = p.refundedAmount ? ' <span style="color:var(--danger);font-size:11px;">(-' + won(p.refundedAmount) + ')</span>' : '';
+    return '<tr>'
+      + '<td>' + day + '</td>'
+      + '<td>' + time + '</td>'
+      + '<td><div class="email">' + escapeHtml(p.email || '(이메일 없음)') + '</div><div class="sub">' + escapeHtml(p.uid || '') + '</div></td>'
+      + '<td class="num"><b>' + won(p.amount) + '</b>' + refundText + '</td>'
+      + '<td class="num">' + (p.credits || 0) + 'p</td>'
+      + '<td><span class="statpill ' + statusCls + '">' + statusText + '</span></td>'
+      + '</tr>';
+  }).join('');
+}
+$('loadSalesBtn').addEventListener('click', loadSales);
+$('salesDate').addEventListener('change', loadSales);
+$('salesDate').addEventListener('keydown', e => { if (e.key === 'Enter') loadSales(); });
+$('salesDate').value = todayKST();
 
 // 시작: 토큰 있으면 대시보드 시도
 if (TOKEN) { showDash(); } else { showLogin(); }
