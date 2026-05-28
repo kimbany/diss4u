@@ -921,7 +921,7 @@
       <div class="action-grid">
         <button class="btn-secondary" id="payCardBtn" onclick="setPayMethod('card')">💳 카드</button>
         <button class="btn-secondary" id="payKakaoBtn" onclick="setPayMethod('kakaopay')">카카오페이</button>
-        <button class="btn-secondary" id="payPaypalBtn" onclick="setPayMethod('paypal')">PayPal</button>
+        <button class="btn-secondary" id="payPaypalBtn" onclick="setPayMethod('paypal')" style="display:none;">PayPal</button>
       </div>
     </div>
 
@@ -1248,7 +1248,7 @@ async function openChargeModal() {
   const kakaoBtn = document.getElementById('payKakaoBtn');
   const paypalBtn = document.getElementById('payPaypalBtn');
   if (kakaoBtn) kakaoBtn.style.display = cfg.kakao ? '' : 'none';
-  if (paypalBtn) paypalBtn.style.display = cfg.paypal ? '' : 'none';
+  if (paypalBtn) paypalBtn.style.display = 'none';   // PayPal 결제 숨김
   if (methodWrap) methodWrap.style.display = '';
   // 저장해둔 휴대폰 번호 있으면 입력란에 미리 채워줌
   const phoneInput = document.getElementById('buyerPhoneInput');
