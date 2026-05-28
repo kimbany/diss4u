@@ -467,13 +467,17 @@ function readBody(req) {
 }
 
 function buildPrompt(params) {
-  const { name, relationship, keywords, genre, lang, gender, mustInclude } = params;
+  const { name, relationship, keywords, genre, lang, gender, mustInclude, useNameInLyrics } = params;
   const genderText = { male: '남자', female: '여자', pet: '반려동물' }[gender] || '미지정';
   const langText = { ko: '한글', en: '영어', mix: '섞기' }[lang] || '한글';
   const fixed = (mustInclude && mustInclude.trim()) ? mustInclude.trim() : '(없음)';
   const rel = (relationship && relationship.trim()) ? relationship.trim() : '친구';
+  // useNameInLyrics가 false로 명시되면 이름은 제목에만 쓰고 가사 본문에는 절대 못 쓰게 함
+  const nameRule = (useNameInLyrics === false)
+    ? `\n\n[이름 사용 규칙]\n이름(${name})은 제목(title)에만 사용할 수 있고, 가사(lyrics) 본문에는 절대 쓰지 마라.\n가사에서는 "너", "쟤", "걔" 같은 지시어로만 가리켜라.\n`
+    : '';
 
-  return `너는 한국 숏폼 음악/KPOP 전문 작사가다.
+  return `너는 최고의 숏폼 작사가이고 사용자에 빙의한 작곡 작사가이다
 
 이 가사의 목적은:
 친구·지인·반려동물 등을 가볍게 놀리고, 약올리고, 킹받게 만드는 재미있는 노래를 만드는 것이다.
@@ -534,7 +538,7 @@ ${langText}
 
 [장르]
 ${genre}
-
+${nameRule}
 ---
 
 [나와의 관계] 사용 규칙
@@ -1856,12 +1860,17 @@ const server = http.createServer(async (req, res) => {
       return send(res, 400, { error: '필수 항목 누락' });
     }
 
+    // 노래 길이 단축 힌트: Suno가 더 짧게 만들도록 style/lyrics에 보조 마커 추가
+    const SHORT_HINT = ', short song around 45 seconds, no long intro or outro, fade out at end';
+    const finalStyle = /short|seconds|outro|fade/i.test(style) ? style : (style + SHORT_HINT);
+    const finalLyrics = /\[End\]\s*$/i.test(lyrics.trim()) ? lyrics : (lyrics.trim() + '\n\n[End]');
+
     let r, text;
     try {
       r = await fetch('https://api.apiframe.ai/v2/music/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-API-Key': process.env.APIFRAME_API_KEY },
-        body: JSON.stringify({ model: 'suno', prompt: lyrics, sunoParams: { custom_mode: true, title, style, model_version: 'V5' } })
+        body: JSON.stringify({ model: 'suno', prompt: finalLyrics, sunoParams: { custom_mode: true, title, style: finalStyle, model_version: 'V5' } })
       });
       text = await r.text();
     } catch (e) {

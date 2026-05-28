@@ -667,6 +667,10 @@
       <div class="field">
         <div class="label"><span class="label-icon">👤</span>놀릴 사람 이름</div>
         <input class="input" id="targetName" placeholder="예: 김슬기" maxlength="20">
+        <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:var(--text-dim);cursor:pointer;">
+          <input type="checkbox" id="useNameInLyrics" checked style="width:16px;height:16px;cursor:pointer;accent-color:var(--lime);">
+          <span>이름을 가사에도 사용 <span style="color:var(--text-dimmer);">(끄면 제목에만 사용)</span></span>
+        </label>
       </div>
 
       <div class="field">
@@ -1965,6 +1969,7 @@ async function startGeneration() {
   const relationship = document.getElementById('relationship').value.trim();
   const keywords = document.getElementById('keywords').value.trim();
   const mustInclude = document.getElementById('mustInclude').value.trim();
+  const useNameInLyrics = !!(document.getElementById('useNameInLyrics') || {}).checked;
 
   if (!name) { showError('놀릴 사람 이름을 입력해주세요'); return; }
   if (!keywords) { showError('놀릴 포인트를 입력해주세요'); return; }
@@ -1982,7 +1987,7 @@ async function startGeneration() {
   try {
     const lyricsData = await callWorker('/generate-lyrics', {
       name, relationship, keywords, genre, lang: STATE.selectedLang,
-      gender: STATE.selectedGender, mustInclude
+      gender: STATE.selectedGender, mustInclude, useNameInLyrics
     });
 
     if (STATE.generationCancelled) return;
