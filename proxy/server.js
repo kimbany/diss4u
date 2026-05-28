@@ -1502,12 +1502,20 @@ const server = http.createServer(async (req, res) => {
   }
 
   // [관리자] 날짜별 매출 (KST 기준). query: date=YYYY-MM-DD
+  // [관리자] 매출 (KST 기준). query: date=YYYY-MM-DD (단일일) 또는 from=YYYY-MM-DD&to=YYYY-MM-DD (기간, 양끝 포함)
   if (path === '/admin/sales') {
     if (!(await verifyAdmin(req))) return send(res, 401, { error: 'admin_auth_required', message: '관리자 인증이 필요해요' });
-    const date = url.searchParams.get('date');
-    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return send(res, 400, { error: 'bad_date', message: '날짜 형식이 YYYY-MM-DD가 아니에요' });
-    const start = new Date(date + 'T00:00:00+09:00');
-    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    const singleDate = url.searchParams.get('date');
+    let from = url.searchParams.get('from');
+    let to = url.searchParams.get('to');
+    if (singleDate) { from = to = singleDate; }
+    if (!from || !to || !dateRe.test(from) || !dateRe.test(to)) {
+      return send(res, 400, { error: 'bad_date', message: '날짜 형식이 YYYY-MM-DD가 아니에요 (date 또는 from/to 필요)' });
+    }
+    if (from > to) { const t = from; from = to; to = t; } // 뒤집힘 보정
+    const start = new Date(from + 'T00:00:00+09:00');
+    const end = new Date(new Date(to + 'T00:00:00+09:00').getTime() + 24 * 60 * 60 * 1000);
     let rows = [];
     try {
       const qs = await fdb.collection('payments').where('createdAt', '>=', start).where('createdAt', '<', end).get();
@@ -1539,7 +1547,7 @@ const server = http.createServer(async (req, res) => {
                .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
     let gross = 0, refunded = 0;
     for (const r of rows) { gross += r.amount; refunded += r.refundedAmount || 0; }
-    return send(res, 200, { ok: true, date, count: rows.length, gross, refunded, net: gross - refunded, payments: rows });
+    return send(res, 200, { ok: true, from, to, count: rows.length, gross, refunded, net: gross - refunded, payments: rows });
   }
 
   // [관리자] 자동 환불: 포트원 취소(부분/전액) + 유료 크레딧 차감 + 기록
