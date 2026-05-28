@@ -1497,6 +1497,47 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true, payments });
   }
 
+  // [관리자] 날짜별 매출 (KST 기준). query: date=YYYY-MM-DD
+  if (path === '/admin/sales') {
+    if (!(await verifyAdmin(req))) return send(res, 401, { error: 'admin_auth_required', message: '관리자 인증이 필요해요' });
+    const date = url.searchParams.get('date');
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return send(res, 400, { error: 'bad_date', message: '날짜 형식이 YYYY-MM-DD가 아니에요' });
+    const start = new Date(date + 'T00:00:00+09:00');
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    let rows = [];
+    try {
+      const qs = await fdb.collection('payments').where('createdAt', '>=', start).where('createdAt', '<', end).get();
+      qs.forEach(d => {
+        const x = d.data();
+        rows.push({
+          paymentId: x.paymentId || d.id,
+          uid: x.uid || null,
+          amount: x.amount || 0,
+          credits: x.credits || 0,
+          status: x.status || 'completed',
+          refundedAmount: x.refundedAmount || 0,
+          createdAt: (x.createdAt && x.createdAt.toDate) ? x.createdAt.toDate().toISOString() : null
+        });
+      });
+    } catch (e) {
+      return send(res, 500, { error: 'sales_fail', message: '매출 조회 실패', detail: e.message });
+    }
+    // uid → email 매핑 (Firestore users.email)
+    const uids = [...new Set(rows.map(r => r.uid).filter(Boolean))];
+    const emailMap = {};
+    await Promise.all(uids.map(async u => {
+      try {
+        const s = await fdb.collection('users').doc(u).get();
+        if (s.exists) emailMap[u] = s.data().email || null;
+      } catch (e) {}
+    }));
+    rows = rows.map(r => ({ ...r, email: emailMap[r.uid] || null }))
+               .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+    let gross = 0, refunded = 0;
+    for (const r of rows) { gross += r.amount; refunded += r.refundedAmount || 0; }
+    return send(res, 200, { ok: true, date, count: rows.length, gross, refunded, net: gross - refunded, payments: rows });
+  }
+
   // [관리자] 자동 환불: 포트원 취소(부분/전액) + 유료 크레딧 차감 + 기록
   if (path === '/refund-payment' && req.method === 'POST') {
     if (!(await verifyAdmin(req))) return send(res, 401, { error: 'admin_auth_required', message: '관리자 인증이 필요해요' });
