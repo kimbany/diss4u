@@ -783,6 +783,17 @@
     <div class="section-title">가사</div>
     <div class="lyrics-box" id="lyricsBox"></div>
 
+    <div id="inputRecap" style="display:none;margin-top:18px;">
+      <div id="recapKeywords" style="display:none;">
+        <div class="section-title" style="margin-bottom:6px;">🎯 놀릴 포인트</div>
+        <div class="lyrics-box" id="recapKeywordsText" style="font-size:14px;line-height:1.7;"></div>
+      </div>
+      <div id="recapMustInclude" style="display:none;margin-top:10px;">
+        <div class="section-title" style="margin-bottom:6px;">✍️ 꼭 넣고 싶은 문장</div>
+        <div class="lyrics-box" id="recapMustIncludeText" style="font-size:14px;line-height:1.7;"></div>
+      </div>
+    </div>
+
     <button class="btn-primary" id="instaVideoBtn" onclick="makeInstaVideo()"
       style="margin-bottom:6px;background:linear-gradient(135deg,var(--purple) 0%,var(--pink) 100%);color:#1a1a1f;box-shadow:0 8px 30px rgba(197,163,255,.35);">
       <span class="btn-mic" style="color:var(--purple);">📹</span>
@@ -1076,6 +1087,7 @@ async function saveSong(song) {
       name: song.name || '',
       relationship: song.relationship || '',
       keywords: song.keywords || '',
+      mustInclude: song.mustInclude || '',
       genre: song.genre || '',
       gender: song.gender || '',
       lang: song.lang || '',
@@ -1996,7 +2008,7 @@ async function startGeneration() {
       id: null,
       title: lyricsData.title,
       lyrics: lyricsData.lyrics,
-      name, relationship, keywords, genre,
+      name, relationship, keywords, mustInclude, genre,
       gender: STATE.selectedGender,
       lang: STATE.selectedLang,
       audioUrl: result.audioUrl,
@@ -2187,6 +2199,16 @@ function showResult() {
   document.getElementById('resultLang').textContent = LANG_NAMES[song.lang];
   document.getElementById('resultTarget').textContent = '🎯 ' + song.name;
   document.getElementById('lyricsBox').textContent = song.lyrics;
+
+  // 만든 사람에게만 보이는 입력 요약 (놀릴 포인트 + 꼭 넣고 싶은 문장)
+  const kw = (song.keywords || '').trim();
+  const mi = (song.mustInclude || '').trim();
+  document.getElementById('recapKeywordsText').textContent = kw;
+  document.getElementById('recapMustIncludeText').textContent = mi;
+  document.getElementById('recapKeywords').style.display = kw ? '' : 'none';
+  document.getElementById('recapMustInclude').style.display = mi ? '' : 'none';
+  document.getElementById('inputRecap').style.display = (kw || mi) ? '' : 'none';
+
   if (song.audioUrl) {
     const wrap = document.getElementById('audioPlayerWrap');
     const audio = document.getElementById('audioPlayer');
