@@ -15,7 +15,9 @@
   body { margin: 0; background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
   a { color: var(--accent2); }
-  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px 80px; }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 24px 20px 80px; }
+  td.actions { text-align: right; white-space: nowrap; }
+  td.actions .btn { margin-left: 6px; }
   h1 { font-size: 20px; margin: 0; }
   .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
   .brand .tag { font-size: 12px; color: var(--dim); border: 1px solid var(--line); padding: 2px 8px; border-radius: 999px; }
@@ -57,7 +59,26 @@
   .ledger-row:last-child { border-bottom: none; }
   .ledger-amt.plus { color: var(--accent); font-weight: 700; }
   .ledger-amt.minus { color: var(--danger); font-weight: 700; }
-  @media (max-width: 560px) { .wrap { padding: 16px 10px 60px; } }
+  @media (max-width: 768px) {
+    .wrap { padding: 14px 10px 60px; }
+    h1 { font-size: 18px; }
+    .card { padding: 14px; border-radius: 12px; margin-bottom: 14px; }
+    .card h2 { font-size: 14px; margin-bottom: 12px; }
+    .topbar { margin-bottom: 14px; }
+    .tabs { gap: 0; }
+    .tab { flex: 1; padding: 10px 8px; font-size: 13px; text-align: center; }
+    .toolbar { gap: 8px; }
+    .toolbar .btn { padding: 8px 12px; font-size: 12px; }
+    .search { max-width: 100%; }
+    input[type="date"] { max-width: 140px; }
+    table { min-width: 640px; font-size: 12px; }
+    th, td { padding: 9px 8px; }
+    td.actions { white-space: normal; text-align: left; }
+    td.actions .btn { margin: 3px 4px 3px 0; padding: 6px 10px; font-size: 12px; }
+    .modal { padding: 14px; }
+    .sales-summary { gap: 12px; padding: 8px 0 12px; font-size: 13px; }
+    .sales-summary span b { font-size: 14px; }
+  }
   /* 결제/환불 모달 */
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex;
     align-items: flex-start; justify-content: center; padding: 40px 16px; z-index: 50; overflow-y: auto; }
@@ -170,9 +191,14 @@
       <div class="card">
         <h2>💰 매출</h2>
         <div class="toolbar">
-          <label for="salesDate" style="margin:0;">날짜</label>
-          <input type="date" id="salesDate" />
+          <label for="salesFrom" style="margin:0;">시작</label>
+          <input type="date" id="salesFrom" />
+          <label for="salesTo" style="margin:0;">종료</label>
+          <input type="date" id="salesTo" />
           <button class="btn small" id="loadSalesBtn">조회</button>
+          <button class="btn secondary small" id="salesTodayBtn">오늘</button>
+          <button class="btn secondary small" id="sales7Btn">최근 7일</button>
+          <button class="btn secondary small" id="sales30Btn">최근 30일</button>
           <span class="stat" id="salesStat"></span>
         </div>
         <div class="sales-summary" id="salesSummary"></div>
@@ -323,7 +349,7 @@ function renderMembers() {
       <td class="num free">${m.freeCredits}</td>
       <td class="num paid">${m.paidGranted}</td>
       <td class="num paid">${m.paidCredits}</td>
-      <td style="text-align:right;white-space:nowrap">
+      <td class="actions">
         <button class="btn small secondary" data-act="songs" data-uid="${m.uid}" data-email="${em}">제작물</button>
         <button class="btn small secondary" data-act="ledger" data-uid="${m.uid}" data-email="${em}" style="margin-left:6px;">크레딧 내역</button>
         <button class="btn small" data-act="grant" data-uid="${m.uid}" data-email="${em}" style="margin-left:6px;">크레딧 증정</button>
@@ -637,14 +663,25 @@ function todayKST() {
   // 브라우저 TZ와 무관하게 KST 기준 YYYY-MM-DD
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 }
+function shiftKST(days) {
+  // 오늘(KST)에서 days만큼 더한 YYYY-MM-DD
+  const today = todayKST();
+  const t = new Date(today + 'T00:00:00+09:00');
+  t.setUTCDate(t.getUTCDate() + days);
+  return t.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+}
+function setSalesRange(from, to) {
+  $('salesFrom').value = from; $('salesTo').value = to;
+}
 async function loadSales() {
-  const dateInput = $('salesDate');
-  if (!dateInput.value) dateInput.value = todayKST();
-  const date = dateInput.value;
+  if (!$('salesFrom').value) $('salesFrom').value = todayKST();
+  if (!$('salesTo').value) $('salesTo').value = todayKST();
+  let from = $('salesFrom').value, to = $('salesTo').value;
+  if (from > to) { const t = from; from = to; to = t; setSalesRange(from, to); }
   $('salesRows').innerHTML = '<tr><td colspan="6" style="color:var(--dim)">조회 중…</td></tr>';
   $('salesSummary').innerHTML = '';
   setMsg($('salesMsg'), '');
-  const r = await api('/admin/sales?date=' + encodeURIComponent(date));
+  const r = await api('/admin/sales?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to));
   if (r.status === 401) { logout(); return; }
   if (!r.ok || !r.data.ok) { setMsg($('salesMsg'), (r.data && r.data.message) || '매출 조회 실패', 'err'); $('salesRows').innerHTML = ''; return; }
   renderSales(r.data);
@@ -656,7 +693,7 @@ function renderSales(d) {
     + '<span>환불 <b style="color:var(--danger)">' + won(d.refunded) + '</b></span>'
     + '<span>순매출 <b>' + won(d.net) + '</b></span>';
   const rows = d.payments || [];
-  if (!rows.length) { $('salesRows').innerHTML = '<tr><td colspan="6" style="color:var(--dim)">해당 날짜의 결제가 없어요</td></tr>'; return; }
+  if (!rows.length) { $('salesRows').innerHTML = '<tr><td colspan="6" style="color:var(--dim)">해당 기간에 결제가 없어요</td></tr>'; return; }
   $('salesRows').innerHTML = rows.map(p => {
     const dt = p.createdAt ? new Date(p.createdAt) : null;
     const day = dt ? dt.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }) : '-';
@@ -675,9 +712,14 @@ function renderSales(d) {
   }).join('');
 }
 $('loadSalesBtn').addEventListener('click', loadSales);
-$('salesDate').addEventListener('change', loadSales);
-$('salesDate').addEventListener('keydown', e => { if (e.key === 'Enter') loadSales(); });
-$('salesDate').value = todayKST();
+$('salesFrom').addEventListener('change', loadSales);
+$('salesTo').addEventListener('change', loadSales);
+$('salesFrom').addEventListener('keydown', e => { if (e.key === 'Enter') loadSales(); });
+$('salesTo').addEventListener('keydown', e => { if (e.key === 'Enter') loadSales(); });
+$('salesTodayBtn').addEventListener('click', () => { setSalesRange(todayKST(), todayKST()); loadSales(); });
+$('sales7Btn').addEventListener('click',  () => { setSalesRange(shiftKST(-6), todayKST()); loadSales(); });
+$('sales30Btn').addEventListener('click', () => { setSalesRange(shiftKST(-29), todayKST()); loadSales(); });
+setSalesRange(todayKST(), todayKST());
 
 // 시작: 토큰 있으면 대시보드 시도
 if (TOKEN) { showDash(); } else { showLogin(); }
