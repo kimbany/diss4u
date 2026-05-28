@@ -1605,7 +1605,7 @@ async function exchangeKakaoCode(code) {
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok || !d.token) {
-      showError('카카오 로그인 실패: ' + (d.message || '서버 응답 오류'));
+      showError('카카오 로그인 실패: ' + (d.message || '서버 응답 오류') + (d.detail ? ' [' + String(d.detail).slice(0, 300) + ']' : ''));
       return;
     }
     await auth.signInWithCustomToken(d.token);
