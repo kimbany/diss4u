@@ -744,6 +744,60 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  // 카카오 로그인: { accessToken } → Firebase Custom Token 발급
+  // 카카오 access token으로 kapi.kakao.com/v2/user/me 호출해 검증 후, uid="kakao_<id>" 로 토큰 발급.
+  if (path === '/auth/kakao' && req.method === 'POST') {
+    if (!CREDITS_ENABLED) return send(res, 400, { error: 'auth_disabled', message: '인증 시스템이 비활성 상태예요' });
+    const { accessToken } = await readBody(req);
+    if (!accessToken) return send(res, 400, { error: 'no_token', message: '카카오 액세스 토큰이 없어요' });
+    let kakaoUser;
+    try {
+      const r = await fetch('https://kapi.kakao.com/v2/user/me', {
+        headers: { 'Authorization': 'Bearer ' + accessToken }
+      });
+      const text = await r.text();
+      if (!r.ok) return send(res, 401, { error: 'kakao_verify_fail', message: '카카오 인증에 실패했어요', detail: text.slice(0, 200) });
+      kakaoUser = JSON.parse(text);
+    } catch (e) {
+      return send(res, 502, { error: 'kakao_unreachable', message: '카카오 서버 연결 실패', detail: e.message });
+    }
+    const kakaoId = kakaoUser && kakaoUser.id;
+    if (!kakaoId) return send(res, 401, { error: 'no_id', message: '카카오 사용자 식별 실패' });
+    const acc = kakaoUser.kakao_account || {};
+    const profile = acc.profile || {};
+    const email = acc.email || null;
+    const nickname = profile.nickname || null;
+    const photo = profile.profile_image_url || profile.thumbnail_image_url || null;
+    const uid = 'kakao_' + kakaoId;
+
+    // Firebase 사용자 레코드에 email/displayName 반영(있을 때만). 충돌은 무시하고 진행.
+    try {
+      await admin.auth().updateUser(uid, {
+        email: email || undefined,
+        displayName: nickname || undefined,
+        photoURL: photo || undefined,
+        emailVerified: email ? true : undefined
+      });
+    } catch (e) {
+      if (e.code === 'auth/user-not-found') {
+        try {
+          await admin.auth().createUser({
+            uid, email: email || undefined, displayName: nickname || undefined,
+            photoURL: photo || undefined, emailVerified: !!email
+          });
+        } catch (e2) { /* email 충돌 등 — 그래도 custom token은 발급 */ }
+      }
+    }
+
+    try {
+      const customToken = await admin.auth().createCustomToken(uid, { provider: 'kakao' });
+      if (email) { try { await getOrCreateUser(uid, email); } catch (e) {} }
+      return send(res, 200, { ok: true, token: customToken, uid, email, nickname });
+    } catch (e) {
+      return send(res, 500, { error: 'token_fail', message: '토큰 발급 실패', detail: e.message });
+    }
+  }
+
   // 내 크레딧 조회 (없으면 신규 보너스 지급). 추천 코드 / 광고 잔여 횟수도 함께 반환.
   if (path === '/me') {
     if (!CREDITS_ENABLED) return send(res, 200, { enabled: false, credits: null, cost: COST_PER_SONG });
