@@ -1297,6 +1297,20 @@ async function buyPack(amount, credits) {
     }
   }
 
+  // KG이니시스(카드)는 구매자 이메일도 필수. 구글 로그인이면 currentUser.email 있음.
+  // 카카오 로그인(이메일 미동의 등)이면 비어 있으므로 입력받음.
+  let buyerEmail = currentUser.email || '';
+  if (!isKakao && !buyerEmail) {
+    buyerEmail = localStorage.getItem('diss4u_email') || '';
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(buyerEmail)) {
+      const input = prompt('카드 결제를 위해 이메일을 입력해주세요', buyerEmail);
+      if (input === null) { chargeMsg('결제가 취소됐어요'); return; }
+      buyerEmail = input.trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(buyerEmail)) { chargeMsg('이메일 형식이 올바르지 않아요', true); return; }
+      try { localStorage.setItem('diss4u_email', buyerEmail); } catch (e) {}
+    }
+  }
+
   try {
     const req = {
       storeId: cfg.storeId,
@@ -1307,7 +1321,7 @@ async function buyPack(amount, credits) {
       currency: 'CURRENCY_KRW',
       payMethod: isKakao ? 'EASY_PAY' : 'CARD',
       customer: {
-        email: currentUser.email || undefined,
+        email: buyerEmail || undefined,
         fullName: currentUser.displayName || undefined,
         phoneNumber: buyerPhone || undefined,
       },
@@ -1433,7 +1447,7 @@ async function loginKakao() {
     const redirectUri = location.origin + '/';
     Kakao.Auth.authorize({
       redirectUri,
-      scope: 'profile_nickname,profile_image,account_email'
+      scope: 'profile_nickname'
     });
   } catch (err) {
     showError('카카오 로그인 호출 실패: ' + ((err && (err.message || err.error)) || ''));
