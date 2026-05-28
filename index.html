@@ -1584,7 +1584,7 @@ async function loginKakao() {
   try {
     // Kakao JS SDK v2는 팝업 login이 제거돼 리다이렉트 방식만 지원.
     // 카카오 로그인 후 ?code= 로 redirectUri로 돌아옴 → 로드 핸들러에서 서버 교환 처리.
-    const redirectUri = location.origin + '/';
+    const redirectUri = location.origin;
     Kakao.Auth.authorize({
       redirectUri,
       scope: 'profile_nickname,account_email'
@@ -1597,7 +1597,7 @@ async function loginKakao() {
 // 카카오 리다이렉트(?code=)에서 돌아오면 서버에 코드 전달 → Firebase 로그인
 async function exchangeKakaoCode(code) {
   try {
-    const redirectUri = location.origin + '/';
+    const redirectUri = location.origin;
     const r = await fetch(getWorkerUrl() + '/auth/kakao', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
