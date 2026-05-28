@@ -636,6 +636,9 @@
       <button class="btn-google" onclick="loginGoogle()">
         <span style="font-weight:800;color:#4285F4;">G</span> Google로 시작하기
       </button>
+      <button class="btn-google" onclick="loginKakao()" style="background:#FEE500;border-color:#FEE500;color:#1a1a1f;margin-top:8px;">
+        <span style="font-weight:800;">💬</span> 카카오로 시작하기
+      </button>
     </div>
 
     <!-- Form -->
@@ -1420,6 +1423,37 @@ function loginGoogle() {
     }
     showError('로그인 실패: ' + (err.message || err.code));
   });
+}
+
+async function loginKakao() {
+  if (!window.Kakao || !Kakao.Auth) { showError('카카오 SDK 로딩 중이에요. 잠시 후 다시 시도해주세요.'); return; }
+  try {
+    const tokenResp = await new Promise((resolve, reject) => {
+      Kakao.Auth.login({
+        scope: 'profile_nickname,profile_image,account_email',
+        success: resolve,
+        fail: reject
+      });
+    });
+    const accessToken = tokenResp && tokenResp.access_token;
+    if (!accessToken) { showError('카카오 로그인 실패: 토큰이 없어요'); return; }
+    const r = await fetch(getWorkerUrl() + '/auth/kakao', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessToken })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.token) { showError('카카오 로그인 실패: ' + (d.message || '서버 응답 오류')); return; }
+    await auth.signInWithCustomToken(d.token);
+  } catch (err) {
+    // 사용자가 취소한 경우는 조용히 무시
+    if (err && (err.error === 'access_denied' || err.error === 'cancel' || err === 'cancel')) return;
+    if (err && err.code === 'auth/user-disabled') {
+      showError('탈퇴한 계정이에요. 이 카카오 계정으로는 다시 가입할 수 없습니다.');
+      return;
+    }
+    showError('카카오 로그인 실패: ' + ((err && (err.error_description || err.message || err.error)) || ''));
+  }
 }
 
 function logout() {
