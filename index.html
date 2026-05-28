@@ -1067,7 +1067,7 @@ async function fetchMySongs() {
     const arr = snap.docs.map(d => {
       const x = d.data();
       return { id: d.id, ...x, createdAt: (x.createdAt && x.createdAt.toDate) ? x.createdAt.toDate().toISOString() : (x.createdAt || new Date().toISOString()) };
-    });
+    }).filter(s => !s.blocked); // 관리자가 차단한 곡은 만든 사람에게도 숨김
     arr.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     return arr;
   } catch (e) {
@@ -2255,6 +2255,7 @@ async function loadSong(id) {
     const doc = await db.collection('songs').doc(id).get();
     if (doc.exists) {
       const x = doc.data();
+      if (x.blocked) { showToast('신고로 인해 비공개 처리된 곡이에요'); return; }
       STATE.currentSong = { id: doc.id, ...x, createdAt: (x.createdAt && x.createdAt.toDate) ? x.createdAt.toDate().toISOString() : (x.createdAt || new Date().toISOString()) };
       showResult();
     } else {
