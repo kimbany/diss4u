@@ -1072,7 +1072,26 @@ auth.onAuthStateChanged(user => {
   updateAuthUI();
   loadHistory();
   fetchCredits();
+  maybeResumePayment();   // 모바일 결제 리다이렉트 복귀 시 자동 검증
 });
+
+// 모바일에서 결제 후 사이트로 돌아왔으면 (?paid=1) 자동으로 결제 검증
+async function maybeResumePayment() {
+  if (!currentUser) return;
+  const params = new URLSearchParams(location.search);
+  if (params.get('paid') !== '1') return;
+  // 마커 제거 (새로고침 시 중복 트리거 방지)
+  params.delete('paid');
+  const qs = params.toString();
+  history.replaceState(null, '', location.origin + location.pathname + (qs ? '?' + qs : '') + location.hash);
+  let pid = null;
+  try { pid = localStorage.getItem('diss4u_pending_pay'); } catch (e) {}
+  if (!pid) return;
+  // 충전 모달을 열어 결제 상태/결과를 표시
+  const m = document.getElementById('chargeModal');
+  if (m) m.classList.add('active');
+  await verifyAndCredit(pid);
+}
 
 // 서버에서 내 크레딧 잔액 조회 → UI 갱신
 async function fetchCredits() {
@@ -1294,6 +1313,11 @@ async function buyPack(amount, credits) {
     }
   }
 
+  // 모바일은 외부 결제 페이지로 떠났다가 돌아오므로 paymentId를 미리 저장해 둠
+  try { localStorage.setItem('diss4u_pending_pay', paymentId); } catch (e) {}
+  // 결제 완료 후 돌아올 주소 (?paid=1 마커로 자동 검증 트리거)
+  const returnUrl = location.origin + location.pathname + '?paid=1';
+
   try {
     const req = {
       storeId: cfg.storeId,
@@ -1303,6 +1327,7 @@ async function buyPack(amount, credits) {
       totalAmount: amount,
       currency: 'CURRENCY_KRW',
       payMethod: isKakao ? 'EASY_PAY' : 'CARD',
+      redirectUrl: returnUrl,   // KG이니시스 모바일은 리다이렉트 필수
       customer: {
         email: currentUser.email || undefined,
         fullName: currentUser.displayName || undefined,
@@ -1312,7 +1337,8 @@ async function buyPack(amount, credits) {
     };
     const resp = await PortOne.requestPayment(req);
     if (resp.code != null) {
-      // 사용자가 취소했거나 결제 실패
+      // 사용자가 취소했거나 결제 실패 → 보류 결제 정리
+      try { localStorage.removeItem('diss4u_pending_pay'); } catch (e) {}
       if (!/cancel|취소/i.test(resp.message || '')) showError('결제 실패: ' + (resp.message || resp.code));
       return;
     }
@@ -1374,6 +1400,14 @@ async function verifyAndCredit(paymentId) {
     const btn = document.getElementById('pendingCheckBtn');
     if (btn) btn.style.display = '';
     chargeMsg('⏳ 결제 승인 대기 중이에요. 승인되면 적립돼요. 잠시 후 "대기 중인 결제 확인하기"를 눌러주세요.');
+    return;
+  }
+  // 결제가 진행되지 않음(취소/미완료): 보류 결제 정리 후 부드럽게 안내
+  if (vd && vd.error === 'not_paid') {
+    try { localStorage.removeItem('diss4u_pending_pay'); } catch (e) {}
+    const btn = document.getElementById('pendingCheckBtn');
+    if (btn) btn.style.display = 'none';
+    chargeMsg('결제가 취소되었거나 완료되지 않았어요');
     return;
   }
   if (!vr.ok || !vd.ok) {
