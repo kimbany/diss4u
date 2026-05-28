@@ -2395,6 +2395,32 @@ const VIDEO = {
 };
 const VIDEO_PALETTE = ['#d4ff3a', '#a3e5ff', '#c5a3ff', '#ffb3d9'];
 
+// 인스타 영상 중앙에 합성할 PNG 레이어들 (깔끔하게 누끼 딴 새 이미지)
+const LAYER_SRCS = { mascot: 'mascot2.png', wordmark: 'logo1.png', badge: 'badge2.png' };
+const LAYERS = {};
+let LAYERS_READY = false;
+function loadLayers() {
+  return Promise.all(Object.entries(LAYER_SRCS).map(([key, src]) => new Promise((resolve) => {
+    const img = new Image();
+    let done = false;
+    const finish = (ok) => { if (done) return; done = true; LAYERS[key] = ok ? img : null; resolve(); };
+    img.onload = () => finish(true);
+    img.onerror = () => finish(false);
+    setTimeout(() => finish(!!(img.complete && img.naturalWidth)), 3000);
+    img.src = src + '?v=2';
+  }))).then(() => {
+    LAYERS_READY = !!(LAYERS.mascot && LAYERS.mascot.naturalWidth);
+    return LAYERS_READY;
+  });
+}
+
+function drawImgCentered(ctx, img, x, y, w) {
+  if (!img || !img.naturalWidth) return 0;
+  const h = w * (img.naturalHeight / img.naturalWidth);
+  ctx.drawImage(img, x - w / 2, y - h / 2, w, h);
+  return h;
+}
+
 // 가사를 화면에 띄울 줄 단위로 정리 ([Intro] 등 섹션태그 제거)
 function parseLyricLines(raw) {
   if (!raw) return [];
@@ -2460,7 +2486,7 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
-// 중앙 장식 — 이미지 없이 캔버스로 직접 그림: 펄스 링 + 그라데이션 오브 + 🎤 + Diss4U 워드마크
+// 중앙 장식 — 펄스 링/그라데이션 오브 위에 PNG 레이어(마스코트/워드마크/배지) 합성
 function drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed) {
   const beat = 1 + bass * 0.22;
   const bob = Math.sin(elapsed * 5) * (3 + bass * 12);
@@ -2478,9 +2504,9 @@ function drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed) {
     ctx.stroke();
   }
 
-  // 2) 메인 오브 — 브랜드 컬러 그라데이션 (white→pink→purple→cyan)
+  // 2) 배경 오브 — 마스코트 뒤에 깔리는 글로우 (white→pink→purple→cyan)
   ctx.save();
-  ctx.shadowColor = 'rgba(255, 64, 175, 0.6)';
+  ctx.shadowColor = 'rgba(255, 64, 175, 0.55)';
   ctx.shadowBlur = 35 + bass * 55;
   const og = ctx.createRadialGradient(cx - r * 0.32, cy + bob - r * 0.32, r * 0.05, cx, cy + bob, r);
   og.addColorStop(0, '#ffffff');
@@ -2491,7 +2517,7 @@ function drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed) {
   ctx.beginPath(); ctx.arc(cx, cy + bob, r, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 
-  // 3) 오브 가장자리 핫핑크 외곽선 — 브랜드 강조
+  // 3) 오브 가장자리 핫핑크 외곽선
   ctx.save();
   ctx.lineWidth = 5;
   ctx.strokeStyle = 'rgba(255, 64, 175, 0.9)';
@@ -2500,33 +2526,44 @@ function drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed) {
   ctx.beginPath(); ctx.arc(cx, cy + bob, r, 0, Math.PI * 2); ctx.stroke();
   ctx.restore();
 
-  // 4) 중앙 마이크 이모지 — 비트 둠칫둠칫
-  ctx.font = (r * 0.95) + 'px sans-serif';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('🎤', cx, cy + bob);
+  // 4) 마스코트(mascot2.png) — 오브 위에 합성, 비트 바운스
+  if (LAYERS.mascot) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(255, 64, 175, 0.55)';
+    ctx.shadowBlur = 22 + bass * 30;
+    drawImgCentered(ctx, LAYERS.mascot, cx, cy + bob, orbR * 1.6 * beat);
+    ctx.restore();
+  } else {
+    // 폴백: 이미지 로드 실패 시 마이크 이모지
+    ctx.font = (r * 0.95) + 'px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('🎤', cx, cy + bob);
+  }
 
-  // 5) 오브 아래 Diss4U 워드마크 — 캔버스 텍스트, 색 분리 (Diss=white / 4=pink / U=cyan)
-  const wy = cy + orbR * 1.45;
-  ctx.font = '900 64px "Black Han Sans", Pretendard, sans-serif';
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = 'left';
-  const dW = ctx.measureText('Diss').width;
-  const fW = ctx.measureText('4').width;
-  const uW = ctx.measureText('U').width;
-  const gap = 4;
-  const totalW = dW + fW + uW + gap * 2;
-  let x = cx - totalW / 2;
-  ctx.save();
-  ctx.shadowColor = 'rgba(0,0,0,0.55)';
-  ctx.shadowBlur = 10;
-  ctx.shadowOffsetY = 3;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('Diss', x, wy); x += dW + gap;
-  ctx.fillStyle = '#ff40af';
-  ctx.fillText('4', x, wy); x += fW + gap;
-  ctx.fillStyle = '#1ad1ff';
-  ctx.fillText('U', x, wy);
-  ctx.restore();
+  // 5) 워드마크(logo1.png) — 오브 아래
+  let belowY = cy + orbR * 1.35;
+  if (LAYERS.wordmark) {
+    const lh = drawImgCentered(ctx, LAYERS.wordmark, cx, belowY, orbR * 2.2);
+    belowY += lh * 0.55 + orbR * 0.1;
+  } else {
+    // 폴백: 캔버스 텍스트로 Diss4U
+    ctx.font = '900 64px "Black Han Sans", Pretendard, sans-serif';
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    const dW = ctx.measureText('Diss').width;
+    const fW = ctx.measureText('4').width;
+    const uW = ctx.measureText('U').width;
+    const gap = 4, totalW = dW + fW + uW + gap * 2;
+    let x = cx - totalW / 2;
+    ctx.fillStyle = '#ffffff'; ctx.fillText('Diss', x, belowY); x += dW + gap;
+    ctx.fillStyle = '#ff40af'; ctx.fillText('4', x, belowY); x += fW + gap;
+    ctx.fillStyle = '#1ad1ff'; ctx.fillText('U', x, belowY);
+    belowY += 50;
+  }
+
+  // 6) 배지(badge2.png) — 워드마크 아래 THIS 4 U
+  if (LAYERS.badge) {
+    drawImgCentered(ctx, LAYERS.badge, cx, belowY + orbR * 0.15, orbR * 1.15);
+  }
 }
 
 function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song) {
@@ -2620,6 +2657,7 @@ async function makeInstaVideo() {
   setVideoStatus('오디오 불러오는 중...', 0);
 
   try { await (document.fonts && document.fonts.ready); } catch (e) {}
+  await loadLayers();
 
   const lines = parseLyricLines(song.lyrics);
 
