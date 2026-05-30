@@ -1399,7 +1399,7 @@ style 필드는 Suno AI에 넘기는 **영어 음악 스타일** 설명이다.
 * 락 → korean rock, distorted electric guitar, energetic drum kit, punchy band sound
 * 동요 → korean kids song, cute simple melody, glockenspiel, playful childlike vocal
 * 로파이 → lofi hiphop, chill beat, mellow piano, vinyl crackle, dreamy
-* 요들송 → alpine yodel, swiss folk, yodeling chorus, accordion, bavarian polka feel, comic yodel vocal flips
+* 요들송 → alpine yodel vocal delivery, swiss folk, accordion, bavarian polka feel, clear sung Korean lyrics on every line, short yodel ad-libs between lines
 * 쌈바 → brazilian samba, surdo drum, pandeiro, fast carnival groove, festive horns
 
 [장르]가 위 매핑에 없으면 그 장르를 가장 잘 표현하는 영어 키워드 3~5개(리듬·악기·창법·멜로디)를 직접 골라 사용해라.
@@ -1416,7 +1416,7 @@ style 필드는 Suno AI에 넘기는 **영어 음악 스타일** 설명이다.
 
 좋은 style 예:
 * [장르]=트로트 → "short 45-second korean trot, accordion, ppongjjak rhythm, retro 80s vibe, bouncy bass, comic vocal bends, no intro, no outro, no bridge, repeated catchy hook, playful comedy lyrics"
-* [장르]=요들송 → "short 45-second alpine yodel, swiss folk, yodeling chorus, accordion, bavarian polka feel, comic yodel vocal flips, no intro, no outro, no bridge, repeated catchy hook, playful comedy lyrics"
+* [장르]=요들송 → "short 45-second alpine yodel vocal delivery, swiss folk, accordion, bavarian polka feel, clear sung Korean lyrics on every line, short yodel ad-libs between lines, no intro, no outro, no bridge, repeated catchy hook, playful comedy lyrics"
 * [장르]=쌈바 → "short 45-second brazilian samba, surdo drum, pandeiro, fast carnival groove, festive horns, no intro, no outro, no bridge, repeated catchy hook, playful comedy lyrics"
 * [장르]=랩 → "short 45-second korean rap, fast aggressive flow, hard 808 beat, minimal melody, pure rap delivery, no intro, no outro, no bridge, repeated catchy hook, playful comedy lyrics"
 
@@ -1428,15 +1428,42 @@ style 필드는 Suno AI에 넘기는 **영어 음악 스타일** 설명이다.
 
 * 힙합/랩 → 짧게 끊어치는 플로우, 라임 가볍게
 * 발라드 → 줄을 부드럽게 흘리는 느낌
-* 트로트 → "얼쑤", "지화자" 같은 추임새 1~2개 허용
+* 트로트 → "얼쑤", "지화자" 같은 추임새 허용
 * 동요 → 짧은 반복, 의성어/의태어 가능
 * 로파이 → 잔잔하고 단조롭게, 한숨 같은 느낌
-* 요들송 → "요들레이히후" 같은 추임새 1줄 허용
-* 쌈바 → 흥겹게 외치는 느낌, "올레" 같은 추임새 가능
+* 요들송 → "요를레이히" 같은 요들 추임새 허용
+* 쌈바 → 흥겹게 외치는 느낌, "올레" 같은 추임새 허용
 * 락 → 짧고 강하게 내지르는 느낌
 * K-pop → 캐치한 멜로딕 라인, 영어 포인트 OK
 
-추임새는 **1줄 이하**로 가볍게 쓰고, 가사 전체 흐름을 망치면 안 된다.
+★★ 추임새 표기 절대 규칙 ★★
+
+추임새("요를레이히", "얼쑤", "지화자", "올레" 등)는 절대 **별도 줄**로 쓰지 마라.
+반드시 본 가사 줄 끝에 **(괄호)** 로 붙여라.
+
+이유: 별도 줄로 쓰면 Suno가 "후렴은 추임새만 부르는 것"으로 잘못 알아듣고
+본 가사를 노래로 안 부른다. (괄호) 표기는 Suno가 백보컬·애드립으로 처리해서
+메인 보컬은 본 가사를 또렷이 부른다.
+
+나쁜 예 (가사가 안 불림):
+[Hook]
+요를레이히
+배 나왔네
+요를레이히
+이 냄새는 뭐니
+
+좋은 예 (가사가 또렷이 불림):
+[Hook]
+배 나왔네 (요를레이히)
+이 냄새는 뭐니 (요를레이히)
+배 나왔네 (요를레이히)
+이 냄새는 뭐니 (요를레이히)
+
+같은 규칙이 트로트("얼쑤"), 쌈바("올레"), 동요(의성어), 모든 장르에 적용된다.
+괄호 안 추임새는 줄당 1개만, 짧게 써라.
+
+Hook의 모든 줄은 반드시 의미 있는 한국어 가사여야 한다.
+추임새만으로 줄을 채우는 것은 절대 금지.
 
 ---
 
