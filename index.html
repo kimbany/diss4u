@@ -720,6 +720,7 @@
           <div class="pill" data-genre="rock">락</div>
           <div class="pill" data-genre="kids">동요</div>
           <div class="pill" data-genre="lofi">로파이</div>
+          <div class="pill" data-genre="yodel">요들송</div>
           <div class="pill" data-genre="random">🎲 랜덤</div>
         </div>
       </div>
@@ -1862,7 +1863,7 @@ const STATE = {
 
 const GENRE_NAMES = {
   hiphop: '힙합', rap: '랩', ballad: '발라드', trot: '트로트',
-  kpop: 'K-pop', rock: '락', kids: '동요', lofi: '로파이', random: '랜덤'
+  kpop: 'K-pop', rock: '락', kids: '동요', lofi: '로파이', yodel: '요들송', random: '랜덤'
 };
 const LANG_NAMES = { ko: '한국어', en: 'English', mix: '한+영' };
 const AVATAR_COLORS = ['c1', 'c2', 'c3', 'c4'];
@@ -1978,7 +1979,7 @@ async function startGeneration() {
 
   let genre = STATE.selectedGenre;
   if (genre === 'random') {
-    const genres = ['hiphop', 'rap', 'ballad', 'trot', 'kpop', 'rock', 'kids', 'lofi'];
+    const genres = ['hiphop', 'rap', 'ballad', 'trot', 'kpop', 'rock', 'kids', 'lofi', 'yodel'];
     genre = genres[Math.floor(Math.random() * genres.length)];
   }
 
@@ -2235,7 +2236,7 @@ function newSong() {
 
 const GENRE_EMOJI = {
   hiphop: '🔥', rap: '🎤', ballad: '💧', trot: '🎙️', kpop: '⭐',
-  rock: '🎸', kids: '🌈', lofi: '☁️'
+  rock: '🎸', kids: '🌈', lofi: '☁️', yodel: '🏔️'
 };
 
 async function loadHistory() {
