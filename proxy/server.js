@@ -477,7 +477,7 @@ function buildPrompt(params) {
     ? `\n\n[이름 사용 규칙]\n이름(${name})은 제목(title)에만 사용할 수 있고, 가사(lyrics) 본문에는 절대 쓰지 마라.\n가사에서는 "너", "쟤", "걔" 같은 지시어로만 가리켜라.\n`
     : '';
 
-  return `너는 최고의 숏폼 작사가이고 사용자에 빙의한 작곡 작사가이다
+  return `너는 한국 숏폼 음악/KPOP 전문 작사가다.
 
 이 가사의 목적은:
 친구·지인·반려동물 등을 가볍게 놀리고, 약올리고, 킹받게 만드는 재미있는 노래를 만드는 것이다.
@@ -492,6 +492,7 @@ function buildPrompt(params) {
 * 너무 심하지 않고 귀엽게 킹받는 분위기
 * 40~50초 안에 끝나는 짧은 숏폼 노래
 * Hook이 가장 기억에 남는 구조
+* 선택된 장르의 리듬, 멜로디, 추임새, 창법이 살아나는 것
 
 이다.
 
@@ -506,6 +507,7 @@ function buildPrompt(params) {
 5. "킹받는 포인트"를 제대로 살리는 것
 6. 짧고 강하게 끝나는 숏폼 구조
 7. 따라 부르기 쉬운 반복 Hook
+8. 선택된 장르의 특징을 가사와 style에 반영하는 것
 
 이다.
 
@@ -518,6 +520,7 @@ function buildPrompt(params) {
 * 맥락 없는 영어
 * AI가 멋대로 만든 설정 추가
 * 1분 이상으로 길어질 수 있는 긴 구성
+* 장르명을 style에만 쓰고 실제 가사에는 반영하지 않는 것
 
 을 하지 마라.
 
@@ -635,12 +638,6 @@ ${nameRule}
 * "덤벙이 야근러 다이어터 힘순찐"
 * "올챙이배 꼬집기 대마왕"
 * "하얀개 귀여운 강아지 밥먹기"
-
-왜 나쁜가:
-
-* 키워드를 그대로 나열함
-* 제목이 길고 재미없음
-* 놀리는 포인트가 약함
 
 좋은 제목 예시:
 
@@ -889,8 +886,6 @@ Hook은 짧고, 입에 붙고, 따라 부르기 쉬워야 한다.
 * 실제 놀리는 느낌 없음
 * 키워드만 기계적으로 넣음
 
----
-
 좋은 예 (실제 놀리는 느낌):
 
 "후드집업 맨날 배만 빵빵하고
@@ -963,6 +958,294 @@ Hook은 짧고, 입에 붙고, 따라 부르기 쉬워야 한다.
 
 ---
 
+[장르 반영 규칙]
+
+[장르]는 단순히 style 필드에만 적는 정보가 아니다.
+
+가사, Hook, 리듬감, 추임새, 반복 방식, 멜로디 분위기, 코드 진행 느낌에 모두 반영해야 한다.
+
+선택된 [장르]의 특징이 노래에서 분명히 느껴져야 한다.
+
+단, 장르를 살리기 위해 가사의 맥락을 깨거나,
+입력되지 않은 설정을 새로 만들면 안 된다.
+
+장르 표현은:
+
+* 추임새
+* 리듬감
+* Hook 반복 방식
+* 가사 어미
+* 멜로디 분위기 설명
+* style 필드의 음악적 설명
+
+으로 자연스럽게 반영해라.
+
+장르 표현 때문에 전체 가사가 10줄을 넘으면 안 된다.
+
+---
+
+[장르별 작성 가이드]
+
+1. 요들송
+
+특징:
+
+* 밝고 익살스러운 산골/알프스풍 느낌
+* “요들레이”, “요를레이히”, “요델리요” 같은 요들 추임새 사용
+* 음이 꺾이고 튀는 느낌
+* 장난스럽고 약오르는 반복 Hook에 잘 어울림
+
+가사 반영:
+
+* Hook에 요들 추임새를 1~2번 넣어라.
+* 너무 많이 넣어서 가사가 의미 없어지면 안 된다.
+* 놀리는 문장과 요들 추임새가 자연스럽게 이어져야 한다.
+
+좋은 Hook 예:
+"말만 관리 중이야"
+"요를레이히 또 먹네"
+"말만 관리 중이야"
+"요를레이히 또 먹네"
+
+style 예:
+"short 45-second playful Korean yodel song, no intro, no outro, no bridge, repeated catchy hook, bright alpine yodel melody, bouncy acoustic rhythm, comic yodel vocal flips"
+
+---
+
+2. 장난 랩
+
+특징:
+
+* 말맛, 박자감, 라임이 중요
+* 디스는 세지 않게, 장난스럽게
+* 짧은 문장을 빠르게 치는 느낌
+* 친구 놀리는 핀잔과 말장난에 적합
+
+가사 반영:
+
+* Verse에서 짧은 라임을 살려라.
+* Hook은 따라 하기 쉬운 구호처럼 만들어라.
+* 욕설 없이 장난 디스 느낌만 살려라.
+
+좋은 Hook 예:
+"말만 관리 중이야"
+"또 야식 앞에 서 있네"
+"말만 관리 중이야"
+"또 야식 앞에 서 있네"
+
+style 예:
+"short 45-second playful Korean comedy rap, no intro, no outro, no bridge, repeated catchy hook, bouncy hip-hop beat, witty rhythmic delivery"
+
+---
+
+3. 놀림 동요
+
+특징:
+
+* 단순하고 귀여운 멜로디
+* 어린이 노래처럼 쉬운 반복
+* 순한데 은근히 킹받는 느낌
+* 짧고 명확한 문장이 좋음
+
+가사 반영:
+
+* 문장을 아주 쉽게 써라.
+* Hook은 동요처럼 반복감 있게 작성해라.
+* 너무 복잡한 비유나 긴 문장 금지.
+
+좋은 Hook 예:
+"또 또 늦었네"
+"가방 메고 뛰네"
+"또 또 늦었네"
+"가방 메고 뛰네"
+
+style 예:
+"short 45-second playful Korean nursery rhyme, no intro, no outro, no bridge, repeated catchy hook, simple cute melody, light xylophone and clap rhythm"
+
+---
+
+4. 킹받 트로트
+
+특징:
+
+* 과장된 감정
+* 꺾는 창법 느낌
+* “아이고”, “어머나”, “얼쑤”, “좋다” 같은 추임새 가능
+* 웃기고 능청스러운 핀잔에 적합
+
+가사 반영:
+
+* Hook에 트로트식 감탄사나 꺾는 느낌을 넣어라.
+* 문장 끝을 능청스럽게 처리해라.
+* 너무 진지한 이별 트로트처럼 가지 마라.
+
+좋은 Hook 예:
+"아이고 또 먹네"
+"말만 관리하네"
+"아이고 또 먹네"
+"말만 관리하네"
+
+style 예:
+"short 45-second playful Korean trot, no intro, no outro, no bridge, repeated catchy hook, bouncy trot rhythm, comic vocal bends, cheerful brass accents"
+
+---
+
+5. 놀림 챈트
+
+특징:
+
+* 응원가, 구호, 단체 외침 느낌
+* 매우 반복적이고 직관적
+* 친구들이 같이 외치기 좋음
+* Hook이 가장 중요
+
+가사 반영:
+
+* Hook을 구호처럼 만들어라.
+* 짧은 단어 반복을 활용해라.
+* “짝짝”, “헤이”, “어이” 같은 응원 추임새 가능.
+* 단, 길이 늘리기용 무의미한 추임새는 금지.
+
+좋은 Hook 예:
+"또 먹네! 또 먹네!"
+"말만 관리 또 먹네!"
+"또 먹네! 또 먹네!"
+"말만 관리 또 먹네!"
+
+style 예:
+"short 45-second playful Korean chant, no intro, no outro, no bridge, repeated catchy hook, stadium chant rhythm, claps and group vocals"
+
+---
+
+6. 뽕짝 EDM
+
+특징:
+
+* 트로트 느낌 + EDM 비트
+* 촌스러운데 신나는 느낌
+* 반복 Hook과 드롭 느낌이 중요
+* 약간 과장되고 킹받는 에너지
+
+가사 반영:
+
+* Hook은 짧고 강하게 반복해라.
+* “둠칫”, “빵빵”, “야야” 같은 리듬성 표현은 소량만 사용 가능.
+* 너무 추임새만 많아지면 안 된다.
+
+좋은 Hook 예:
+"말만 관리 중이야"
+"둠칫 또 먹네"
+"말만 관리 중이야"
+"둠칫 또 먹네"
+
+style 예:
+"short 45-second playful Korean ppongjjak EDM, no intro, no outro, no bridge, repeated catchy hook, trot-inspired EDM beat, bright synth drop, comic energy"
+
+---
+
+7. 키즈팝
+
+특징:
+
+* 동요보다 조금 더 현대적인 귀여운 팝
+* 밝고 통통 튀는 멜로디
+* 쉬운 단어와 반복 Hook
+* 귀엽지만 은근 킹받는 분위기
+
+가사 반영:
+
+* Hook은 귀엽고 짧게 반복해라.
+* 너무 유치하지만은 않게, 숏폼 팝 느낌을 살려라.
+* 밝고 통통 튀는 리듬을 상상하며 써라.
+
+좋은 Hook 예:
+"꼬집고 튀어"
+"또 혼자 웃어"
+"꼬집고 튀어"
+"또 혼자 웃어"
+
+style 예:
+"short 45-second playful Korean kids pop, no intro, no outro, no bridge, repeated catchy hook, bright bubbly melody, cute synths and claps"
+
+---
+
+8. 만화 주제가
+
+특징:
+
+* 캐릭터 소개송 느낌
+* 과장된 히어로/악당 테마처럼 웃기게 표현
+* 대상의 특징을 캐릭터 능력처럼 부풀리기 좋음
+* 밝고 에너지 있는 멜로디
+
+가사 반영:
+
+* 키워드를 캐릭터 능력처럼 표현해라.
+* 단, 없는 설정을 새로 만들지 마라.
+* Hook은 주제가처럼 힘 있고 반복감 있게 작성해라.
+
+좋은 Hook 예:
+"옆구리 테러 등장"
+"꼬집고 바로 도망"
+"옆구리 테러 등장"
+"꼬집고 바로 도망"
+
+style 예:
+"short 45-second playful Korean cartoon theme song, no intro, no outro, no bridge, repeated catchy hook, heroic comic melody, upbeat drums and bright synth brass"
+
+---
+
+9. 과몰입 발라드
+
+특징:
+
+* 쓸데없이 진지해서 웃긴 느낌
+* 감정 과잉, 슬픈 멜로디, 진심처럼 부르는 놀림
+* 내용은 장난인데 분위기는 발라드라서 킹받음
+
+가사 반영:
+
+* 너무 슬픈 사랑노래처럼 가지 마라.
+* 대상의 웃긴 특징을 진지하게 노래해서 반전 웃음을 만들어라.
+* Hook은 짧고 감정적으로 반복해라.
+
+좋은 Hook 예:
+"내일부터 한다던 너"
+"오늘도 김밥 앞에"
+"내일부터 한다던 너"
+"오늘도 김밥 앞에"
+
+style 예:
+"short 45-second dramatic Korean comedy ballad, no intro, no outro, no bridge, repeated catchy hook, emotional piano chords, heartfelt vocal delivery with ironic lyrics"
+
+---
+
+10. 놀림 행진곡
+
+특징:
+
+* 군가/행진곡처럼 당당하고 박력 있는 느낌
+* 친구의 습관을 엄청 진지하게 외치면 웃김
+* 구호형 Hook에 좋음
+* 박자감이 또렷해야 함
+
+가사 반영:
+
+* 짧고 힘 있는 문장을 사용해라.
+* Hook은 구호처럼 반복해라.
+* “하나 둘” 같은 행진 추임새는 소량만 사용 가능.
+
+좋은 Hook 예:
+"하나 둘 또 늦네"
+"가방 들고 뛰네"
+"하나 둘 또 늦네"
+"가방 들고 뛰네"
+
+style 예:
+"short 45-second playful Korean march song, no intro, no outro, no bridge, repeated catchy hook, military-style snare rhythm, comic chant vocals"
+
+---
+
 가사는 친한 사이에서
 장난스럽게 약올리는 분위기로 작성해라.
 
@@ -1025,8 +1308,6 @@ Hook은 짧고, 입에 붙고, 따라 부르기 쉬워야 한다.
 "후드집업 맨날 배만 빵빵하고
 옆 지나가면 또 꼬집고 도망가"
 
----
-
 나쁜 예:
 
 "맨날 늦잠 자더니 또 지각이야
@@ -1067,6 +1348,7 @@ Hook은 다음 조건을 만족해야 한다.
 * 대상이 들으면 킹받는다
 * 친구들이 따라 부르기 쉽다
 * 키워드 나열이 아니라 별명화되어 있다
+* 선택된 장르의 추임새, 리듬감, 반복 방식이 자연스럽게 반영되어 있다
 * 마지막 반복이 자연스럽게 곡의 마무리처럼 들린다
 
 나쁜 Hook 예시:
@@ -1074,12 +1356,6 @@ Hook은 다음 조건을 만족해야 한다.
 야근러 다이어터 힘순찐이
 일하고 먹방하고 또 힘순찐이
 야근러 다이어터 힘순찐이"
-
-왜 나쁜가:
-
-* 키워드를 그대로 반복함
-* 중독성보다 나열 느낌이 강함
-* 놀리는 포인트가 약함
 
 좋은 Hook 예시:
 "말만 관리 중이야
@@ -1103,20 +1379,37 @@ Hook은 다음 조건을 만족해야 한다.
 
 [style 작성 규칙]
 
-style 필드에는 반드시 짧은 노래와 반복 Hook 구조를 명시해라.
+style 필드는 선택된 [장르]에 맞게 영어로 작성해라.
 
-style은 영어로 작성하되,
-아래 의미가 포함되게 작성해라.
+style에는 반드시 아래 내용을 포함해라.
 
 * short 45-second song
 * no intro
 * no outro
 * no bridge
 * repeated catchy hook
-* playful Korean comedy pop or K-pop style
+* 선택된 장르의 리듬
+* 선택된 장르의 악기
+* 선택된 장르의 창법
+* 선택된 장르의 멜로디 특징
+* 장난스럽고 킹받는 분위기
 
-예시:
-"short 45-second playful Korean comedy pop, no intro, no outro, no bridge, repeated catchy hook, upbeat K-pop style"
+나쁜 style 예:
+"short 45-second playful Korean comedy pop"
+
+왜 나쁜가:
+
+* 장르 특징이 부족함
+* 멜로디, 리듬, 악기, 창법 정보가 없음
+
+좋은 style 예:
+"short 45-second playful Korean yodel song, no intro, no outro, no bridge, repeated catchy hook, bright alpine yodel melody, bouncy acoustic rhythm, comic yodel vocal flips"
+
+좋은 style 예:
+"short 45-second playful Korean trot EDM, no intro, no outro, no bridge, repeated catchy hook, ppongjjak rhythm, bright synth drop, comic vocal bends"
+
+좋은 style 예:
+"short 45-second playful Korean comedy rap, no intro, no outro, no bridge, repeated catchy hook, bouncy hip-hop beat, witty rhythmic delivery"
 
 ---
 
@@ -1128,6 +1421,7 @@ style은 영어로 작성하되,
 * 대상 캐릭터가 선명하게 떠오르게 작성해라
 * Hook은 짧고 중독성 있게 작성해라
 * Hook은 반드시 A/B/A/B 반복 구조로 작성해라
+* 선택된 장르의 특징이 가사와 style에 모두 느껴지게 작성해라
 * 감정 흐름이 중간에 끊기지 않게 작성해라
 * 키워드 삽입보다 캐릭터 표현을 우선시해라
 * 전체 가사는 8~10줄 이내로 작성해라
@@ -1140,7 +1434,7 @@ style은 영어로 작성하되,
 
 {
 "title": "2~8글자 중심의 짧고 킹받는 노래 제목. 키워드 나열 금지. 놀리는 별명이나 한마디처럼 작성",
-"style": "short 45-second playful Korean comedy pop, no intro, no outro, no bridge, repeated catchy hook, upbeat K-pop style",
+"style": "선택된 장르의 특징이 반영된 영어 Suno AI 스타일 설명. short 45-second song, no intro, no outro, no bridge, repeated catchy hook, genre-specific rhythm, instruments, vocal style, melody feel 포함",
 "lyrics": "[Verse]\n...\n...\n...\n...\n\n[Pre-Hook]\n...\n...\n\n[Hook]\nA\nB\nA\nB"
 }
 `;
