@@ -1060,20 +1060,59 @@ Hook은 반드시 4줄 이내로 끝내라.
 
 [style 작성 규칙]
 
-style 필드에는 반드시 짧은 노래임을 명시해라.
+style 필드는 Suno AI에 넘기는 **영어 음악 스타일** 설명이다.
+반드시 아래 (1) + (2)를 모두 포함해서 작성하라.
 
-style은 영어로 작성하되,
-아래 의미가 포함되게 작성해라.
-
+(1) 공통 필수 키워드 — 어떤 장르든 항상 포함
 * short 45-second song
-* no intro
-* no outro
-* no bridge
+* no intro, no outro, no bridge
 * catchy hook
-* playful Korean comedy pop or K-pop style
+* playful comedy lyrics
+
+(2) [장르]에 해당하는 음악 스타일 키워드 — 아래 매핑에서 [장르]에 맞는 줄 하나만 골라 그대로 사용
+
+* 힙합 → korean hiphop, boom bap, punchy 808, hip hop hook, rhythmic flow
+* 랩 → korean rap, fast aggressive flow, hard 808 beat, minimal melody, pure rap delivery
+* 발라드 → korean ballad, slow tempo, piano, soft emotional vocal, mellow strings
+* 트로트 → korean trot, accordion, ppongjjak rhythm, retro 80s vibe, bouncy bass
+* K-pop → upbeat korean pop, bright synth, catchy melodic hook, polished kpop production
+* 락 → korean rock, distorted electric guitar, energetic drum kit, punchy band sound
+* 동요 → korean kids song, cute simple melody, glockenspiel, playful childlike vocal
+* 로파이 → lofi hiphop, chill beat, mellow piano, vinyl crackle, dreamy
+* 요들송 → alpine yodel, swiss folk, yodeling chorus, accordion, bavarian polka feel
+* 쌈바 → brazilian samba, surdo drum, pandeiro, fast carnival groove, festive horns
+
+[장르]가 위 매핑에 없으면 그 장르를 가장 잘 표현하는 영어 키워드 3~5개를 직접 골라 사용해라.
+
+규칙:
+* [장르]와 무관한 키워드를 절대 섞지 마라.
+  예) [장르]=트로트인데 "kpop synth" 넣지 마라.
+  예) [장르]=요들송인데 "808 beat" 넣지 마라.
+* (1) 공통 키워드와 (2) 장르 키워드를 자연스럽게 한 문장으로 이어 써라.
 
 예시:
-"short 45-second playful Korean comedy pop, no intro, no outro, no bridge, catchy hook, upbeat K-pop style"
+* [장르]=트로트 → "short 45-second korean trot, accordion, ppongjjak rhythm, retro 80s vibe, bouncy bass, no intro, no outro, no bridge, catchy hook, playful comedy lyrics"
+* [장르]=요들송 → "short 45-second alpine yodel, swiss folk, yodeling chorus, accordion, bavarian polka feel, no intro, no outro, no bridge, catchy hook, playful comedy lyrics"
+* [장르]=쌈바 → "short 45-second brazilian samba, surdo drum, pandeiro, fast carnival groove, festive horns, no intro, no outro, no bridge, catchy hook, playful comedy lyrics"
+* [장르]=랩 → "short 45-second korean rap, fast aggressive flow, hard 808 beat, minimal melody, pure rap delivery, no intro, no outro, no bridge, catchy hook, playful comedy lyrics"
+
+---
+
+[가사 톤 — 장르별 참고]
+
+가사 내용·놀림 포인트는 똑같이 살리되, 장르에 따라 줄의 호흡과 추임새를 살짝 맞춰라.
+
+* 힙합/랩 → 짧게 끊어치는 플로우, 라임 가볍게
+* 발라드 → 줄을 부드럽게 흘리는 느낌
+* 트로트 → "얼쑤", "지화자" 같은 추임새 1~2개 허용
+* 동요 → 짧은 반복, 의성어/의태어 가능
+* 로파이 → 잔잔하고 단조롭게, 한숨 같은 느낌
+* 요들송 → "요들레이히후" 같은 추임새 1줄 허용
+* 쌈바 → 흥겹게 외치는 느낌, "올레" 같은 추임새 가능
+* 락 → 짧고 강하게 내지르는 느낌
+* K-pop → 캐치한 멜로딕 라인, 영어 포인트 OK
+
+추임새는 **1줄 이하**로 가볍게 쓰고, 가사 전체 흐름을 망치면 안 된다.
 
 ---
 
@@ -1096,7 +1135,7 @@ style은 영어로 작성하되,
 
 {
 "title": "2~8글자 중심의 짧고 킹받는 노래 제목. 키워드 나열 금지. 놀리는 별명이나 한마디처럼 작성",
-"style": "short 45-second playful Korean comedy pop, no intro, no outro, no bridge, catchy hook, upbeat K-pop style",
+"style": "short 45-second + (위 [style 작성 규칙]의 [장르] 매핑 키워드) + no intro, no outro, no bridge, catchy hook, playful comedy lyrics",
 "lyrics": "[Verse]\n...\n...\n...\n...\n\n[Pre-Hook]\n...\n...\n\n[Hook]\n...\n...\n...\n..."
 }
 `;
