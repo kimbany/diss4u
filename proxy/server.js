@@ -491,6 +491,8 @@ function buildPrompt(params) {
 * 자연스럽게 이어지는 상황극
 * 너무 심하지 않고 귀엽게 킹받는 분위기
 * 40~50초 안에 끝나는 짧은 숏폼 노래
+* Hook이 가장 기억에 남는 구조
+* 선택된 장르의 리듬, 멜로디, 추임새, 창법이 살아나는 것
 
 이다.
 
@@ -504,6 +506,8 @@ function buildPrompt(params) {
 4. 실제 친구를 놀리는 현실감
 5. "킹받는 포인트"를 제대로 살리는 것
 6. 짧고 강하게 끝나는 숏폼 구조
+7. 따라 부르기 쉬운 반복 Hook
+8. 선택된 장르의 특징을 가사와 style에 반영하는 것
 
 이다.
 
@@ -516,6 +520,7 @@ function buildPrompt(params) {
 * 맥락 없는 영어
 * AI가 멋대로 만든 설정 추가
 * 1분 이상으로 길어질 수 있는 긴 구성
+* 장르명을 style에만 쓰고 실제 가사에는 반영하지 않는 것
 
 을 하지 마라.
 
@@ -634,12 +639,6 @@ ${nameRule}
 * "올챙이배 꼬집기 대마왕"
 * "하얀개 귀여운 강아지 밥먹기"
 
-왜 나쁜가:
-
-* 키워드를 그대로 나열함
-* 제목이 길고 재미없음
-* 놀리는 포인트가 약함
-
 좋은 제목 예시:
 
 * "또 먹네"
@@ -680,7 +679,7 @@ ${nameRule}
 각 파트의 줄 수는 반드시 아래 제한을 지켜라.
 
 [Verse]
-4~6줄만 작성한다.
+4줄만 작성한다.
 대상의 특징과 상황을 바로 보여준다.
 처음부터 바로 놀림 포인트가 드러나야 한다.
 키워드를 단순히 넣지 말고,
@@ -693,26 +692,33 @@ Hook으로 넘어가기 전에 놀림 포인트를 한 번 더 몰아간다.
 
 [Hook]
 4줄만 작성한다.
-가장 킹받는 별명이나 문장을 짧고 중독성 있게 반복한다.
-키워드를 그대로 반복하지 말고,
-놀리는 별명, 반복되는 행동, 친구들이 맨날 하는 놀림 말투로 변형해라.
+Hook은 이 노래에서 가장 중요한 파트다.
+가장 킹받고 중독성 있는 핵심 문장 2줄을 만들고,
+그 2줄을 한 번 더 반복해서 총 4줄로 작성해라.
 
-전체 가사는 최대 12줄을 넘지 마라.
+즉 Hook 구조는 반드시 아래처럼 작성해라.
+
+1줄: 핵심 Hook 문장 A
+2줄: 핵심 Hook 문장 B
+3줄: 핵심 Hook 문장 A 반복
+4줄: 핵심 Hook 문장 B 반복
+
+Hook은 짧고, 입에 붙고, 따라 부르기 쉬워야 한다.
+대상이 들으면 바로 기억에 남고 약오르는 느낌이어야 한다.
+
+전체 가사는 최대 10줄을 넘지 마라.
 
 각 줄은 짧게 작성해라.
-한 줄은 12~18자 정도의 짧은 한국어 문장으로 작성하는 것을 우선한다.
+한 줄은 10~16자 정도의 짧은 한국어 문장으로 작성하는 것을 우선한다.
 
 너무 긴 문장, 설명이 많은 문장, 랩처럼 길게 늘어지는 문장은 금지한다.
 
-Hook은 반복해도 되지만, 같은 문장을 과하게 반복하지 마라.
-Hook은 반드시 4줄 안에서 끝내라.
-
 전체 흐름은:
-상황 제시 → 놀림 강화 → 짧고 중독성 있는 Hook
+상황 제시 → 놀림 강화 → 2줄 Hook 반복
 
 으로 끝나야 한다.
 
-마지막 Hook의 마지막 줄이 자연스러운 마무리 역할을 해야 한다.
+마지막 Hook의 반복이 자연스러운 마무리 역할을 해야 한다.
 
 ---
 
@@ -720,14 +726,17 @@ Hook은 반드시 4줄 안에서 끝내라.
 
 40~50초 노래를 위해 다음을 반드시 지켜라.
 
-* 전체 10~12줄 이내
+* 전체 8~10줄 이내
+* Verse 4줄
+* Pre-Hook 2줄
+* Hook 4줄
 * Intro 금지
 * Outro 금지
 * Bridge 금지
 * 2절 금지
 * 긴 설명 금지
 * 긴 문장 금지
-* 같은 Hook 과도한 반복 금지
+* Hook 외의 반복 금지
 * 의미 없는 추임새로 길이 늘리기 금지
 
 가사는 짧고 강하게 작성해라.
@@ -877,8 +886,6 @@ Hook은 반드시 4줄 안에서 끝내라.
 * 실제 놀리는 느낌 없음
 * 키워드만 기계적으로 넣음
 
----
-
 좋은 예 (실제 놀리는 느낌):
 
 "후드집업 맨날 배만 빵빵하고
@@ -922,7 +929,7 @@ Hook은 반드시 4줄 안에서 끝내라.
 * 문장을 절대 수정하지 마라
 * 문장을 자연스럽게 가사 흐름 안에 삽입해라
 * 앞뒤 문장과 연결되게 작성해라
-* 전체 12줄 제한 안에서 자연스럽게 포함해라
+* 전체 10줄 제한 안에서 자연스럽게 포함해라
 
 "(없음)"이면 무시해라.
 
@@ -948,6 +955,294 @@ Hook은 반드시 4줄 안에서 끝내라.
 자연스럽게 섞어라.
 
 맥락 없는 영어 문장 절대 금지.
+
+---
+
+[장르 반영 규칙]
+
+[장르]는 단순히 style 필드에만 적는 정보가 아니다.
+
+가사, Hook, 리듬감, 추임새, 반복 방식, 멜로디 분위기, 코드 진행 느낌에 모두 반영해야 한다.
+
+선택된 [장르]의 특징이 노래에서 분명히 느껴져야 한다.
+
+단, 장르를 살리기 위해 가사의 맥락을 깨거나,
+입력되지 않은 설정을 새로 만들면 안 된다.
+
+장르 표현은:
+
+* 추임새
+* 리듬감
+* Hook 반복 방식
+* 가사 어미
+* 멜로디 분위기 설명
+* style 필드의 음악적 설명
+
+으로 자연스럽게 반영해라.
+
+장르 표현 때문에 전체 가사가 10줄을 넘으면 안 된다.
+
+---
+
+[장르별 작성 가이드]
+
+1. 요들송
+
+특징:
+
+* 밝고 익살스러운 산골/알프스풍 느낌
+* “요들레이”, “요를레이히”, “요델리요” 같은 요들 추임새 사용
+* 음이 꺾이고 튀는 느낌
+* 장난스럽고 약오르는 반복 Hook에 잘 어울림
+
+가사 반영:
+
+* Hook에 요들 추임새를 1~2번 넣어라.
+* 너무 많이 넣어서 가사가 의미 없어지면 안 된다.
+* 놀리는 문장과 요들 추임새가 자연스럽게 이어져야 한다.
+
+좋은 Hook 예:
+"말만 관리 중이야"
+"요를레이히 또 먹네"
+"말만 관리 중이야"
+"요를레이히 또 먹네"
+
+style 예:
+"short 45-second playful Korean yodel song, no intro, no outro, no bridge, repeated catchy hook, bright alpine yodel melody, bouncy acoustic rhythm, comic yodel vocal flips"
+
+---
+
+2. 장난 랩
+
+특징:
+
+* 말맛, 박자감, 라임이 중요
+* 디스는 세지 않게, 장난스럽게
+* 짧은 문장을 빠르게 치는 느낌
+* 친구 놀리는 핀잔과 말장난에 적합
+
+가사 반영:
+
+* Verse에서 짧은 라임을 살려라.
+* Hook은 따라 하기 쉬운 구호처럼 만들어라.
+* 욕설 없이 장난 디스 느낌만 살려라.
+
+좋은 Hook 예:
+"말만 관리 중이야"
+"또 야식 앞에 서 있네"
+"말만 관리 중이야"
+"또 야식 앞에 서 있네"
+
+style 예:
+"short 45-second playful Korean comedy rap, no intro, no outro, no bridge, repeated catchy hook, bouncy hip-hop beat, witty rhythmic delivery"
+
+---
+
+3. 놀림 동요
+
+특징:
+
+* 단순하고 귀여운 멜로디
+* 어린이 노래처럼 쉬운 반복
+* 순한데 은근히 킹받는 느낌
+* 짧고 명확한 문장이 좋음
+
+가사 반영:
+
+* 문장을 아주 쉽게 써라.
+* Hook은 동요처럼 반복감 있게 작성해라.
+* 너무 복잡한 비유나 긴 문장 금지.
+
+좋은 Hook 예:
+"또 또 늦었네"
+"가방 메고 뛰네"
+"또 또 늦었네"
+"가방 메고 뛰네"
+
+style 예:
+"short 45-second playful Korean nursery rhyme, no intro, no outro, no bridge, repeated catchy hook, simple cute melody, light xylophone and clap rhythm"
+
+---
+
+4. 킹받 트로트
+
+특징:
+
+* 과장된 감정
+* 꺾는 창법 느낌
+* “아이고”, “어머나”, “얼쑤”, “좋다” 같은 추임새 가능
+* 웃기고 능청스러운 핀잔에 적합
+
+가사 반영:
+
+* Hook에 트로트식 감탄사나 꺾는 느낌을 넣어라.
+* 문장 끝을 능청스럽게 처리해라.
+* 너무 진지한 이별 트로트처럼 가지 마라.
+
+좋은 Hook 예:
+"아이고 또 먹네"
+"말만 관리하네"
+"아이고 또 먹네"
+"말만 관리하네"
+
+style 예:
+"short 45-second playful Korean trot, no intro, no outro, no bridge, repeated catchy hook, bouncy trot rhythm, comic vocal bends, cheerful brass accents"
+
+---
+
+5. 놀림 챈트
+
+특징:
+
+* 응원가, 구호, 단체 외침 느낌
+* 매우 반복적이고 직관적
+* 친구들이 같이 외치기 좋음
+* Hook이 가장 중요
+
+가사 반영:
+
+* Hook을 구호처럼 만들어라.
+* 짧은 단어 반복을 활용해라.
+* “짝짝”, “헤이”, “어이” 같은 응원 추임새 가능.
+* 단, 길이 늘리기용 무의미한 추임새는 금지.
+
+좋은 Hook 예:
+"또 먹네! 또 먹네!"
+"말만 관리 또 먹네!"
+"또 먹네! 또 먹네!"
+"말만 관리 또 먹네!"
+
+style 예:
+"short 45-second playful Korean chant, no intro, no outro, no bridge, repeated catchy hook, stadium chant rhythm, claps and group vocals"
+
+---
+
+6. 뽕짝 EDM
+
+특징:
+
+* 트로트 느낌 + EDM 비트
+* 촌스러운데 신나는 느낌
+* 반복 Hook과 드롭 느낌이 중요
+* 약간 과장되고 킹받는 에너지
+
+가사 반영:
+
+* Hook은 짧고 강하게 반복해라.
+* “둠칫”, “빵빵”, “야야” 같은 리듬성 표현은 소량만 사용 가능.
+* 너무 추임새만 많아지면 안 된다.
+
+좋은 Hook 예:
+"말만 관리 중이야"
+"둠칫 또 먹네"
+"말만 관리 중이야"
+"둠칫 또 먹네"
+
+style 예:
+"short 45-second playful Korean ppongjjak EDM, no intro, no outro, no bridge, repeated catchy hook, trot-inspired EDM beat, bright synth drop, comic energy"
+
+---
+
+7. 키즈팝
+
+특징:
+
+* 동요보다 조금 더 현대적인 귀여운 팝
+* 밝고 통통 튀는 멜로디
+* 쉬운 단어와 반복 Hook
+* 귀엽지만 은근 킹받는 분위기
+
+가사 반영:
+
+* Hook은 귀엽고 짧게 반복해라.
+* 너무 유치하지만은 않게, 숏폼 팝 느낌을 살려라.
+* 밝고 통통 튀는 리듬을 상상하며 써라.
+
+좋은 Hook 예:
+"꼬집고 튀어"
+"또 혼자 웃어"
+"꼬집고 튀어"
+"또 혼자 웃어"
+
+style 예:
+"short 45-second playful Korean kids pop, no intro, no outro, no bridge, repeated catchy hook, bright bubbly melody, cute synths and claps"
+
+---
+
+8. 만화 주제가
+
+특징:
+
+* 캐릭터 소개송 느낌
+* 과장된 히어로/악당 테마처럼 웃기게 표현
+* 대상의 특징을 캐릭터 능력처럼 부풀리기 좋음
+* 밝고 에너지 있는 멜로디
+
+가사 반영:
+
+* 키워드를 캐릭터 능력처럼 표현해라.
+* 단, 없는 설정을 새로 만들지 마라.
+* Hook은 주제가처럼 힘 있고 반복감 있게 작성해라.
+
+좋은 Hook 예:
+"옆구리 테러 등장"
+"꼬집고 바로 도망"
+"옆구리 테러 등장"
+"꼬집고 바로 도망"
+
+style 예:
+"short 45-second playful Korean cartoon theme song, no intro, no outro, no bridge, repeated catchy hook, heroic comic melody, upbeat drums and bright synth brass"
+
+---
+
+9. 과몰입 발라드
+
+특징:
+
+* 쓸데없이 진지해서 웃긴 느낌
+* 감정 과잉, 슬픈 멜로디, 진심처럼 부르는 놀림
+* 내용은 장난인데 분위기는 발라드라서 킹받음
+
+가사 반영:
+
+* 너무 슬픈 사랑노래처럼 가지 마라.
+* 대상의 웃긴 특징을 진지하게 노래해서 반전 웃음을 만들어라.
+* Hook은 짧고 감정적으로 반복해라.
+
+좋은 Hook 예:
+"내일부터 한다던 너"
+"오늘도 김밥 앞에"
+"내일부터 한다던 너"
+"오늘도 김밥 앞에"
+
+style 예:
+"short 45-second dramatic Korean comedy ballad, no intro, no outro, no bridge, repeated catchy hook, emotional piano chords, heartfelt vocal delivery with ironic lyrics"
+
+---
+
+10. 놀림 행진곡
+
+특징:
+
+* 군가/행진곡처럼 당당하고 박력 있는 느낌
+* 친구의 습관을 엄청 진지하게 외치면 웃김
+* 구호형 Hook에 좋음
+* 박자감이 또렷해야 함
+
+가사 반영:
+
+* 짧고 힘 있는 문장을 사용해라.
+* Hook은 구호처럼 반복해라.
+* “하나 둘” 같은 행진 추임새는 소량만 사용 가능.
+
+좋은 Hook 예:
+"하나 둘 또 늦네"
+"가방 들고 뛰네"
+"하나 둘 또 늦네"
+"가방 들고 뛰네"
+
+style 예:
+"short 45-second playful Korean march song, no intro, no outro, no bridge, repeated catchy hook, military-style snare rhythm, comic chant vocals"
 
 ---
 
@@ -1013,8 +1308,6 @@ Hook은 반드시 4줄 안에서 끝내라.
 "후드집업 맨날 배만 빵빵하고
 옆 지나가면 또 꼬집고 도망가"
 
----
-
 나쁜 예:
 
 "맨날 늦잠 자더니 또 지각이야
@@ -1027,22 +1320,36 @@ Moonlight dancing in my galaxy fire"
 
 [Hook 작성 규칙]
 
-Hook에서도 키워드를 단순 반복하지 마라.
+Hook은 노래에서 가장 강조되어야 하는 파트다.
 
-대신:
+Hook은 단순히 키워드를 반복하는 것이 아니라,
+대상을 놀리는 가장 킹받는 별명, 행동, 말투를
+짧고 중독성 있는 2줄로 압축해야 한다.
 
-* 놀리는 별명
-* 반복되는 행동
-* 친구들이 맨날 하는 놀림 말투
-* 대상이 들으면 킹받을 한마디
+Hook은 반드시 2줄짜리 핵심 문장을 만들고,
+그 2줄을 한 번 더 반복해서 총 4줄로 작성해라.
 
-처럼 변형해서 사용해라.
+Hook 구조:
+A
+B
+A
+B
 
-Hook은 "키워드 반복"보다
-"킹받는 별명화"가 더 중요하다.
+Hook 문장 A와 B는 서로 연결되어야 한다.
 
-Hook은 짧아야 한다.
-Hook은 반드시 4줄 이내로 끝내라.
+A는 놀리는 별명이나 핵심 상황,
+B는 그걸 더 약오르게 만드는 한마디로 작성해라.
+
+Hook은 다음 조건을 만족해야 한다.
+
+* 짧다
+* 입에 잘 붙는다
+* 2번 반복해도 어색하지 않다
+* 대상이 들으면 킹받는다
+* 친구들이 따라 부르기 쉽다
+* 키워드 나열이 아니라 별명화되어 있다
+* 선택된 장르의 추임새, 리듬감, 반복 방식이 자연스럽게 반영되어 있다
+* 마지막 반복이 자연스럽게 곡의 마무리처럼 들린다
 
 나쁜 Hook 예시:
 "야근러 다이어터 힘순찐이
@@ -1053,36 +1360,49 @@ Hook은 반드시 4줄 이내로 끝내라.
 좋은 Hook 예시:
 "말만 관리 중이야
 또 야식 앞에 서 있네
-내일부터 다이어터
-오늘도 실패했네"
+말만 관리 중이야
+또 야식 앞에 서 있네"
+
+좋은 Hook 예시:
+"꼬집고 튀어
+또 혼자 웃어
+꼬집고 튀어
+또 혼자 웃어"
+
+좋은 Hook 예시:
+"단추 비상
+배부터 등장
+단추 비상
+배부터 등장"
 
 ---
 
 [style 작성 규칙]
 
 style 필드는 Suno AI에 넘기는 **영어 음악 스타일** 설명이다.
-반드시 아래 (1) + (2)를 모두 포함해서 작성하라.
+선택된 [장르]에 맞게, 반드시 아래 (1) + (2)를 모두 포함해서 작성하라.
 
 (1) 공통 필수 키워드 — 어떤 장르든 항상 포함
 * short 45-second song
 * no intro, no outro, no bridge
-* catchy hook
+* repeated catchy hook
 * playful comedy lyrics
 
 (2) [장르]에 해당하는 음악 스타일 키워드 — 아래 매핑에서 [장르]에 맞는 줄 하나만 골라 그대로 사용
+   반드시 그 장르의 **리듬·악기·창법·멜로디 특징**이 모두 드러나야 한다.
 
 * 힙합 → korean hiphop, boom bap, punchy 808, hip hop hook, rhythmic flow
 * 랩 → korean rap, fast aggressive flow, hard 808 beat, minimal melody, pure rap delivery
 * 발라드 → korean ballad, slow tempo, piano, soft emotional vocal, mellow strings
-* 트로트 → korean trot, accordion, ppongjjak rhythm, retro 80s vibe, bouncy bass
+* 트로트 → korean trot, accordion, ppongjjak rhythm, retro 80s vibe, bouncy bass, comic vocal bends
 * K-pop → upbeat korean pop, bright synth, catchy melodic hook, polished kpop production
 * 락 → korean rock, distorted electric guitar, energetic drum kit, punchy band sound
 * 동요 → korean kids song, cute simple melody, glockenspiel, playful childlike vocal
 * 로파이 → lofi hiphop, chill beat, mellow piano, vinyl crackle, dreamy
-* 요들송 → alpine yodel, swiss folk, yodeling chorus, accordion, bavarian polka feel
+* 요들송 → alpine yodel, swiss folk, yodeling chorus, accordion, bavarian polka feel, comic yodel vocal flips
 * 쌈바 → brazilian samba, surdo drum, pandeiro, fast carnival groove, festive horns
 
-[장르]가 위 매핑에 없으면 그 장르를 가장 잘 표현하는 영어 키워드 3~5개를 직접 골라 사용해라.
+[장르]가 위 매핑에 없으면 그 장르를 가장 잘 표현하는 영어 키워드 3~5개(리듬·악기·창법·멜로디)를 직접 골라 사용해라.
 
 규칙:
 * [장르]와 무관한 키워드를 절대 섞지 마라.
@@ -1090,11 +1410,15 @@ style 필드는 Suno AI에 넘기는 **영어 음악 스타일** 설명이다.
   예) [장르]=요들송인데 "808 beat" 넣지 마라.
 * (1) 공통 키워드와 (2) 장르 키워드를 자연스럽게 한 문장으로 이어 써라.
 
-예시:
-* [장르]=트로트 → "short 45-second korean trot, accordion, ppongjjak rhythm, retro 80s vibe, bouncy bass, no intro, no outro, no bridge, catchy hook, playful comedy lyrics"
-* [장르]=요들송 → "short 45-second alpine yodel, swiss folk, yodeling chorus, accordion, bavarian polka feel, no intro, no outro, no bridge, catchy hook, playful comedy lyrics"
-* [장르]=쌈바 → "short 45-second brazilian samba, surdo drum, pandeiro, fast carnival groove, festive horns, no intro, no outro, no bridge, catchy hook, playful comedy lyrics"
-* [장르]=랩 → "short 45-second korean rap, fast aggressive flow, hard 808 beat, minimal melody, pure rap delivery, no intro, no outro, no bridge, catchy hook, playful comedy lyrics"
+나쁜 style 예:
+"short 45-second playful Korean comedy pop"
+왜 나쁜가: 장르가 무엇이든 K-pop으로 뭉뚱그림. 악기·리듬·창법 정보 없음.
+
+좋은 style 예:
+* [장르]=트로트 → "short 45-second korean trot, accordion, ppongjjak rhythm, retro 80s vibe, bouncy bass, comic vocal bends, no intro, no outro, no bridge, repeated catchy hook, playful comedy lyrics"
+* [장르]=요들송 → "short 45-second alpine yodel, swiss folk, yodeling chorus, accordion, bavarian polka feel, comic yodel vocal flips, no intro, no outro, no bridge, repeated catchy hook, playful comedy lyrics"
+* [장르]=쌈바 → "short 45-second brazilian samba, surdo drum, pandeiro, fast carnival groove, festive horns, no intro, no outro, no bridge, repeated catchy hook, playful comedy lyrics"
+* [장르]=랩 → "short 45-second korean rap, fast aggressive flow, hard 808 beat, minimal melody, pure rap delivery, no intro, no outro, no bridge, repeated catchy hook, playful comedy lyrics"
 
 ---
 
@@ -1123,9 +1447,11 @@ style 필드는 Suno AI에 넘기는 **영어 음악 스타일** 설명이다.
 * 듣자마자 상황이 이해되게 작성해라
 * 대상 캐릭터가 선명하게 떠오르게 작성해라
 * Hook은 짧고 중독성 있게 작성해라
+* Hook은 반드시 A/B/A/B 반복 구조로 작성해라
+* 선택된 장르의 특징이 가사와 style에 모두 느껴지게 작성해라
 * 감정 흐름이 중간에 끊기지 않게 작성해라
 * 키워드 삽입보다 캐릭터 표현을 우선시해라
-* 전체 가사는 10~12줄 이내로 작성해라
+* 전체 가사는 8~10줄 이내로 작성해라
 * 설명 없이 JSON만 출력해라
 
 ---
@@ -1135,8 +1461,8 @@ style 필드는 Suno AI에 넘기는 **영어 음악 스타일** 설명이다.
 
 {
 "title": "2~8글자 중심의 짧고 킹받는 노래 제목. 키워드 나열 금지. 놀리는 별명이나 한마디처럼 작성",
-"style": "short 45-second + (위 [style 작성 규칙]의 [장르] 매핑 키워드) + no intro, no outro, no bridge, catchy hook, playful comedy lyrics",
-"lyrics": "[Verse]\n...\n...\n...\n...\n\n[Pre-Hook]\n...\n...\n\n[Hook]\n...\n...\n...\n..."
+"style": "short 45-second + (위 [style 작성 규칙]의 [장르] 매핑 줄을 그대로 사용 — 리듬·악기·창법·멜로디 포함) + no intro, no outro, no bridge, repeated catchy hook, playful comedy lyrics",
+"lyrics": "[Verse]\n...\n...\n...\n...\n\n[Pre-Hook]\n...\n...\n\n[Hook]\nA\nB\nA\nB"
 }
 `;
 }
