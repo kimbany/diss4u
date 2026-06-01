@@ -1354,25 +1354,43 @@ style 예:
 
 특징:
 
-* 트로트 느낌 + EDM 비트
-* 촌스러운데 신나는 느낌
+* 트로트 + 빠른 전자 비트 (이박사 스타일 테크노 뽕짝)
+* "쿵짝 쿵짝" 4박자 오움파(oom-pah) 베이스가 쉬지 않고 깔림
+* 촌스러운 레트로 신디사이저 + 색소폰 + 아코디언
+* 빠르고(140~150 BPM) 정신없이 신나는 느낌
+* 트로트 꺾기 창법 + 과장된 흥
 * 반복 Hook과 드롭 느낌이 중요
 * 약간 과장되고 킹받는 에너지
 
 가사 반영:
 
 * Hook은 짧고 강하게 반복해라.
-* “둠칫”, “빵빵”, “야야” 같은 리듬성 표현은 소량만 사용 가능.
+* 가사 어미를 "~네", "~야", "~지" 처럼 트로트 꺾기 좋게 써라.
+* "둠칫", "쿵짝", "니나노", "야야" 같은 리듬성 추임새는 (괄호)로 소량만 사용 가능.
 * 너무 추임새만 많아지면 안 된다.
 
 좋은 Hook 예:
-"말만 관리 중이야"
-"둠칫 또 먹네"
-"말만 관리 중이야"
-"오늘도 딱 걸렸네"
+"말만 관리 중이야 (쿵짝)"
+"또 먹네 또 먹어 (쿵짝)"
+"말만 관리 중이야 (쿵짝)"
+"오늘도 딱 걸렸네 (니나노)"
+
+★ 뽕짝 style 작성 특별 규칙 ★
+
+"ppongjjak"이라는 단어만으로는 음악 AI가 뽕짝을 이해하지 못한다.
+반드시 아래 키워드를 모두 조합해서 구체적으로 작성해라:
+
+* Korean techno-trot
+* fast oom-pah polka bass (쿵짝쿵짝 베이스)
+* 145 BPM high energy
+* retro synthesizer stabs
+* cheesy saxophone and accordion riffs
+* vintage Korean cabaret disco
+* exaggerated trot vocal bends (꺾기)
+* relentless four-on-the-floor beat
 
 style 예:
-"short complete 45-second Korean ppongjjak EDM, no intro, no outro, no bridge, repeated strong hook, clear ending feel, trot-inspired EDM beat, bright synth drop, comic energy"
+"short complete 45-second Korean techno-trot ppongjjak, 145 BPM high energy, fast oom-pah polka bass, retro synthesizer stabs, cheesy saxophone and accordion riffs, vintage Korean cabaret disco, exaggerated trot vocal bends, relentless four-on-the-floor beat, no intro, no outro, no bridge, repeated strong hook, clear ending feel, comic energy"
 
 ---
 
@@ -1643,7 +1661,7 @@ style에는 반드시 아래 내용을 포함해라.
 "short complete 45-second Korean yodel song, no intro, no outro, no bridge, repeated strong hook, clear ending feel, bright alpine yodel melody, bouncy acoustic rhythm, comic yodel vocal flips"
 
 좋은 style 예:
-"short complete 45-second playful Korean trot EDM, no intro, no outro, no bridge, repeated strong hook, clear ending feel, ppongjjak rhythm, bright synth drop, comic vocal bends"
+"short complete 45-second Korean techno-trot ppongjjak, 145 BPM high energy, fast oom-pah polka bass, retro synthesizer stabs, cheesy saxophone and accordion riffs, exaggerated trot vocal bends, no intro, no outro, no bridge, repeated strong hook, clear ending feel, comic energy"
 
 좋은 style 예:
 "short complete 45-second playful Korean comedy rap, no intro, no outro, no bridge, repeated strong hook, clear ending feel, bouncy hip-hop beat, witty rhythmic delivery"
