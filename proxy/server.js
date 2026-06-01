@@ -518,7 +518,14 @@ function readBody(req) {
 }
 
 function buildPrompt(params) {
-  const { name, relationship, keywords, genre, lang, gender, mustInclude, useNameInLyrics } = params;
+  const { name, relationship, keywords, genre: genreRaw, lang, gender, mustInclude, useNameInLyrics } = params;
+  // 프런트에서 영어 코드로 넘어오는 장르를 프롬프트의 [장르별 작성 가이드] 섹션명과 정확히 매칭되는 한국어로 변환
+  const GENRE_MAP = {
+    hiphop: '힙합', rap: '장난 랩', ballad: '과몰입 발라드', trot: '킹받 트로트',
+    ppongjjak: '뽕짝 EDM', kpop: 'K-pop', rock: '락', kids: '놀림 동요',
+    lofi: '로파이', yodel: '요들송', samba: '쌈바'
+  };
+  const genre = GENRE_MAP[genreRaw] || genreRaw;
   const genderText = { male: '남자', female: '여자', pet: '반려동물' }[gender] || '미지정';
   const langText = { ko: '한글', en: '영어', mix: '섞기' }[lang] || '한글';
   const fixed = (mustInclude && mustInclude.trim()) ? mustInclude.trim() : '(없음)';
