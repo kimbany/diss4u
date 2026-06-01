@@ -222,6 +222,17 @@
     font-weight: 700;
     box-shadow: 0 4px 20px rgba(212, 255, 58, 0.3);
   }
+  /* 준비중(비활성) 장르 */
+  .pill.soon {
+    opacity: 0.45; cursor: not-allowed;
+    background: var(--bg-card); color: var(--text-dimmer);
+  }
+  .pill.soon:hover { border-color: var(--border); }
+  .pill .soon-tag {
+    font-size: 9px; font-weight: 700; color: var(--orange);
+    background: rgba(255, 200, 158, 0.12); border: 1px solid rgba(255, 200, 158, 0.3);
+    padding: 1px 6px; border-radius: 999px; margin-left: 4px; vertical-align: 1px;
+  }
 
   /* === LANG TOGGLE === */
   .lang-toggle {
@@ -745,17 +756,17 @@
         <div class="pill-row" id="genreRow">
           <div class="pill selected" data-genre="hiphop">힙합</div>
           <div class="pill" data-genre="rap">랩</div>
-          <div class="pill" data-genre="ballad">발라드</div>
-          <div class="pill" data-genre="trot">트로트</div>
-          <div class="pill" data-genre="ppongjjak">뽕짝</div>
+          <div class="pill" data-genre="yodel">요들송</div>
+          <div class="pill" data-genre="bollywood">발리우드</div>
           <div class="pill" data-genre="kpop">K-pop</div>
+          <div class="pill" data-genre="ballad">발라드</div>
           <div class="pill" data-genre="rock">락</div>
           <div class="pill" data-genre="kids">동요</div>
           <div class="pill" data-genre="lofi">로파이</div>
-          <div class="pill" data-genre="yodel">요들송</div>
           <div class="pill" data-genre="samba">쌈바</div>
-          <div class="pill" data-genre="bollywood">발리우드</div>
           <div class="pill" data-genre="random">🎲 랜덤</div>
+          <div class="pill soon" data-genre="trot">트로트 <span class="soon-tag">준비중</span></div>
+          <div class="pill soon" data-genre="ppongjjak">뽕짝 <span class="soon-tag">준비중</span></div>
         </div>
       </div>
 
@@ -1968,9 +1979,13 @@ window.addEventListener('load', () => {
     localStorage.setItem('userId', STATE.userId);
   }
 
-  // 장르 선택 (장르 그룹 내에서만)
+  // 장르 선택 (장르 그룹 내에서만, 준비중(.soon) 장르는 선택 불가)
   document.querySelectorAll('#genreRow .pill').forEach(pill => {
     pill.addEventListener('click', () => {
+      if (pill.classList.contains('soon')) {
+        showToast('이 장르는 준비 중이에요 🛠️ 조금만 기다려주세요!');
+        return;
+      }
       document.querySelectorAll('#genreRow .pill').forEach(p => p.classList.remove('selected'));
       pill.classList.add('selected');
       STATE.selectedGenre = pill.dataset.genre;
@@ -2053,7 +2068,8 @@ async function startGeneration() {
 
   let genre = STATE.selectedGenre;
   if (genre === 'random') {
-    const genres = ['hiphop', 'rap', 'ballad', 'trot', 'ppongjjak', 'kpop', 'rock', 'kids', 'lofi', 'yodel', 'samba', 'bollywood'];
+    // 준비중 장르(트로트/뽕짝)는 랜덤에서도 제외
+    const genres = ['hiphop', 'rap', 'yodel', 'bollywood', 'kpop', 'ballad', 'rock', 'kids', 'lofi', 'samba'];
     genre = genres[Math.floor(Math.random() * genres.length)];
   }
 
