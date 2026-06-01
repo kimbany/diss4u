@@ -453,6 +453,57 @@ async function settleJob(jobId, outcome) {
   } catch (e) { console.warn('settleJob fail', e.message); }
 }
 
+// ===== 쿠팡 파트너스 (골드박스 특가 배너) =====
+// 환경변수: COUPANG_ACCESS_KEY, COUPANG_SECRET_KEY
+// 골드박스는 하루 단위로 갱신되므로 서버 캐시(30분)로 API 호출을 최소화한다.
+const COUPANG_CACHE = { data: null, at: 0 };
+const COUPANG_CACHE_TTL = 30 * 60 * 1000;
+
+// 쿠팡 오픈API HMAC(CEA) 서명 헤더 생성
+function coupangAuthHeader(method, fullPath) {
+  const accessKey = process.env.COUPANG_ACCESS_KEY;
+  const secretKey = process.env.COUPANG_SECRET_KEY;
+  const [path, query = ''] = fullPath.split('?');
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  // GMT 기준 yyMMdd'T'HHmmss'Z'
+  const datetime = String(now.getUTCFullYear()).slice(2) + pad(now.getUTCMonth() + 1) + pad(now.getUTCDate())
+    + 'T' + pad(now.getUTCHours()) + pad(now.getUTCMinutes()) + pad(now.getUTCSeconds()) + 'Z';
+  const message = datetime + method + path + query;
+  const signature = crypto.createHmac('sha256', secretKey).update(message).digest('hex');
+  return `CEA algorithm=HmacSHA256, access-key=${accessKey}, signed-date=${datetime}, signature=${signature}`;
+}
+
+// 골드박스(오늘의 특가) 상품 목록 조회 (캐시 우선)
+async function fetchCoupangGoldbox() {
+  if (!process.env.COUPANG_ACCESS_KEY || !process.env.COUPANG_SECRET_KEY) {
+    return { ok: false, error: 'coupang_not_configured' };
+  }
+  if (COUPANG_CACHE.data && Date.now() - COUPANG_CACHE.at < COUPANG_CACHE_TTL) {
+    return { ok: true, products: COUPANG_CACHE.data, cached: true };
+  }
+  const apiPath = '/v2/providers/affiliate_open_api/apis/openapi/v1/products/goldbox';
+  try {
+    const r = await fetch('https://api-gateway.coupang.com' + apiPath, {
+      headers: { 'Authorization': coupangAuthHeader('GET', apiPath), 'Content-Type': 'application/json' }
+    });
+    const text = await r.text();
+    if (!r.ok) return { ok: false, error: `coupang_http_${r.status}`, detail: text.slice(0, 200) };
+    const j = JSON.parse(text);
+    const items = (j.data || []).map(p => ({
+      id: p.productId,
+      name: p.productName,
+      price: p.productPrice,
+      image: p.productImage,
+      url: p.productUrl,
+    })).filter(p => p.url && p.image);
+    if (items.length) { COUPANG_CACHE.data = items; COUPANG_CACHE.at = Date.now(); }
+    return { ok: true, products: items };
+  } catch (e) {
+    return { ok: false, error: 'coupang_unreachable', detail: e.message };
+  }
+}
+
 function send(res, status, obj) {
   res.writeHead(status, CORS);
   res.end(typeof obj === 'string' ? obj : JSON.stringify(obj));
@@ -1624,6 +1675,7 @@ const server = http.createServer(async (req, res) => {
       has_gemini_key: !!process.env.GEMINI_API_KEY,
       has_apiframe_key: !!process.env.APIFRAME_API_KEY,
       has_portone_secret: !!process.env.PORTONE_V2_API_SECRET,
+      has_coupang_keys: !!(process.env.COUPANG_ACCESS_KEY && process.env.COUPANG_SECRET_KEY),
       credits_enabled: CREDITS_ENABLED,
       payments_enabled: CREDITS_ENABLED && !!process.env.PORTONE_V2_API_SECRET,
       admin_enabled: CREDITS_ENABLED,
@@ -1828,6 +1880,14 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       return send(res, 500, { error: 'share_reward_fail', message: '잠시 후 다시 시도해주세요' });
     }
+  }
+
+  // 쿠팡 파트너스 골드박스 특가 상품 (배너용, 30분 캐시)
+  if (path === '/coupang-goldbox') {
+    const result = await fetchCoupangGoldbox();
+    if (!result.ok) return send(res, 200, { ok: false, products: [], error: result.error });
+    // 배너에는 최대 10개만 보내서 응답 크기 절약
+    return send(res, 200, { ok: true, products: result.products.slice(0, 10) });
   }
 
   // 충전 상품 목록 (금액→크레딧). 프론트가 표시/결제요청에 사용.
