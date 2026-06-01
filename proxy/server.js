@@ -823,10 +823,11 @@ B를 아주 살짝 변형해도 된다.
 A: 말만 관리 중이야
 B: 또 야식 앞에 서 있네
 A: 말만 관리 중이야
-B': 오늘도 딱 걸렸네
+B': 야식이 너를 기다리네
 
 이처럼 마지막 줄은 반복감을 유지하면서도
 "딱 끝났다"는 느낌을 줘야 한다.
+(위 예시 문장을 그대로 쓰지 마라. 매 곡마다 그 곡의 내용에 맞는 새로운 문장을 만들어라.)
 
 ---
 
@@ -873,19 +874,22 @@ B는 그걸 더 약오르게 만드는 한마디로 작성해라.
 "말만 관리 중이야
 또 야식 앞에 서 있네
 말만 관리 중이야
-오늘도 딱 걸렸네"
+젓가락은 이미 손에 있네"
 
 좋은 Hook 예시:
 "꼬집고 튀어
 또 혼자 웃어
 꼬집고 튀어
-오늘도 딱 걸렸네"
+손버릇 평생 가겠어"
 
 좋은 Hook 예시:
 "단추 비상
 배부터 등장
 단추 비상
 오늘도 먼저 등장"
+
+(주의: 위 예시들의 문장을 그대로 가져다 쓰지 마라.
+구조와 느낌만 참고하고, 문장은 매 곡마다 새로 만들어라.)
 
 ---
 
@@ -903,18 +907,30 @@ B는 그걸 더 약오르게 만드는 한마디로 작성해라.
 마지막 줄에는 여운을 남기는 말보다
 짧고 확실한 마무리 멘트를 사용해라.
 
-좋은 마무리 예:
+★★ 마무리 문장 복사 금지 규칙 ★★
 
-* 오늘도 딱 걸렸네
-* 또 너답게 끝났네
-* 내일도 똑같겠네
-* 그래서 네가 웃겨
-* 결국 또 시작이네
-* 역시나 또 걸렸네
-* 오늘도 네가 이겼네
-* 끝까지 너답네
+"오늘도 딱 걸렸네", "또 걸렸네" 같은 문장을 마무리로 쓰지 마라.
+이 문장들은 이미 너무 많이 사용되어 금지한다.
 
-나쁜 마무리 예:
+마무리 문장은 매 곡마다 그 곡의 놀림 내용에서 직접 만들어내라.
+
+마무리 문장을 만드는 방법 (유형만 참고, 문장은 새로 만들 것):
+
+* 결론형: 그 사람의 특징이 결국 어떻게 됐는지 한 줄로 정리
+  (예: 다이어트 놀림이면 → "냉장고만 또 채워졌네")
+* 한 방형: 가장 약오르는 핀잔을 마지막에 던지기
+  (예: 지각 놀림이면 → "회사가 너를 포기했대")
+* 미래형: 내일도/평생 똑같을 거라고 못 박기
+  (예: 폰 중독 놀림이면 → "베터리가 먼저 죽겠다")
+* 항복형: 못 말린다고 인정해버리기
+  (예: 먹보 놀림이면 → "그래 많이 먹어라")
+* 별명 확정형: Hook의 별명을 마지막에 도장 찍듯 확정
+  (예: → "네 이름은 이제 김지각")
+
+핵심: 마무리 문장에는 반드시 그 곡의 키워드/놀림 내용이 들어가야 한다.
+어떤 곡에나 갖다 붙일 수 있는 범용 마무리 문장은 금지한다.
+
+나쁜 마무리 예 (감성적으로 흐려짐):
 
 * 계속 그렇게 흘러가
 * 언젠가는 알게 될 거야
@@ -1256,11 +1272,11 @@ style 예:
 * Hook은 따라 하기 쉬운 구호처럼 만들어라.
 * 욕설 없이 장난 디스 느낌만 살려라.
 
-좋은 Hook 예:
+좋은 Hook 예 (구조만 참고, 문장은 매 곡 새로 만들 것):
 "말만 관리 중이야"
 "또 야식 앞에 서 있네"
 "말만 관리 중이야"
-"오늘도 딱 걸렸네"
+"배달앱이 너를 기억해"
 
 style 예:
 "short complete 45-second playful Korean comedy rap, no intro, no outro, no bridge, repeated strong hook, clear ending feel, bouncy hip-hop beat, witty rhythmic delivery"
@@ -1282,11 +1298,11 @@ style 예:
 * Hook은 동요처럼 반복감 있게 작성해라.
 * 너무 복잡한 비유나 긴 문장 금지.
 
-좋은 Hook 예:
+좋은 Hook 예 (구조만 참고, 문장은 매 곡 새로 만들 것):
 "또 또 늦었네"
 "가방 메고 뛰네"
 "또 또 늦었네"
-"오늘도 딱 걸렸네"
+"신발도 거꾸로 신었네"
 
 style 예:
 "short complete 45-second Korean nursery rhyme, no intro, no outro, no bridge, repeated strong hook, clear ending feel, simple cute melody, light xylophone and clap rhythm"
@@ -1332,11 +1348,11 @@ style 예:
 * 넣는다면 매번 다른 표현을 만들어라. 매 곡 똑같은 추임새 금지.
 * 단, 길이 늘리기용 무의미한 추임새는 금지.
 
-좋은 Hook 예:
+좋은 Hook 예 (구조만 참고, 문장은 매 곡 새로 만들 것):
 "또 먹네! 또 먹네!"
 "말만 관리 또 먹네!"
 "또 먹네! 또 먹네!"
-"오늘도 딱 걸렸네!"
+"숟가락 내려놔 제발!"
 
 style 예:
 "short complete 45-second Korean chant, no intro, no outro, no bridge, repeated strong hook, clear ending feel, stadium chant rhythm, claps and group vocals"
@@ -1398,11 +1414,11 @@ style 예:
 * 너무 유치하지만은 않게, 숏폼 팝 느낌을 살려라.
 * 밝고 통통 튀는 리듬을 상상하며 써라.
 
-좋은 Hook 예:
+좋은 Hook 예 (구조만 참고, 문장은 매 곡 새로 만들 것):
 "꼬집고 튀어"
 "또 혼자 웃어"
 "꼬집고 튀어"
-"오늘도 딱 걸렸네"
+"유치원생도 안 그래"
 
 style 예:
 "short complete 45-second Korean kids pop, no intro, no outro, no bridge, repeated strong hook, clear ending feel, bright bubbly melody, cute synths and claps"
@@ -1424,11 +1440,11 @@ style 예:
 * 단, 없는 설정을 새로 만들지 마라.
 * Hook은 주제가처럼 힘 있고 반복감 있게 작성해라.
 
-좋은 Hook 예:
+좋은 Hook 예 (구조만 참고, 문장은 매 곡 새로 만들 것):
 "옆구리 테러 등장"
 "꼬집고 바로 도망"
 "옆구리 테러 등장"
-"오늘도 딱 걸렸네"
+"이 마을의 빌런이다"
 
 style 예:
 "short complete 45-second Korean cartoon theme song, no intro, no outro, no bridge, repeated strong hook, clear ending feel, heroic comic melody, upbeat drums and bright synth brass"
@@ -1449,11 +1465,11 @@ style 예:
 * 대상의 웃긴 특징을 진지하게 노래해서 반전 웃음을 만들어라.
 * Hook은 짧고 감정적으로 반복해라.
 
-좋은 Hook 예:
+좋은 Hook 예 (구조만 참고, 문장은 매 곡 새로 만들 것):
 "내일부터 한다던 너"
 "오늘도 김밥 앞에"
 "내일부터 한다던 너"
-"오늘도 딱 걸렸네"
+"김밥은 죄가 없잖아"
 
 style 예:
 "short complete 45-second dramatic Korean comedy ballad, no intro, no outro, no bridge, repeated strong hook, clear ending feel, emotional piano chords, heartfelt vocal delivery with ironic lyrics"
@@ -1542,7 +1558,7 @@ style 예:
 배 나왔네 (요를레이히)
 이 냄새는 뭐니 (요를레이히)
 배 나왔네 (요를레이히)
-오늘도 딱 걸렸네 (요를레이)
+단추가 도망가네 (요를레이)
 
 같은 규칙이 요들송("요를레이히"), 킹받 트로트("얼쑤", "아이고"), 놀림 챈트("짝짝", "헤이"),
 뽕짝 EDM("둠칫"), 놀림 행진곡("하나 둘"), 발리우드("아이야이야"), 모든 장르에 적용된다.
@@ -1667,7 +1683,7 @@ Moonlight dancing in my galaxy fire"
 지각 장인 또 등장
 가방 메고 뛰어와
 지각 장인 또 등장
-오늘도 딱 걸렸네
+시계가 너를 포기했네
 
 왜 좋은가:
 
