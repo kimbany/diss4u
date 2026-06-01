@@ -523,7 +523,7 @@ function buildPrompt(params) {
   const GENRE_MAP = {
     hiphop: '힙합', rap: '장난 랩', ballad: '과몰입 발라드', trot: '킹받 트로트',
     ppongjjak: '뽕짝 EDM', kpop: 'K-pop', rock: '락', kids: '놀림 동요',
-    lofi: '로파이', yodel: '요들송', samba: '쌈바'
+    lofi: '로파이', yodel: '요들송', samba: '쌈바', bollywood: '발리우드'
   };
   const genre = GENRE_MAP[genreRaw] || genreRaw;
   const genderText = { male: '남자', female: '여자', pet: '반려동물' }[gender] || '미지정';
@@ -1497,6 +1497,49 @@ style 예:
 
 ---
 
+11. 발리우드
+
+특징:
+
+* 인도 영화 OST처럼 화려하고 드라마틱한 느낌
+* 타블라(tabla) 리듬 + 시타르(sitar) 멜로디 + 화려한 스트링
+* 신나는 군무 장면이 떠오르는 댄스 비트
+* 과장된 감정 표현과 극적인 멜로디
+* 단체로 따라 부르는 후렴이 잘 어울림
+* 놀림 포인트를 영화 주인공 서사처럼 과장하면 웃김
+
+가사 반영:
+
+* 대상의 특징을 발리우드 영화 주인공처럼 거창하게 묘사해라.
+* Hook은 단체 군무 후렴처럼 흥겹고 따라 부르기 쉽게 작성해라.
+* 가사는 한국어로 쓰되, 리듬감을 살려 들썩이는 느낌으로 써라.
+* "아이야이야", "발레발레" 같은 인도풍 추임새는 (괄호)로 소량만 사용 가능.
+* 너무 추임새만 많아지면 안 된다.
+
+좋은 Hook 예:
+"또 먹방 찍는 너 (아이야이야)"
+"오늘의 주인공이야 (발레발레)"
+"또 먹방 찍는 너 (아이야이야)"
+"오늘도 딱 걸렸네 (발레발레)"
+
+★ 발리우드 style 작성 특별 규칙 ★
+
+"bollywood"라는 단어 하나만으로는 부족하다.
+반드시 아래 키워드를 모두 조합해서 구체적으로 작성해라:
+
+* Bollywood dance number
+* energetic tabla and dhol percussion (타블라/돌 타악기)
+* sitar riffs and lush Indian strings (시타르 + 스트링)
+* dramatic cinematic melody
+* group chorus chanting (단체 떼창 후렴)
+* festive Indian wedding party energy
+* playful Hindi-film masala vibe
+
+style 예:
+"short complete 45-second Bollywood dance number with Korean lyrics, energetic tabla and dhol percussion, sitar riffs and lush Indian strings, dramatic cinematic melody, group chorus chanting, festive Indian wedding party energy, playful Hindi-film masala vibe, no intro, no outro, no bridge, repeated strong hook, clear ending feel, comic energy"
+
+---
+
 ★★ 추임새 표기 절대 규칙 ★★
 
 추임새("요를레이히", "얼쑤", "지화자", "올레", "둠칫", "짝짝", "헤이", "하나 둘" 등)는
@@ -1522,7 +1565,7 @@ style 예:
 오늘도 딱 걸렸네 (요를레이)
 
 같은 규칙이 요들송("요를레이히"), 킹받 트로트("얼쑤", "아이고"), 놀림 챈트("짝짝", "헤이"),
-뽕짝 EDM("둠칫"), 놀림 행진곡("하나 둘"), 모든 장르에 적용된다.
+뽕짝 EDM("둠칫"), 놀림 행진곡("하나 둘"), 발리우드("아이야이야"), 모든 장르에 적용된다.
 괄호 안 추임새는 줄당 1개만, 짧게 써라.
 
 Hook의 모든 줄은 반드시 의미 있는 한국어 가사여야 한다.

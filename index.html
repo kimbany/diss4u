@@ -754,6 +754,7 @@
           <div class="pill" data-genre="lofi">로파이</div>
           <div class="pill" data-genre="yodel">요들송</div>
           <div class="pill" data-genre="samba">쌈바</div>
+          <div class="pill" data-genre="bollywood">발리우드</div>
           <div class="pill" data-genre="random">🎲 랜덤</div>
         </div>
       </div>
@@ -1935,7 +1936,7 @@ const STATE = {
 
 const GENRE_NAMES = {
   hiphop: '힙합', rap: '랩', ballad: '발라드', trot: '트로트', ppongjjak: '뽕짝',
-  kpop: 'K-pop', rock: '락', kids: '동요', lofi: '로파이', yodel: '요들송', samba: '쌈바', random: '랜덤'
+  kpop: 'K-pop', rock: '락', kids: '동요', lofi: '로파이', yodel: '요들송', samba: '쌈바', bollywood: '발리우드', random: '랜덤'
 };
 const LANG_NAMES = { ko: '한국어', en: 'English', mix: '한+영' };
 const AVATAR_COLORS = ['c1', 'c2', 'c3', 'c4'];
@@ -2052,7 +2053,7 @@ async function startGeneration() {
 
   let genre = STATE.selectedGenre;
   if (genre === 'random') {
-    const genres = ['hiphop', 'rap', 'ballad', 'trot', 'ppongjjak', 'kpop', 'rock', 'kids', 'lofi', 'yodel', 'samba'];
+    const genres = ['hiphop', 'rap', 'ballad', 'trot', 'ppongjjak', 'kpop', 'rock', 'kids', 'lofi', 'yodel', 'samba', 'bollywood'];
     genre = genres[Math.floor(Math.random() * genres.length)];
   }
 
