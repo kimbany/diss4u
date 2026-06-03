@@ -605,6 +605,33 @@
   .toast.show { display: block; animation: toastIn 0.3s; }
   @keyframes toastIn { from { opacity: 0; transform: translate(-50%, 20px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
+  /* === 크레딧 증정 알림 팝업 === */
+  .grant-popup {
+    position: fixed; top: 80px; left: 50%; transform: translateX(-50%) translateY(-16px);
+    background: linear-gradient(135deg, var(--lime) 0%, var(--cyan) 100%);
+    color: #11131a; padding: 14px 18px; padding-right: 42px; border-radius: 16px;
+    display: flex; align-items: center; gap: 12px; min-width: 240px; max-width: 360px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.15) inset;
+    z-index: 1000; opacity: 0; transition: opacity .25s ease, transform .25s ease;
+    font-family: inherit;
+  }
+  .grant-popup.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .grant-popup .gp-emoji { font-size: 26px; line-height: 1; }
+  .grant-popup .gp-body { flex: 1; min-width: 0; }
+  .grant-popup .gp-title { font-size: 13px; font-weight: 600; opacity: .85; }
+  .grant-popup .gp-amount { font-size: 20px; font-weight: 800; margin-top: 2px; }
+  .grant-popup .gp-close {
+    position: absolute; top: 6px; right: 8px;
+    background: transparent; border: none; color: #11131a;
+    font-size: 22px; font-weight: 700; line-height: 1; cursor: pointer;
+    opacity: .6; padding: 4px 8px;
+  }
+  .grant-popup .gp-close:hover { opacity: 1; }
+  @media (max-width: 480px) {
+    .grant-popup { min-width: 0; left: 12px; right: 12px; transform: translateY(-16px); max-width: none; }
+    .grant-popup.show { transform: translateY(0); }
+  }
+
   /* === ERROR === */
   .error-box {
     background: rgba(255, 100, 130, 0.1);
@@ -1250,7 +1277,48 @@ auth.onAuthStateChanged(user => {
   loadHistory();
   fetchCredits();
   maybeResumePayment();   // 모바일 결제 리다이렉트 복귀 시 자동 검증
+  watchUserDoc(user);     // 관리자 크레딧 증정 등 사용자 문서 실시간 감지
 });
+
+// ===== 사용자 문서 실시간 감지 (크레딧 증정 알림 등) =====
+let _userDocUnsub = null;
+function watchUserDoc(user) {
+  if (_userDocUnsub) { try { _userDocUnsub(); } catch (e) {} _userDocUnsub = null; }
+  if (!user) return;
+  const seenKey = 'diss4u_seenGrantId_' + user.uid;
+  _userDocUnsub = db.collection('users').doc(user.uid).onSnapshot(snap => {
+    if (!snap.exists) return;
+    const g = snap.data().lastGrant;
+    if (!g || !g.id || !g.amount) return;
+    let seen = '';
+    try { seen = localStorage.getItem(seenKey) || ''; } catch (e) {}
+    if (g.id === seen) return;        // 같은 증정 두 번 띄우지 않기
+    try { localStorage.setItem(seenKey, g.id); } catch (e) {}
+    showGrantPopup(g.amount);
+    fetchCredits();                   // 잔액 즉시 갱신
+  }, err => { console.warn('user doc watch fail', err && err.message); });
+}
+
+function showGrantPopup(amount) {
+  // 이미 떠 있으면 제거
+  document.querySelectorAll('.grant-popup').forEach(el => el.remove());
+  const el = document.createElement('div');
+  el.className = 'grant-popup';
+  el.innerHTML =
+    '<div class="gp-emoji">🎁</div>'
+    + '<div class="gp-body">'
+    +   '<div class="gp-title">크레딧을 받았어요!</div>'
+    +   '<div class="gp-amount">+' + amount + 'p</div>'
+    + '</div>'
+    + '<button class="gp-close" aria-label="닫기">×</button>';
+  document.body.appendChild(el);
+  const close = () => { el.classList.remove('show'); setTimeout(() => el.remove(), 250); };
+  el.querySelector('.gp-close').addEventListener('click', close);
+  // 페이드인
+  requestAnimationFrame(() => el.classList.add('show'));
+  // 6초 후 자동 닫힘
+  setTimeout(close, 6000);
+}
 
 // 모바일에서 결제 후 사이트로 돌아왔으면 (?paid=1) 자동으로 결제 검증
 async function maybeResumePayment() {

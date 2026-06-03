@@ -250,6 +250,17 @@ async function grantCredits(uid, amount, adminUser) {
     });
   } catch (e) { console.warn('grant log fail', e.message); }
   await logCredit(uid, amount, 'free', 'admin');
+  // 사용자 화면에 알림 팝업 띄우기 위한 마커. id로 중복 방지.
+  try {
+    await ref.set({
+      lastGrant: {
+        id: Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+        amount,
+        by: adminUser || 'admin',
+        at: admin.firestore.FieldValue.serverTimestamp()
+      }
+    }, { merge: true });
+  } catch (e) { console.warn('lastGrant marker fail', e.message); }
   return result;
 }
 
@@ -2139,7 +2150,18 @@ const server = http.createServer(async (req, res) => {
       do {
         const list = await admin.auth().listUsers(1000, pageToken);
         for (const ur of list.users) {
-          users.push({ uid: ur.uid, email: ur.email || null, signupAt: ur.metadata && ur.metadata.creationTime ? ur.metadata.creationTime : null, disabled: !!ur.disabled });
+          const meta = ur.metadata || {};
+          const lastSignIn = meta.lastSignInTime || null;
+          const lastRefresh = meta.lastRefreshTime || null;
+          // 마지막 접속 = 가장 최근(토큰 갱신 시각이 보통 더 최신)
+          const lastAccessAt = [lastSignIn, lastRefresh].filter(Boolean).sort().pop() || null;
+          users.push({
+            uid: ur.uid,
+            email: ur.email || null,
+            signupAt: meta.creationTime || null,
+            lastAccessAt,
+            disabled: !!ur.disabled
+          });
         }
         pageToken = list.pageToken;
       } while (pageToken);
@@ -2164,6 +2186,7 @@ const server = http.createServer(async (req, res) => {
         email: u.email,
         disabled: u.disabled,                        // 차단(탈퇴) 여부
         signupAt: createdAt || u.signupAt,           // 가입 일자
+        lastAccessAt: u.lastAccessAt,                // 마지막 접속(토큰 갱신/로그인 중 최근)
         totalCredits: p.freeGranted + p.paidGranted, // 총 크레딧(누적 지급)
         availableCredits: p.free + p.paid,           // 가용 가능 크레딧(현재 잔액)
         freeCredits: p.free,                         // 무료 크레딧 보유
