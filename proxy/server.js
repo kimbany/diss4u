@@ -278,38 +278,60 @@ async function grantCredits(uid, amount, adminUser) {
 async function disableUserAccount(uid, opts) {
   const by = (opts && opts.by) || 'self';
   const ref = fdb.collection('users').doc(uid);
-  let lost = 0;
+  let lostFree = 0, lostPaid = 0;
   try {
-    lost = await fdb.runTransaction(async (t) => {
+    const res = await fdb.runTransaction(async (t) => {
       const snap = await t.get(ref);
       const p = snap.exists ? splitPools(snap.data()) : { free: 0, paid: 0, freeGranted: 0, paidGranted: 0 };
-      const total = p.free + p.paid;
+      const lf = p.free, lp = p.paid;
       p.free = 0; p.paid = 0;
       t.set(ref, poolPatch(p, {
         disabled: true,
         disabledAt: admin.firestore.FieldValue.serverTimestamp(),
-        disabledBy: by
+        disabledBy: by,
+        // 관리자 복구 시 되돌려놓을 수 있도록 소멸 직전 풀 스냅샷 보관 (다음 차단 때 덮어씀)
+        forfeit: { free: lf, paid: lp, by, at: new Date() }
       }), { merge: true });
-      return total;
+      return { lf, lp };
     });
-    if (lost > 0) await logCredit(uid, -lost, 'spend', 'withdrawal'); // 소멸 기록
+    lostFree = res.lf; lostPaid = res.lp;
+    const total = lostFree + lostPaid;
+    if (total > 0) await logCredit(uid, -total, 'spend', 'withdrawal');
   } catch (e) { console.warn('disable forfeit fail', e.message); }
   // Auth 계정 비활성화 + 기존 토큰 무효화 (재로그인 차단)
   await admin.auth().updateUser(uid, { disabled: true });
   try { await admin.auth().revokeRefreshTokens(uid); } catch (e) {}
-  return { forfeited: lost };
+  return { forfeited: lostFree + lostPaid };
 }
 
-// 회원 복구(잘못 차단 해제): 계정 재활성화. 소멸된 크레딧은 복원하지 않음.
+// 회원 복구(잘못 차단 해제): 계정 재활성화 + 차단 시 소멸된 크레딧 자동 복원.
 async function restoreUserAccount(uid) {
-  await admin.auth().updateUser(uid, { disabled: false });
+  const ref = fdb.collection('users').doc(uid);
+  let returnedFree = 0, returnedPaid = 0;
   try {
-    await fdb.collection('users').doc(uid).set({
-      disabled: false,
-      restoredAt: admin.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
-  } catch (e) { console.warn('restore doc fail', e.message); }
-  return { ok: true };
+    const res = await fdb.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      const p = snap.exists ? splitPools(snap.data()) : { free: 0, paid: 0, freeGranted: 0, paidGranted: 0 };
+      const data = snap.exists ? snap.data() : {};
+      const f = data.forfeit;
+      let rf = 0, rp = 0;
+      if (f) { rf = Number(f.free) || 0; rp = Number(f.paid) || 0; p.free += rf; p.paid += rp; }
+      t.set(ref, poolPatch(p, {
+        disabled: false,
+        restoredAt: admin.firestore.FieldValue.serverTimestamp(),
+        forfeit: admin.firestore.FieldValue.delete()
+      }), { merge: true });
+      return { rf, rp };
+    });
+    returnedFree = res.rf; returnedPaid = res.rp;
+    const total = returnedFree + returnedPaid;
+    if (total > 0) {
+      await logCredit(uid, total, 'refund', 'restore');
+      await markLastGrant(uid, total, 'restore', 'admin');
+    }
+  } catch (e) { console.warn('restore credits fail', e.message); }
+  await admin.auth().updateUser(uid, { disabled: false });
+  return { ok: true, restoredFree: returnedFree, restoredPaid: returnedPaid, restored: returnedFree + returnedPaid };
 }
 
 // ===== 관리자 인증 =====
@@ -2680,8 +2702,8 @@ const server = http.createServer(async (req, res) => {
     const { uid } = await readBody(req);
     if (!uid) return send(res, 400, { error: 'no_uid', message: '대상 회원이 없어요' });
     try {
-      await restoreUserAccount(String(uid));
-      return send(res, 200, { ok: true });
+      const r = await restoreUserAccount(String(uid));
+      return send(res, 200, { ok: true, restored: r.restored, restoredFree: r.restoredFree, restoredPaid: r.restoredPaid });
     } catch (e) {
       return send(res, 500, { error: 'restore_failed', message: '회원 복구 처리 실패', detail: e.message });
     }

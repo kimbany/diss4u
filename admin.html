@@ -546,12 +546,13 @@ async function banMember(uid, email) {
 }
 async function restoreMember(uid, email) {
   const label = email || uid;
-  if (!confirm("'" + label + "' 님을 복구(차단 해제)할까요?\n\n· 다시 로그인할 수 있게 됩니다.\n· 소멸된 크레딧은 복원되지 않습니다.")) return;
+  if (!confirm("'" + label + "' 님을 복구(차단 해제)할까요?\n\n· 같은 구글 계정으로 다시 로그인할 수 있게 됩니다.\n· 차단 시 소멸된 크레딧도 함께 복원됩니다.")) return;
   setMsg($('memberMsg'), '복구 처리 중…');
   const r = await api('/admin/restore', { method: 'POST', body: JSON.stringify({ uid }) });
   if (r.status === 401) { logout(); return; }
   if (!r.ok || !r.data.ok) { setMsg($('memberMsg'), (r.data && r.data.message) || '복구 실패', 'err'); return; }
-  setMsg($('memberMsg'), '✓ ' + label + ' 님을 복구했어요', 'ok');
+  const restored = (r.data && r.data.restored) || 0;
+  setMsg($('memberMsg'), '✓ ' + label + ' 님을 복구했어요' + (restored > 0 ? (' (크레딧 ' + restored + 'p 복원)') : ''), 'ok');
   loadMembers();
 }
 
