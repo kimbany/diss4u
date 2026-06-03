@@ -171,6 +171,7 @@
               <tr>
                 <th>구글 아이디</th>
                 <th>가입 일자</th>
+                <th>마지막 접속</th>
                 <th style="text-align:right">총 크레딧</th>
                 <th style="text-align:right">가용 가능</th>
                 <th style="text-align:right">무료 보유</th>
@@ -180,7 +181,7 @@
               </tr>
             </thead>
             <tbody id="memberRows">
-              <tr><td colspan="8" style="color:var(--dim)">불러오는 중…</td></tr>
+              <tr><td colspan="9" style="color:var(--dim)">불러오는 중…</td></tr>
             </tbody>
           </table>
         </div>
@@ -333,7 +334,7 @@ function renderMembers() {
   const rows = MEMBERS.filter(m => !q || (m.email || '').toLowerCase().includes(q));
   $('memberStat').textContent = `총 ${MEMBERS.length}명` + (q ? ` · 검색 ${rows.length}명` : '');
   if (!rows.length) {
-    $('memberRows').innerHTML = '<tr><td colspan="8" style="color:var(--dim)">회원이 없어요</td></tr>';
+    $('memberRows').innerHTML = '<tr><td colspan="9" style="color:var(--dim)">회원이 없어요</td></tr>';
     return;
   }
   $('memberRows').innerHTML = rows.map(m => {
@@ -346,6 +347,7 @@ function renderMembers() {
     <tr id="m-${m.uid}"${banned ? ' style="opacity:.6"' : ''}>
       <td><div class="email">${escapeHtml(m.email || '(이메일 없음)')}${banned ? ' <span class="pill banned">차단됨</span>' : ''}</div><div class="sub">${m.uid}</div></td>
       <td>${fmtDate(m.signupAt)}</td>
+      <td>${m.lastAccessAt ? fmtDate(m.lastAccessAt) : '<span style="color:var(--dim)">-</span>'}</td>
       <td class="num">${m.totalCredits}</td>
       <td class="num"><b>${m.availableCredits}</b></td>
       <td class="num free">${m.freeCredits}</td>
@@ -380,7 +382,7 @@ function escapeHtml(s) {
 
 async function loadMembers() {
   setMsg($('memberMsg'), '');
-  $('memberRows').innerHTML = '<tr><td colspan="8" style="color:var(--dim)">불러오는 중…</td></tr>';
+  $('memberRows').innerHTML = '<tr><td colspan="9" style="color:var(--dim)">불러오는 중…</td></tr>';
   const r = await api('/admin/users');
   if (r.status === 401) { logout(); setMsg($('loginMsg'), '세션이 만료됐어요. 다시 로그인하세요', 'err'); return; }
   if (!r.ok || !r.data.ok) { setMsg($('memberMsg'), r.data.message || '회원 목록을 불러오지 못했어요', 'err'); $('memberRows').innerHTML = ''; return; }
@@ -432,7 +434,7 @@ async function toggleSongs(uid, email) {
   if (!mrow) return;
   const tr = document.createElement('tr');
   tr.id = 'songs-' + uid;
-  tr.innerHTML = '<td colspan="8" style="background:var(--panel2);"><div class="msg" style="color:var(--dim)">제작물 불러오는 중…</div></td>';
+  tr.innerHTML = '<td colspan="9" style="background:var(--panel2);"><div class="msg" style="color:var(--dim)">제작물 불러오는 중…</div></td>';
   mrow.after(tr);
   const r = await api('/admin/songs?uid=' + encodeURIComponent(uid));
   if (r.status === 401) { logout(); return; }
@@ -499,7 +501,7 @@ async function toggleLedger(uid, email) {
   if (!mrow) return;
   const tr = document.createElement('tr');
   tr.id = 'ledger-' + uid;
-  tr.innerHTML = '<td colspan="8" style="background:var(--panel2);"><div class="msg" style="color:var(--dim)">크레딧 내역 불러오는 중…</div></td>';
+  tr.innerHTML = '<td colspan="9" style="background:var(--panel2);"><div class="msg" style="color:var(--dim)">크레딧 내역 불러오는 중…</div></td>';
   mrow.after(tr);
   const r = await api('/admin/credit-history?uid=' + encodeURIComponent(uid));
   if (r.status === 401) { logout(); return; }
