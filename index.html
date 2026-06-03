@@ -1282,9 +1282,14 @@ auth.onAuthStateChanged(user => {
 
 // ===== 사용자 문서 실시간 감지 (크레딧 증정 알림 등) =====
 let _userDocUnsub = null;
+let pendingGrantAmount = 0;   // 홈이 아닌 화면에서 받은 증정 알림 대기
+function isOnHomeScreen() {
+  const s = document.getElementById('screen-input');
+  return !!(s && s.classList.contains('active'));
+}
 function watchUserDoc(user) {
   if (_userDocUnsub) { try { _userDocUnsub(); } catch (e) {} _userDocUnsub = null; }
-  if (!user) return;
+  if (!user) { pendingGrantAmount = 0; return; }
   const seenKey = 'diss4u_seenGrantId_' + user.uid;
   _userDocUnsub = db.collection('users').doc(user.uid).onSnapshot(snap => {
     if (!snap.exists) return;
@@ -1294,8 +1299,13 @@ function watchUserDoc(user) {
     try { seen = localStorage.getItem(seenKey) || ''; } catch (e) {}
     if (g.id === seen) return;        // 같은 증정 두 번 띄우지 않기
     try { localStorage.setItem(seenKey, g.id); } catch (e) {}
-    showGrantPopup(g.amount);
-    fetchCredits();                   // 잔액 즉시 갱신
+    fetchCredits();                   // 잔액은 어디서든 즉시 갱신
+    if (isOnHomeScreen()) {
+      showGrantPopup(g.amount);
+    } else {
+      // 홈이 아니면 대기 → 홈으로 돌아올 때 표시
+      pendingGrantAmount = g.amount;
+    }
   }, err => { console.warn('user doc watch fail', err && err.message); });
 }
 
@@ -2382,6 +2392,11 @@ function showScreen(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + name).classList.add('active');
   window.scrollTo(0, 0);
+  // 홈(노래 제작) 화면에 진입할 때, 대기 중인 크레딧 증정 알림이 있으면 표시
+  if (name === 'input' && pendingGrantAmount > 0) {
+    const amt = pendingGrantAmount; pendingGrantAmount = 0;
+    setTimeout(() => showGrantPopup(amt), 200);
+  }
 }
 
 function setProgress(pct, msg, sub) {
