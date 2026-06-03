@@ -155,6 +155,23 @@ async function logCredit(uid, amount, type, reason) {
   } catch (e) { console.warn('logCredit fail', e.message); }
 }
 
+// 사용자 화면에 '크레딧 받음' 미니 팝업을 띄우기 위한 마커.
+// source: 'admin' | 'share' | 'purchase' | 'referral' (등). id로 중복 표시 방지.
+async function markLastGrant(uid, amount, source, by) {
+  if (!fdb || !uid || !amount) return;
+  try {
+    await fdb.collection('users').doc(uid).set({
+      lastGrant: {
+        id: Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+        amount,
+        source: source || 'admin',
+        by: by || null,
+        at: admin.firestore.FieldValue.serverTimestamp()
+      }
+    }, { merge: true });
+  } catch (e) { console.warn('lastGrant mark fail', e.message); }
+}
+
 // 곡 생성 성공 시: songsMade 증가 + (첫 곡 & 추천 귀속됐으면) 추천인 보상 지급(무료 풀)
 async function onSongMade(uid) {
   if (!fdb || !uid) return;
@@ -187,7 +204,10 @@ async function onSongMade(uid) {
         t.set(rref, poolPatch(p, { referralCount: cnt + 1 }), { merge: true });
         return true;
       });
-      if (paid) await logCredit(payTo, REFERRAL_REWARD, 'free', 'referral');
+      if (paid) {
+        await logCredit(payTo, REFERRAL_REWARD, 'free', 'referral');
+        await markLastGrant(payTo, REFERRAL_REWARD, 'referral');
+      }
     }
   } catch (e) { console.warn('onSongMade fail', e.message); }
 }
@@ -250,17 +270,7 @@ async function grantCredits(uid, amount, adminUser) {
     });
   } catch (e) { console.warn('grant log fail', e.message); }
   await logCredit(uid, amount, 'free', 'admin');
-  // 사용자 화면에 알림 팝업 띄우기 위한 마커. id로 중복 방지.
-  try {
-    await ref.set({
-      lastGrant: {
-        id: Date.now() + '-' + Math.random().toString(36).slice(2, 8),
-        amount,
-        by: adminUser || 'admin',
-        at: admin.firestore.FieldValue.serverTimestamp()
-      }
-    }, { merge: true });
-  } catch (e) { console.warn('lastGrant marker fail', e.message); }
+  await markLastGrant(uid, amount, 'admin', adminUser || 'admin');
   return result;
 }
 
@@ -2158,6 +2168,7 @@ const server = http.createServer(async (req, res) => {
         return send(res, result.code || 400, { error: result.reason, message: result.message, credits: result.credits });
       }
       await logCredit(uid, SHARE_REWARD, 'free', 'share');
+      await markLastGrant(uid, SHARE_REWARD, 'share');
       return send(res, 200, { ok: true, credits: result.credits, credited: SHARE_REWARD });
     } catch (e) {
       return send(res, 500, { error: 'share_reward_fail', message: '잠시 후 다시 시도해주세요' });
@@ -2607,7 +2618,10 @@ const server = http.createServer(async (req, res) => {
     if (!credits) return send(res, 400, { error: 'unknown_amount', message: '알 수 없는 결제 금액이에요', amount: paidAmount });
 
     const result = await creditPaymentOnce(uid, String(paymentId), credits, paidAmount);
-    if (!result.already) await logCredit(uid, credits, 'paid', 'purchase');
+    if (!result.already) {
+      await logCredit(uid, credits, 'paid', 'purchase');
+      await markLastGrant(uid, credits, 'purchase');
+    }
     return send(res, 200, {
       ok: true,
       credited: result.already ? 0 : credits,
