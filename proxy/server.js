@@ -30,10 +30,11 @@ function genRefCode() {
 
 // ===== 결제(충전) — 포트원 V2 =====
 // 결제 금액(원)당 적립 크레딧. 클라가 보낸 금액이 아니라 포트원에서 조회한 실결제액으로만 매칭한다.
+// 충전 패키지: { 결제금액(원): { credits: 총 적립p, base: 기본 곡 수, bonus: 보너스 곡 수 } }
 const CREDIT_PACKS = {
-  1000: 10,   // 1곡
-  4900: 60,   // 6곡 (할인)
-  9900: 150,  // 15곡 (할인)
+  1000: { credits: 10,  base: 1,  bonus: 0 },   // 1곡
+  4900: { credits: 60,  base: 5,  bonus: 1 },   // 5+1곡
+  8900: { credits: 120, base: 10, bonus: 2 },   // 10+2곡
 };
 
 // firebase-admin 초기화 (FIREBASE_SERVICE_ACCOUNT 없으면 레거시 모드)
@@ -2405,7 +2406,13 @@ const server = http.createServer(async (req, res) => {
   // 충전 상품 목록 (금액→크레딧). 프론트가 표시/결제요청에 사용.
   if (path === '/packs') {
     const packs = Object.entries(CREDIT_PACKS)
-      .map(([amount, credits]) => ({ amount: Number(amount), credits, songs: Math.floor(credits / COST_PER_SONG) }))
+      .map(([amount, p]) => ({
+        amount: Number(amount),
+        credits: p.credits,
+        base: p.base,
+        bonus: p.bonus,
+        songs: p.base + p.bonus
+      }))
       .sort((a, b) => a.amount - b.amount);
     return send(res, 200, { enabled: CREDITS_ENABLED && !!process.env.PORTONE_V2_API_SECRET, packs, cost: COST_PER_SONG });
   }
@@ -2833,8 +2840,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     const paidAmount = p.amount && (p.amount.total ?? p.amount.paid);
-    const credits = CREDIT_PACKS[paidAmount];
-    if (!credits) return send(res, 400, { error: 'unknown_amount', message: '알 수 없는 결제 금액이에요', amount: paidAmount });
+    const pack = CREDIT_PACKS[paidAmount];
+    if (!pack) return send(res, 400, { error: 'unknown_amount', message: '알 수 없는 결제 금액이에요', amount: paidAmount });
+    const credits = pack.credits;
 
     const result = await creditPaymentOnce(uid, String(paymentId), credits, paidAmount);
     if (!result.already) {
