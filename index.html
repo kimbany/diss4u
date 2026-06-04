@@ -616,6 +616,11 @@
     font-family: inherit;
   }
   .grant-popup.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  /* 소멸 임박 안내는 주황 톤 + 클릭하면 내역 열림 */
+  .grant-popup.expire {
+    background: linear-gradient(135deg, var(--orange) 0%, #ffd9a8 100%);
+    cursor: pointer;
+  }
   .grant-popup .gp-emoji { font-size: 26px; line-height: 1; }
   .grant-popup .gp-body { flex: 1; min-width: 0; }
   .grant-popup .gp-title { font-size: 13px; font-weight: 600; opacity: .85; }
@@ -1099,7 +1104,17 @@
         </div>
       </div>
     </div>
-    <div style="font-size:11px;color:var(--text-dimmer);margin-bottom:14px;">* 곡을 만들 때는 무료 크레딧부터 차감됩니다.</div>
+    <div style="font-size:11px;color:var(--text-dimmer);margin-bottom:14px;">* 곡을 만들 때는 무료 크레딧부터 차감되며, 충전 포인트는 소멸 예정일이 가까운 것부터 사용됩니다.</div>
+
+    <!-- 충전(유료) 포인트 소멸 예정 안내 -->
+    <div id="chExpireWarn" style="display:none;background:rgba(255,200,158,0.1);border:1px solid rgba(255,200,158,0.35);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--orange);line-height:1.5;"></div>
+
+    <!-- 충전(유료) 포인트 내역 + 소멸 예정일 -->
+    <div class="label" style="margin-bottom:8px;">💳 충전 포인트 내역 (소멸 예정일)</div>
+    <div id="chPaidLots" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:18px;">
+      <div style="color:var(--text-dim);text-align:center;padding:14px 0;font-size:13px;">불러오는 중...</div>
+    </div>
+
     <div class="label" style="margin-bottom:8px;">크레딧 내역 (적립 · 사용)</div>
     <div id="chList" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
       <div style="color:var(--text-dim);text-align:center;padding:20px 0;">불러오는 중...</div>
@@ -1383,7 +1398,44 @@ async function fetchCredits() {
     if (typeof d.paidCredits === 'number') STATE.paidCredits = d.paidCredits;
     updateCreditUI();
     maybeClaimReferral();
+    maybeShowExpiryPopup(d.expiringSoon);   // 충전 포인트 소멸 임박 안내
   } catch (e) { console.warn('fetchCredits fail', e); }
+}
+
+// 충전 포인트 소멸 30일 이내면 홈 화면에 안내 팝업 (하루 1번, 만료일별 1번만)
+function maybeShowExpiryPopup(es) {
+  if (!es || !es.amount || !currentUser) return;
+  // 같은 만료건은 하루에 한 번만 — key: uid + 만료일(날짜) + 오늘날짜
+  const expDay = (es.expireAt || '').slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+  const key = 'diss4u_expWarn_' + currentUser.uid + '_' + expDay;
+  let last = '';
+  try { last = localStorage.getItem(key) || ''; } catch (e) {}
+  if (last === today) return;
+  try { localStorage.setItem(key, today); } catch (e) {}
+  const show = () => showExpiryPopup(es);
+  if (isOnHomeScreen()) show();
+  else setTimeout(show, 800);   // 다른 화면이면 잠시 후
+}
+
+function showExpiryPopup(es) {
+  const dt = new Date(es.expireAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+  document.querySelectorAll('.grant-popup.expire').forEach(el => el.remove());
+  const el = document.createElement('div');
+  el.className = 'grant-popup expire';
+  el.innerHTML =
+    '<div class="gp-emoji">⏳</div>'
+    + '<div class="gp-body">'
+    +   '<div class="gp-title">충전 포인트 소멸 예정</div>'
+    +   '<div class="gp-amount" style="font-size:15px;">' + es.amount + 'p · ' + dt + '(' + es.days + '일 후)</div>'
+    + '</div>'
+    + '<button class="gp-close" aria-label="닫기">×</button>';
+  document.body.appendChild(el);
+  const close = () => { el.classList.remove('show'); setTimeout(() => el.remove(), 250); };
+  el.querySelector('.gp-close').addEventListener('click', close);
+  el.addEventListener('click', (e) => { if (e.target === el || e.target.classList.contains('gp-body')) { openCreditHistory(); close(); } });
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(close, 9000);
 }
 
 // 저장된 추천 코드가 있으면 서버에 귀속 요청 (신규 유저만 서버에서 처리)
@@ -1977,6 +2029,7 @@ async function openCreditHistory() {
   document.getElementById('creditHistoryModal').classList.add('active');
   // 우선 캐시/현재값으로 요약 즉시 표시
   renderCreditSummary(STATE.credits, STATE.freeCredits, STATE.paidCredits);
+  loadPaidLots();   // 충전 포인트 내역 + 소멸 예정일
   const list = document.getElementById('chList');
   list.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px 0;">불러오는 중...</div>';
   try {
@@ -2019,6 +2072,55 @@ async function openCreditHistory() {
   } catch (e) {
     console.warn('credit history fail', e);
     list.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px 0;">내역을 불러오지 못했어요.</div>';
+  }
+}
+
+// 충전(유료) 포인트 내역 + 소멸 예정일 로드
+async function loadPaidLots() {
+  const box = document.getElementById('chPaidLots');
+  const warn = document.getElementById('chExpireWarn');
+  if (!box) return;
+  box.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:14px 0;font-size:13px;">불러오는 중...</div>';
+  if (warn) warn.style.display = 'none';
+  try {
+    const token = await currentUser.getIdToken();
+    const r = await fetch(getWorkerUrl() + '/paid-lots', { headers: { 'Authorization': 'Bearer ' + token } });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.enabled) {
+      box.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:14px 0;font-size:13px;">불러오지 못했어요.</div>';
+      return;
+    }
+    const lots = d.lots || [];
+    // 소멸 임박 안내 배너
+    if (warn && d.expiringSoon && d.expiringSoon.amount > 0) {
+      const es = d.expiringSoon;
+      const dt = new Date(es.expireAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+      warn.innerHTML = `⚠️ <b>${es.amount}p</b>가 <b>${dt}</b>(${es.days}일 후) 소멸 예정이에요. 그 전에 사용해주세요!`;
+      warn.style.display = '';
+    }
+    if (!lots.length) {
+      box.innerHTML = '<div style="color:var(--text-dimmer);text-align:center;padding:14px 0;font-size:13px;">충전한 포인트가 없어요.</div>';
+      return;
+    }
+    box.innerHTML = lots.map(l => {
+      const charged = new Date(l.chargedAt).toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' });
+      const expire = new Date(l.expireAt).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+      const soon = l.daysLeft <= 30;
+      const expColor = soon ? 'var(--orange)' : 'var(--text-dim)';
+      const usedNote = (l.remaining < l.credits) ? ` <span style="color:var(--text-dimmer);">(충전 ${l.credits}p 중)</span>` : '';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:11px 13px;">
+        <div>
+          <div style="font-size:11px;color:var(--text-dim);">${charged} 충전</div>
+          <div style="font-size:12px;margin-top:2px;color:${expColor};">소멸예정 ${expire} · ${l.daysLeft}일 남음</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-weight:800;color:var(--lime);">${l.remaining}p</div>${usedNote ? `<div style="font-size:10px;color:var(--text-dimmer);">${usedNote}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    console.warn('paid-lots fail', e);
+    box.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:14px 0;font-size:13px;">불러오지 못했어요.</div>';
   }
 }
 
