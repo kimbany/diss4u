@@ -20,6 +20,10 @@ const REFERRAL_REWARD = 10;   // 추천 보상 = 10포인트(1곡). 피추천인
 const REFERRAL_MAX = 100;     // 추천 보상 누적 상한(어뷰징 방지)
 const SHARE_REWARD = 2;       // 인스타 등 공유 보상 = 2포인트. 곡 1개당 1회만 지급(어뷰징 방지)
 
+// ===== 포인트(유료 충전) 유효기간 =====
+const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;   // 충전 포인트 유효기간 = 결제일로부터 1년
+const EXPIRE_WARN_MS = 30 * 24 * 60 * 60 * 1000;  // 소멸 30일 전부터 안내
+
 // 추천 코드 생성 (혼동되는 0/O/1/I 제외 8자리)
 function genRefCode() {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -115,6 +119,142 @@ function poolPatch(p, extra) {
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     ...(extra || {})
   };
+}
+
+// ===== 유료 충전 포인트 lot(만료 추적) =====
+// 충전 1건 = lot 1개: { credits(원래 충전량), remaining(남은량), at(충전ms), expireAt(만료ms), paymentId }
+// users 문서의 paidLots 배열에 저장. paid 풀 합계 = 살아있는 lot들의 remaining 합과 일치하도록 유지한다.
+function getPaidLots(data) {
+  const arr = (data && Array.isArray(data.paidLots)) ? data.paidLots : [];
+  return arr.map(l => ({
+    credits: Number(l.credits) || 0,
+    remaining: Number(l.remaining) || 0,
+    at: Number(l.at) || 0,
+    expireAt: Number(l.expireAt) || ((Number(l.at) || 0) + ONE_YEAR_MS),
+    paymentId: l.paymentId || null
+  }));
+}
+
+// 만료된 lot 제거 → 소멸 포인트량 반환. lots는 제자리 수정.
+function expireLots(lots, nowMs) {
+  let expired = 0;
+  for (const l of lots) {
+    if (l.remaining > 0 && l.expireAt <= nowMs) {
+      expired += l.remaining;
+      l.remaining = 0;
+    }
+  }
+  return expired;
+}
+
+// lot 배열에서 살아있는(remaining>0) 것만, 만료 임박 순(빠른 것 먼저)으로 정렬해 반환
+function liveLots(lots) {
+  return lots.filter(l => l.remaining > 0).sort((a, b) => a.expireAt - b.expireAt);
+}
+
+// 환불 복원용: 아직 만료 안 됐고 일부 소진된 lot을 만료 임박 순으로
+function liveLotsForRestore(lots) {
+  const now = Date.now();
+  return lots
+    .filter(l => l.expireAt > now && l.remaining < l.credits)
+    .sort((a, b) => a.expireAt - b.expireAt);
+}
+
+// paid 풀에서 amount만큼 차감 — 만료 임박 lot부터 소진. 실제 차감량 반환.
+function consumeLots(lots, amount) {
+  let need = amount;
+  for (const l of liveLots(lots)) {
+    if (need <= 0) break;
+    const take = Math.min(l.remaining, need);
+    l.remaining -= take;
+    need -= take;
+  }
+  return amount - need;
+}
+
+// 만료 처리를 반영해 저장할 patch 일부. (p.paid는 lot remaining 합과 동기화)
+function lotsPatch(lots) {
+  // 빈(소진/만료된) lot은 버리되, 최근 기록은 유지하지 않아도 됨(creditLog에 남음)
+  const kept = lots.filter(l => l.remaining > 0).map(l => ({
+    credits: l.credits, remaining: l.remaining, at: l.at, expireAt: l.expireAt, paymentId: l.paymentId || null
+  }));
+  return { paidLots: kept };
+}
+
+// 유저 문서를 받아 만료 lot을 정리한 결과를 트랜잭션 안에서 적용.
+// 반환: { p(풀), lots, expired }. 호출측이 t.set으로 저장해야 함.
+function applyExpiry(data, nowMs) {
+  const p = splitPools(data);
+  const lots = getPaidLots(data);
+  const expired = expireLots(lots, nowMs);
+  if (expired > 0) {
+    p.paid = Math.max(0, p.paid - expired);
+  }
+  // paid 풀과 lot 합계 정합성 보정 (구버전 문서: lot이 없는데 paid가 있으면 lot 하나로 마이그레이션)
+  const liveSum = lots.reduce((s, l) => s + l.remaining, 0);
+  if (lots.length === 0 && p.paid > 0) {
+    // lot 정보가 없는 기존 충전분 → 만료일을 알 수 없으므로 '지금부터 1년'으로 부여(사용자에게 불리하지 않게)
+    lots.push({ credits: p.paid, remaining: p.paid, at: nowMs, expireAt: nowMs + ONE_YEAR_MS, paymentId: null });
+  } else if (liveSum !== p.paid) {
+    // 불일치 시 lot 합계를 신뢰 (소멸/환불 등으로 어긋난 경우)
+    p.paid = liveSum;
+  }
+  return { p, lots, expired };
+}
+
+// 접속 시 호출: 만료된 충전 포인트를 정리하고 결과를 저장. ({ expired, credits })
+async function reconcileExpiry(uid) {
+  if (!fdb || !uid) return { expired: 0 };
+  const ref = fdb.collection('users').doc(uid);
+  try {
+    const out = await fdb.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) return { expired: 0, credits: 0 };
+      const now = Date.now();
+      const { p, lots, expired } = applyExpiry(snap.data(), now);
+      if (expired > 0 || needsLotBackfill(snap.data(), lots)) {
+        t.set(ref, poolPatch(p, lotsPatch(lots)), { merge: true });
+      }
+      return { expired, credits: p.free + p.paid };
+    });
+    if (out.expired > 0) await logCredit(uid, -out.expired, 'spend', 'expire');
+    return out;
+  } catch (e) { console.warn('reconcileExpiry fail', e.message); return { expired: 0 }; }
+}
+
+// 구버전 문서(lot 없음)인데 paid가 있어 백필이 필요한지
+function needsLotBackfill(data, lotsAfter) {
+  const had = (data && Array.isArray(data.paidLots)) ? data.paidLots.length : 0;
+  return had === 0 && lotsAfter.length > 0;
+}
+
+// 30일 이내 소멸 예정 충전 포인트 안내. { amount, expireAt(ISO), days } | null
+// 가장 먼저 만료될 lot 1건 기준으로 안내한다.
+function upcomingExpiry(data, nowMs) {
+  const lots = liveLots(getPaidLots(data));
+  if (!lots.length) return null;
+  const next = lots[0];   // 만료 임박 순 정렬되어 있음
+  const remainMs = next.expireAt - nowMs;
+  if (remainMs > EXPIRE_WARN_MS || remainMs < 0) return null;
+  // 같은 날 만료되는 lot들 합산
+  const sameDay = lots.filter(l => l.expireAt <= next.expireAt + 1000);
+  const amount = sameDay.reduce((s, l) => s + l.remaining, 0);
+  return {
+    amount,
+    expireAt: new Date(next.expireAt).toISOString(),
+    days: Math.max(0, Math.ceil(remainMs / (24 * 60 * 60 * 1000)))
+  };
+}
+
+// lot 목록을 사용자 표시용으로 변환 (충전 내역 + 소멸 예정일)
+function paidLotsView(data, nowMs) {
+  return liveLots(getPaidLots(data)).map(l => ({
+    credits: l.credits,
+    remaining: l.remaining,
+    chargedAt: new Date(l.at).toISOString(),
+    expireAt: new Date(l.expireAt).toISOString(),
+    daysLeft: Math.max(0, Math.ceil((l.expireAt - nowMs) / (24 * 60 * 60 * 1000)))
+  }));
 }
 
 // 유저 문서 조회 (없으면 신규 보너스 지급하며 생성). 추천 코드도 함께 보장한다.
@@ -246,15 +386,21 @@ async function chargeCredits(uid, amount) {
   const ref = fdb.collection('users').doc(uid);
   const result = await fdb.runTransaction(async (t) => {
     const snap = await t.get(ref);
-    const p = snap.exists
-      ? splitPools(snap.data())
-      : { free: SIGNUP_BONUS, paid: 0, freeGranted: SIGNUP_BONUS, paidGranted: 0 };
+    const now = Date.now();
+    const data = snap.exists ? snap.data() : { free: SIGNUP_BONUS, paid: 0, freeGranted: SIGNUP_BONUS, paidGranted: 0 };
+    // 차감 전 만료분 정리
+    const { p, lots } = applyExpiry(data, now);
     const total = p.free + p.paid;
-    if (total < amount) return { ok: false, credits: total };
+    if (total < amount) {
+      // 만료 정리 결과만이라도 저장
+      t.set(ref, poolPatch(p, lotsPatch(lots)), { merge: true });
+      return { ok: false, credits: total };
+    }
     const takeFree = Math.min(p.free, amount);
     p.free -= takeFree;
-    p.paid -= (amount - takeFree);
-    t.set(ref, poolPatch(p), { merge: true });
+    const takePaid = amount - takeFree;
+    if (takePaid > 0) { consumeLots(lots, takePaid); p.paid -= takePaid; }
+    t.set(ref, poolPatch(p, lotsPatch(lots)), { merge: true });
     return { ok: true, credits: p.free + p.paid };
   });
   if (result.ok) await logCredit(uid, -amount, 'spend', 'song');  // 사용 내역 기록
@@ -268,11 +414,24 @@ async function refundCredits(uid, amount) {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(ref);
       if (!snap.exists) return;
-      const p = splitPools(snap.data());
+      const now = Date.now();
+      const { p, lots } = applyExpiry(snap.data(), now);
       const restorePaid = Math.min(amount, Math.max(0, p.paidGranted - p.paid));
-      p.paid += restorePaid;
+      if (restorePaid > 0) {
+        p.paid += restorePaid;
+        // 차감으로 줄어든 lot에 우선 되돌림 (만료 임박 순으로 원래 충전량까지 채움)
+        let back = restorePaid;
+        for (const l of liveLotsForRestore(lots)) {
+          if (back <= 0) break;
+          const room = Math.max(0, l.credits - l.remaining);
+          const add = Math.min(room, back);
+          l.remaining += add; back -= add;
+        }
+        // 되돌릴 lot이 없으면(곡 생성 환불 등) 새 lot으로 — 만료는 지금부터 1년
+        if (back > 0) lots.push({ credits: back, remaining: back, at: now, expireAt: now + ONE_YEAR_MS, paymentId: 'refund' });
+      }
       p.free += (amount - restorePaid);
-      t.set(ref, poolPatch(p), { merge: true });
+      t.set(ref, poolPatch(p, lotsPatch(lots)), { merge: true });
     });
     await logCredit(uid, amount, 'refund', 'refund');  // 환불 내역 기록
   } catch (e) { console.warn('refund fail', e.message); }
@@ -311,15 +470,18 @@ async function disableUserAccount(uid, opts) {
   try {
     const res = await fdb.runTransaction(async (t) => {
       const snap = await t.get(ref);
-      const p = snap.exists ? splitPools(snap.data()) : { free: 0, paid: 0, freeGranted: 0, paidGranted: 0 };
+      const data = snap.exists ? snap.data() : { free: 0, paid: 0, freeGranted: 0, paidGranted: 0 };
+      const p = splitPools(data);
+      const lotsBefore = getPaidLots(data);
       const lf = p.free, lp = p.paid;
       p.free = 0; p.paid = 0;
       t.set(ref, poolPatch(p, {
+        paidLots: [],
         disabled: true,
         disabledAt: admin.firestore.FieldValue.serverTimestamp(),
         disabledBy: by,
-        // 관리자 복구 시 되돌려놓을 수 있도록 소멸 직전 풀 스냅샷 보관 (다음 차단 때 덮어씀)
-        forfeit: { free: lf, paid: lp, by, at: new Date() }
+        // 관리자 복구 시 되돌려놓을 수 있도록 소멸 직전 풀/lot 스냅샷 보관 (다음 차단 때 덮어씀)
+        forfeit: { free: lf, paid: lp, by, at: new Date(), lots: lotsBefore }
       }), { merge: true });
       return { lf, lp };
     });
@@ -340,12 +502,29 @@ async function restoreUserAccount(uid) {
   try {
     const res = await fdb.runTransaction(async (t) => {
       const snap = await t.get(ref);
-      const p = snap.exists ? splitPools(snap.data()) : { free: 0, paid: 0, freeGranted: 0, paidGranted: 0 };
       const data = snap.exists ? snap.data() : {};
+      const p = snap.exists ? splitPools(data) : { free: 0, paid: 0, freeGranted: 0, paidGranted: 0 };
       const f = data.forfeit;
       let rf = 0, rp = 0;
-      if (f) { rf = Number(f.free) || 0; rp = Number(f.paid) || 0; p.free += rf; p.paid += rp; }
+      let lots = getPaidLots(data);
+      if (f) {
+        rf = Number(f.free) || 0; rp = Number(f.paid) || 0;
+        p.free += rf; p.paid += rp;
+        // 차단 시 보관한 lot을 복원하되, 이미 만료된 것은 제외
+        if (Array.isArray(f.lots) && f.lots.length) {
+          const now = Date.now();
+          const restored = f.lots
+            .map(l => ({ credits: Number(l.credits) || 0, remaining: Number(l.remaining) || 0, at: Number(l.at) || 0, expireAt: Number(l.expireAt) || ((Number(l.at) || 0) + ONE_YEAR_MS), paymentId: l.paymentId || null }))
+            .filter(l => l.remaining > 0 && l.expireAt > now);
+          lots = lots.concat(restored);
+          // 복원된 lot 합과 p.paid 정합성 맞춤
+          const liveSum = lots.reduce((s, l) => s + l.remaining, 0);
+          p.paid = liveSum;
+          rp = restored.reduce((s, l) => s + l.remaining, 0);
+        }
+      }
       t.set(ref, poolPatch(p, {
+        ...lotsPatch(lots),
         disabled: false,
         restoredAt: admin.firestore.FieldValue.serverTimestamp(),
         forfeit: admin.firestore.FieldValue.delete()
@@ -467,13 +646,16 @@ async function creditPaymentOnce(uid, paymentId, credits, amount) {
     if (psnap.exists) {
       return { already: true, credits: (usnap.data() || {}).credits || 0 };
     }
-    const p = usnap.exists
-      ? splitPools(usnap.data())
-      : { free: 0, paid: 0, freeGranted: 0, paidGranted: 0 };
+    const now = Date.now();
+    const data = usnap.exists ? usnap.data() : {};
+    // 충전 전에 만료분부터 정리
+    const { p, lots } = applyExpiry(data, now);
     p.paid += credits;
     p.paidGranted += credits;
+    // 새 충전 lot 추가 (결제 시점부터 1년 유효)
+    lots.push({ credits, remaining: credits, at: now, expireAt: now + ONE_YEAR_MS, paymentId });
     const next = p.free + p.paid;
-    t.set(uref, poolPatch(p), { merge: true });
+    t.set(uref, poolPatch(p, lotsPatch(lots)), { merge: true });
     t.set(pref, {
       uid, paymentId, amount, credits, status: 'completed',
       createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -2313,7 +2495,13 @@ const server = http.createServer(async (req, res) => {
     if (!CREDITS_ENABLED) return send(res, 200, { enabled: false, credits: null, cost: COST_PER_SONG });
     const a = await verifyAuthFull(req);
     if (!a) return send(res, 401, { error: 'auth_required', message: '로그인이 필요해요' });
+    await getOrCreateUser(a.uid, a.email);
+    // 접속 시 만료된 충전 포인트 정리 (lazy expiry)
+    await reconcileExpiry(a.uid);
+    // 정리 후 최신 상태 다시 읽기
     const u = await getOrCreateUser(a.uid, a.email);
+    // 다가오는 소멸 예정 안내 (30일 이내 만료될 lot 합산)
+    const warn = upcomingExpiry(u, Date.now());
     return send(res, 200, {
       enabled: true,
       credits: u.credits || 0,
@@ -2321,7 +2509,8 @@ const server = http.createServer(async (req, res) => {
       freeCredits: u.free || 0,
       paidCredits: u.paid || 0,
       refCode: u.refCode || null,
-      shareReward: SHARE_REWARD
+      shareReward: SHARE_REWARD,
+      expiringSoon: warn        // { amount, expireAt(ISO), days } | null
     });
   }
 
@@ -2357,6 +2546,26 @@ const server = http.createServer(async (req, res) => {
       freeCredits: u.free || 0,
       paidCredits: u.paid || 0,
       items
+    });
+  }
+
+  // 충전(유료) 포인트 내역 + 소멸 예정일. 접속 시 만료분 정리 후 살아있는 충전 lot을 반환.
+  if (path === '/paid-lots') {
+    if (!CREDITS_ENABLED) return send(res, 200, { enabled: false, lots: [] });
+    const a = await verifyAuthFull(req);
+    if (!a) return send(res, 401, { error: 'auth_required', message: '로그인이 필요해요' });
+    await getOrCreateUser(a.uid, a.email);
+    await reconcileExpiry(a.uid);
+    const snap = await fdb.collection('users').doc(a.uid).get();
+    const data = snap.exists ? snap.data() : {};
+    const now = Date.now();
+    const lots = paidLotsView(data, now)
+      .sort((x, y) => String(y.chargedAt).localeCompare(String(x.chargedAt)));  // 최신 충전 먼저
+    return send(res, 200, {
+      enabled: true,
+      paidCredits: (splitPools(data).paid) || 0,
+      lots,
+      expiringSoon: upcomingExpiry(data, now)
     });
   }
 
