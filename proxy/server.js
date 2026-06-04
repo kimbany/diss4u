@@ -173,6 +173,34 @@ async function markLastGrant(uid, amount, source, by) {
   } catch (e) { console.warn('lastGrant mark fail', e.message); }
 }
 
+// 충전 크레딧 소멸일(다음에 만료될 충전 건): 결제일 + 1년.
+// FIFO로 가장 오래된 미소진 결제 건을 찾아 만료일을 산출.
+// 입력: uid, 현재 paidCredits(잔액). 결과: ISO 문자열 또는 null.
+const PAID_CREDIT_EXPIRY_DAYS = 365;
+async function computeNextPaidExpiry(uid, paidBalance) {
+  if (!fdb || !uid || !paidBalance || paidBalance <= 0) return null;
+  try {
+    const qs = await fdb.collection('payments').where('uid', '==', uid).get();
+    const payments = qs.docs.map(d => {
+      const x = d.data();
+      const net = (Number(x.credits) || 0) - (Number(x.refundedCredits) || 0); // 환불분 제외 적립
+      const ts = (x.createdAt && x.createdAt.toDate) ? x.createdAt.toDate() : null;
+      const status = x.status || 'completed';
+      return { net, at: ts, status };
+    }).filter(p => p.at && p.net > 0 && p.status !== 'refunded');
+    if (!payments.length) return null;
+    payments.sort((a, b) => a.at - b.at);                  // 오래된 순
+    const totalGranted = payments.reduce((s, p) => s + p.net, 0);
+    let spent = Math.max(0, totalGranted - paidBalance);    // 이미 소진된 양
+    for (const p of payments) {
+      if (spent >= p.net) { spent -= p.net; continue; }     // 이 건은 이미 다 썼음
+      const exp = new Date(p.at.getTime() + PAID_CREDIT_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+      return exp.toISOString();                              // 가장 먼저 만료될 건
+    }
+  } catch (e) { console.warn('computeNextPaidExpiry fail', e.message); }
+  return null;
+}
+
 // 곡 생성 성공 시: songsMade 증가 + (첫 곡 & 추천 귀속됐으면) 추천인 보상 지급(무료 풀)
 async function onSongMade(uid) {
   if (!fdb || !uid) return;
@@ -2472,6 +2500,7 @@ const server = http.createServer(async (req, res) => {
           if (d.createdAt && d.createdAt.toDate) createdAt = d.createdAt.toDate().toISOString();
         }
       } catch (e) {}
+      const paidExpiryAt = await computeNextPaidExpiry(u.uid, p.paid);
       out.push({
         uid: u.uid,
         email: u.email,
@@ -2482,7 +2511,8 @@ const server = http.createServer(async (req, res) => {
         availableCredits: p.free + p.paid,           // 가용 가능 크레딧(현재 잔액)
         freeCredits: p.free,                         // 무료 크레딧 보유
         paidGranted: p.paidGranted,                  // 충전 크레딧(총 충전)
-        paidCredits: p.paid                          // 충전 크레딧 중 가용
+        paidCredits: p.paid,                         // 충전 크레딧 중 가용
+        paidExpiryAt                                  // 다음에 소멸될 충전 건 만료일(ISO) | null
       });
     }
     out.sort((a, b) => String(b.signupAt || '').localeCompare(String(a.signupAt || '')));

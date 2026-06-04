@@ -177,11 +177,12 @@
                 <th style="text-align:right">무료 보유</th>
                 <th style="text-align:right">충전(누적)</th>
                 <th style="text-align:right">충전 가용</th>
+                <th>충전 소멸일</th>
                 <th></th>
               </tr>
             </thead>
             <tbody id="memberRows">
-              <tr><td colspan="9" style="color:var(--dim)">불러오는 중…</td></tr>
+              <tr><td colspan="10" style="color:var(--dim)">불러오는 중…</td></tr>
             </tbody>
           </table>
         </div>
@@ -329,12 +330,27 @@ function fmtDate(s) {
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 
+// 충전 소멸일: 날짜(KST, 시:분 생략) + D-N 표시. 충전 잔액 없으면 '-'.
+function fmtPaidExpiry(iso) {
+  if (!iso) return '<span style="color:var(--dim)">-</span>';
+  const d = new Date(iso);
+  if (isNaN(d)) return '<span style="color:var(--dim)">-</span>';
+  const day = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+  const ms = d.getTime() - Date.now();
+  const days = Math.ceil(ms / (24 * 60 * 60 * 1000));
+  let badge;
+  if (days <= 0) badge = '<span class="statpill refunded">만료</span>';
+  else if (days <= 30) badge = '<span class="statpill partial_refunded">D-' + days + '</span>';
+  else badge = '<span class="sub">D-' + days + '</span>';
+  return day + ' ' + badge;
+}
+
 function renderMembers() {
   const q = $('search').value.trim().toLowerCase();
   const rows = MEMBERS.filter(m => !q || (m.email || '').toLowerCase().includes(q));
   $('memberStat').textContent = `총 ${MEMBERS.length}명` + (q ? ` · 검색 ${rows.length}명` : '');
   if (!rows.length) {
-    $('memberRows').innerHTML = '<tr><td colspan="9" style="color:var(--dim)">회원이 없어요</td></tr>';
+    $('memberRows').innerHTML = '<tr><td colspan="10" style="color:var(--dim)">회원이 없어요</td></tr>';
     return;
   }
   $('memberRows').innerHTML = rows.map(m => {
@@ -353,6 +369,7 @@ function renderMembers() {
       <td class="num free">${m.freeCredits}</td>
       <td class="num paid">${m.paidGranted}</td>
       <td class="num paid">${m.paidCredits}</td>
+      <td>${fmtPaidExpiry(m.paidExpiryAt)}</td>
       <td class="actions">
         <button class="btn small secondary" data-act="songs" data-uid="${m.uid}" data-email="${em}">제작물</button>
         <button class="btn small secondary" data-act="ledger" data-uid="${m.uid}" data-email="${em}" style="margin-left:6px;">크레딧 내역</button>
@@ -382,7 +399,7 @@ function escapeHtml(s) {
 
 async function loadMembers() {
   setMsg($('memberMsg'), '');
-  $('memberRows').innerHTML = '<tr><td colspan="9" style="color:var(--dim)">불러오는 중…</td></tr>';
+  $('memberRows').innerHTML = '<tr><td colspan="10" style="color:var(--dim)">불러오는 중…</td></tr>';
   const r = await api('/admin/users');
   if (r.status === 401) { logout(); setMsg($('loginMsg'), '세션이 만료됐어요. 다시 로그인하세요', 'err'); return; }
   if (!r.ok || !r.data.ok) { setMsg($('memberMsg'), r.data.message || '회원 목록을 불러오지 못했어요', 'err'); $('memberRows').innerHTML = ''; return; }
@@ -434,7 +451,7 @@ async function toggleSongs(uid, email) {
   if (!mrow) return;
   const tr = document.createElement('tr');
   tr.id = 'songs-' + uid;
-  tr.innerHTML = '<td colspan="9" style="background:var(--panel2);"><div class="msg" style="color:var(--dim)">제작물 불러오는 중…</div></td>';
+  tr.innerHTML = '<td colspan="10" style="background:var(--panel2);"><div class="msg" style="color:var(--dim)">제작물 불러오는 중…</div></td>';
   mrow.after(tr);
   const r = await api('/admin/songs?uid=' + encodeURIComponent(uid));
   if (r.status === 401) { logout(); return; }
@@ -501,7 +518,7 @@ async function toggleLedger(uid, email) {
   if (!mrow) return;
   const tr = document.createElement('tr');
   tr.id = 'ledger-' + uid;
-  tr.innerHTML = '<td colspan="9" style="background:var(--panel2);"><div class="msg" style="color:var(--dim)">크레딧 내역 불러오는 중…</div></td>';
+  tr.innerHTML = '<td colspan="10" style="background:var(--panel2);"><div class="msg" style="color:var(--dim)">크레딧 내역 불러오는 중…</div></td>';
   mrow.after(tr);
   const r = await api('/admin/credit-history?uid=' + encodeURIComponent(uid));
   if (r.status === 401) { logout(); return; }
