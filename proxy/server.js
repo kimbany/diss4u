@@ -782,7 +782,14 @@ function buildPrompt(params) {
   const genre = GENRE_MAP[genreRaw] || genreRaw;
   const genderText = { male: '남자', female: '여자', pet: '반려동물' }[gender] || '미지정';
   const langText = { ko: '한글', en: '영어', mix: '섞기' }[lang] || '한글';
-  const fixed = (mustInclude && mustInclude.trim()) ? mustInclude.trim() : '(없음)';
+  // 꼭 넣고 싶은 문장: 콤마(,) 또는 줄바꿈으로 여러 문장 구분 → 각 문장을 그대로 보존
+  const mustList = (mustInclude && mustInclude.trim())
+    ? mustInclude.split(/[,\n]/).map(s => s.trim()).filter(Boolean)
+    : [];
+  const fixed = mustList.length
+    ? mustList.map(s => `"${s}"`).join('\n')   // 각 문장을 따옴표로 감싸 줄바꿈으로 나열
+    : '(없음)';
+  const fixedCount = mustList.length;
   const rel = (relationship && relationship.trim()) ? relationship.trim() : '친구';
   // useNameInLyrics가 false로 명시되면 이름은 제목에만 쓰고 가사 본문에는 절대 못 쓰게 함
   const nameRule = (useNameInLyrics === false)
@@ -856,7 +863,7 @@ ${rel}
 [키워드]
 ${keywords}
 
-[꼭 넣고 싶은 문장]
+[꼭 넣고 싶은 문장] (아래 ${fixedCount}개 문장, 각각 따옴표로 구분됨)
 ${fixed}
 
 [가사 언어]
@@ -1697,14 +1704,30 @@ B줄 = 그걸 더 약오르게 만드는 한마디
 
 ---
 
+★★ [꼭 넣고 싶은 문장] 처리 규칙 — 반드시 지켜라 ★★
+
 [꼭 넣고 싶은 문장]이 "(없음)"이 아니면:
 
-* 문장을 절대 수정하지 마라
-* 문장을 자연스럽게 가사 흐름 안에 삽입해라
-* 앞뒤 문장과 연결되게 작성해라
-* 전체 10줄 제한 안에서 자연스럽게 포함해라
+* 거기 적힌 문장들은 사용자가 노래에 꼭 넣고 싶어 직접 쓴 문장이다.
+* 각 문장은 따옴표("")로 구분되어 있다. 여러 개일 수 있다.
+* 제시된 문장을 "하나도 빠짐없이 전부" 가사에 넣어야 한다.
+* 각 문장은 글자 그대로(원문 그대로) 가사의 한 줄로 사용해라.
+  - 단어를 바꾸거나, 줄이거나, 풀어쓰거나, 의역하지 마라.
+  - 예: 사용자가 "입만 열면 분위기 박살"이라 썼으면
+    가사에 정확히 "입만 열면 분위기 박살"이 한 줄로 들어가야 한다.
+* 단, 자연스러운 노래를 위해 문장 끝에 "~네", "~지", "야" 같은
+  조사/어미를 아주 살짝 붙이는 것은 허용한다. (핵심 단어는 그대로 유지)
+* 이 문장들은 주로 Verse나 Pre-Hook에 배치하고,
+  가장 임팩트 있는 문장 하나는 Hook에 써도 좋다.
+* 키워드와 이 문장들이 자연스럽게 이어지도록 앞뒤 줄을 구성해라.
+* 전체 14줄 구조(Verse 4 + Pre-Hook 2 + Hook 8) 안에서,
+  이 문장들이 우선적으로 들어갈 자리를 확보해라.
+  (문장 개수가 많으면 Verse/Pre-Hook을 이 문장들 위주로 채워라.)
 
-"(없음)"이면 무시해라.
+다 쓴 후 확인해라: 제시된 문장이 전부 가사에 들어갔는가?
+하나라도 빠졌으면 반드시 넣어서 다시 작성해라.
+
+"(없음)"이면 이 규칙은 무시해라.
 
 ---
 
