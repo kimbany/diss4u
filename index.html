@@ -912,10 +912,10 @@
       <span class="btn-mic" style="color:var(--purple);">📹</span>
       <span style="display:flex;flex-direction:column;align-items:center;line-height:1.25;">
         <span>SNS 공유</span>
-        <span style="font-size:11px;font-weight:600;opacity:.85;">인스타 공유 시 +2크레딧 증정 🎁</span>
+        <span style="font-size:11px;font-weight:600;opacity:.85;">인스타·틱톡·유튜브 쇼츠 · 공유 시 +2크레딧 🎁</span>
       </span>
     </button>
-    <div style="text-align:center;font-size:11px;color:var(--text-dim);margin-bottom:14px;">곡당 공유 1회만 크레딧이 증정돼요</div>
+    <div style="text-align:center;font-size:11px;color:var(--text-dim);margin-bottom:14px;">곡당 공유(또는 저장) 1회만 크레딧이 증정돼요</div>
 
     <div class="action-grid">
       <button class="btn-secondary" onclick="downloadSong()">⬇️ MP3 받기</button>
@@ -1124,7 +1124,10 @@
 
 <!-- ===== INSTA VIDEO MODAL ===== -->
 <div class="modal-overlay" id="videoModal">
-  <div class="modal" style="max-width:360px;">
+  <div class="modal" style="max-width:360px;position:relative;">
+    <button id="videoMuteBtn" type="button" onclick="toggleVideoMute()" title="만드는 동안 스피커 음소거 (저장될 영상에는 소리 그대로)"
+      aria-label="스피커 음소거"
+      style="position:absolute;top:14px;right:14px;background:var(--bg-card-2);border:1px solid var(--border);border-radius:10px;width:38px;height:38px;cursor:pointer;color:var(--text);display:none;align-items:center;justify-content:center;padding:0;"></button>
     <div class="modal-title" id="videoModalTitle">📹 SNS 공유 영상</div>
     <div class="modal-desc" id="videoStatus" style="margin-bottom:14px;">준비 중...</div>
 
@@ -1144,8 +1147,23 @@
         style="background:var(--lime);color:#1a1a1f;border-color:var(--lime);font-weight:700;">📤 공유하기</button>
       <button class="btn-secondary" onclick="downloadInstaVideo()">⬇️ 저장</button>
     </div>
+    <div id="videoShareTip" style="display:none;font-size:11px;color:var(--text-dim);line-height:1.6;margin-top:10px;text-align:center;">
+      💡 <b>인스타·카톡</b>은 공유하기로 바로 올릴 수 있어요.<br>
+      <b>틱톡·유튜브 쇼츠</b>는 <b>저장</b> 후 해당 앱에서 업로드하는 게 가장 확실해요.
+    </div>
 
     <button class="btn-secondary" id="videoCloseBtn" onclick="closeVideoModal()" style="margin-top:10px;width:100%;">닫기</button>
+  </div>
+</div>
+
+<!-- ===== 인앱 브라우저 안내 모달 (구글 로그인 403 방지) ===== -->
+<div class="modal-overlay" id="inappGuideModal">
+  <div class="modal" style="max-width:340px;">
+    <div class="modal-title">🌐 브라우저에서 열어주세요</div>
+    <div class="modal-desc" id="inappGuideBody" style="margin:12px 0 18px;line-height:1.7;">
+      앱 안의 브라우저에서는 구글 로그인이 막혀 있어요. 기본 브라우저로 열어주세요.
+    </div>
+    <button class="btn-secondary" onclick="document.getElementById('inappGuideModal').classList.remove('active')" style="width:100%;">알겠어요</button>
   </div>
 </div>
 
@@ -1863,15 +1881,52 @@ function chargeMsg(text, isError) {
   bal.style.color = isError ? '#ff8a8a' : 'var(--text-dim)';
 }
 
+// 네이버·카카오·인스타 등 '인앱 브라우저'인지 감지 (구글 로그인이 차단됨)
+function isInAppBrowser() {
+  const ua = (navigator.userAgent || '').toLowerCase();
+  return /naver|inapp|kakaotalk|instagram|fb_iab|fban|fbav|line|daumapps|everytimeapp|whale\/|band|snapchat/.test(ua);
+}
+
 function loginGoogle() {
+  // 인앱 브라우저면 구글이 로그인을 막으므로(403 disallowed_useragent) 기본 브라우저로 열도록 안내
+  if (isInAppBrowser()) {
+    showInAppBrowserGuide();
+    return;
+  }
   const provider = new firebase.auth.GoogleAuthProvider();
   auth.signInWithPopup(provider).catch(err => {
     if (err && err.code === 'auth/user-disabled') {
       showError('탈퇴한 계정이에요. 이 구글 계정으로는 다시 가입할 수 없습니다.');
       return;
     }
+    // 팝업이 막히거나 인앱 환경이면 안내
+    if (err && (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment' || err.code === 'auth/internal-error')) {
+      showInAppBrowserGuide();
+      return;
+    }
     showError('로그인 실패: ' + (err.message || err.code));
   });
+}
+
+// 인앱 브라우저 안내: 기본 브라우저(사파리/크롬)로 열어야 구글 로그인 가능
+function showInAppBrowserGuide() {
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
+  const how = isIOS
+    ? '오른쪽 위/아래 메뉴(···)를 눌러 <b>Safari로 열기</b>를 선택해주세요.'
+    : '오른쪽 위 메뉴(⋮)를 눌러 <b>다른 브라우저로 열기</b> 또는 <b>Chrome으로 열기</b>를 선택해주세요.';
+  // 클립보드에 주소 복사 시도 (사용자가 붙여넣기 쉽게)
+  try { navigator.clipboard && navigator.clipboard.writeText(location.href); } catch (e) {}
+  const m = document.getElementById('inappGuideModal');
+  if (m) {
+    const body = document.getElementById('inappGuideBody');
+    if (body) body.innerHTML =
+      '카카오톡·네이버·인스타 등 <b>앱 안의 브라우저</b>에서는 구글 로그인이 막혀 있어요.<br><br>'
+      + how + '<br><br>'
+      + '(주소가 복사됐어요. 새 브라우저에 붙여넣어도 돼요)';
+    m.classList.add('active');
+  } else {
+    alert('카카오톡·네이버·인스타 등 앱 안의 브라우저에서는 구글 로그인이 막혀 있어요.\n\n' + (isIOS ? '메뉴(···)에서 "Safari로 열기"' : '메뉴(⋮)에서 "다른 브라우저로 열기"') + '를 선택해주세요.\n\n(주소가 복사됐어요)');
+  }
 }
 
 async function loginKakao() {
@@ -2020,7 +2075,7 @@ document.addEventListener('click', () => {
 
 function openMyList() {
   renderMyList();
-  showScreen('mylist');
+  pushScreen('mylist');
 }
 
 // ===== 크레딧 확인 (적립/사용 내역) =====
@@ -2144,8 +2199,15 @@ function closeCreditHistory() {
 }
 
 function goHome() {
-  showScreen('input');
   loadHistory();
+  // 현재 history가 input 위에 쌓여 있으면 자연스러운 뒤로가기로 처리 → 브라우저 forward도 가능
+  try {
+    if (history.state && history.state.screen && history.state.screen !== 'input') {
+      history.back();
+      return;
+    }
+  } catch (e) {}
+  showScreen('input');
 }
 
 async function renderMyList() {
@@ -2518,6 +2580,30 @@ function showScreen(name) {
   }
 }
 
+// 화면 이동 + 브라우저 히스토리 push (뒤로가기 시 이전 화면으로 돌아갈 수 있게)
+function pushScreen(name) {
+  try {
+    if (!history.state || history.state.screen !== name) {
+      history.pushState({ screen: name }, '');
+    }
+  } catch (e) {}
+  showScreen(name);
+}
+
+// 초기 history 마커 + 뒤로가기 처리
+(function setupScreenHistory() {
+  try {
+    if (!history.state || !history.state.screen) {
+      history.replaceState({ screen: 'input' }, '');
+    }
+  } catch (e) {}
+  window.addEventListener('popstate', function (e) {
+    const target = (e && e.state && e.state.screen) || 'input';
+    // popstate일 때는 push하지 말고 UI만 전환
+    showScreen(target);
+  });
+})();
+
 function setProgress(pct, msg, sub) {
   document.getElementById('progressFill').style.width = pct + '%';
   document.getElementById('loadingMsg').textContent = msg;
@@ -2560,7 +2646,7 @@ function showResult() {
     audio.src = song.audioUrl;
     wrap.style.display = 'block';
   }
-  showScreen('result');
+  pushScreen('result');
   mountAd('adResult', AD_SLOT_RESULT);
   mountCoupangBanner('coupangResult');   // 노래 완성 하단 쿠팡 특가 배너
 }
@@ -2730,8 +2816,9 @@ async function shareKakao() {
 // ===================== 인스타용 영상 만들기 =====================
 const VIDEO = {
   blob: null, blobUrl: null,
-  audioCtx: null, srcNode: null, recorder: null,
-  raf: null, drawTimer: null, stopTimer: null, active: false
+  audioCtx: null, srcNode: null, recorder: null, speakerGain: null,
+  raf: null, drawTimer: null, stopTimer: null, active: false,
+  muted: false
 };
 const VIDEO_PALETTE = ['#d4ff3a', '#a3e5ff', '#c5a3ff', '#ffb3d9'];
 
@@ -2806,10 +2893,34 @@ function closeVideoModal() {
   try { if (VIDEO.recorder && VIDEO.recorder.state === 'recording') VIDEO.recorder.stop(); } catch (e) {}
   try { if (VIDEO.srcNode) VIDEO.srcNode.stop(); } catch (e) {}
   try { if (VIDEO.audioCtx && VIDEO.audioCtx.state !== 'closed') VIDEO.audioCtx.close(); } catch (e) {}
-  VIDEO.recorder = null; VIDEO.srcNode = null; VIDEO.audioCtx = null;
+  VIDEO.recorder = null; VIDEO.srcNode = null; VIDEO.audioCtx = null; VIDEO.speakerGain = null;
+  const muteBtnClose = document.getElementById('videoMuteBtn');
+  if (muteBtnClose) muteBtnClose.style.display = 'none';
   const v = document.getElementById('videoPreview');
   v.pause(); v.removeAttribute('src'); v.load();
   document.getElementById('videoModal').classList.remove('active');
+}
+
+// 평면형 스피커 아이콘 (Lucide 스타일, 24x24 viewBox)
+const SPEAKER_ICON_ON =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>' +
+  '<path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>' +
+  '<path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>' +
+  '</svg>';
+const SPEAKER_ICON_OFF =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>' +
+  '<line x1="23" y1="9" x2="17" y2="15"/>' +
+  '<line x1="17" y1="9" x2="23" y2="15"/>' +
+  '</svg>';
+
+// 만드는 동안 스피커만 음소거. 녹음 경로(영상에 저장될 소리)는 영향 없음.
+function toggleVideoMute() {
+  VIDEO.muted = !VIDEO.muted;
+  if (VIDEO.speakerGain) VIDEO.speakerGain.gain.value = VIDEO.muted ? 0 : 1;
+  const btn = document.getElementById('videoMuteBtn');
+  if (btn) btn.innerHTML = VIDEO.muted ? SPEAKER_ICON_OFF : SPEAKER_ICON_ON;
 }
 
 function wrapText(ctx, text, maxWidth) {
@@ -2980,6 +3091,8 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song) {
 async function makeInstaVideo() {
   const song = STATE.currentSong;
   if (!song || !song.audioUrl) { showToast('오디오가 없어요'); return; }
+  // 새 영상 만들 때마다 스피커 음소거 상태 초기화 (직전 시도의 상태가 남아있지 않도록)
+  VIDEO.muted = false;
 
   const mime = pickVideoMime();
   if (mime === null) {
@@ -3018,7 +3131,10 @@ async function makeInstaVideo() {
   const duration = audioBuffer.duration;
   const ctxA = VIDEO.audioCtx;
 
-  // 2) 오디오 그래프: source -> analyser -> mediaStreamDestination (+ 스피커)
+  // 2) 오디오 그래프:
+  //    녹음 경로: source -> analyser -> mediaStreamDestination  (영상 파일에 들어가는 소리, 항상 1.0)
+  //    스피커 경로: source -> speakerGain -> ctxA.destination   (사용자가 듣는 소리, 음소거 토글 가능)
+  //    두 경로가 분리돼 있어서 스피커를 끄더라도 저장될 영상의 오디오는 그대로 유지됨.
   const srcNode = ctxA.createBufferSource();
   srcNode.buffer = audioBuffer;
   const analyser = ctxA.createAnalyser();
@@ -3027,8 +3143,18 @@ async function makeInstaVideo() {
   const dest = ctxA.createMediaStreamDestination();
   srcNode.connect(analyser);
   analyser.connect(dest);
-  srcNode.connect(ctxA.destination);
+  const speakerGain = ctxA.createGain();
+  speakerGain.gain.value = 1;   // 기본은 스피커 ON (버튼 누르면 무음으로 토글)
+  srcNode.connect(speakerGain);
+  speakerGain.connect(ctxA.destination);
   VIDEO.srcNode = srcNode;
+  VIDEO.speakerGain = speakerGain;
+  // 만드는 동안만 무음 버튼 노출 (flex로 띄워서 SVG 가운데 정렬)
+  const muteBtn = document.getElementById('videoMuteBtn');
+  if (muteBtn) {
+    muteBtn.style.display = 'flex';
+    muteBtn.innerHTML = SPEAKER_ICON_ON;
+  }
 
   // 3) 캔버스 + 스트림 합치기 (모바일 부하 줄이려 540x960)
   const W = 540, H = 960;
@@ -3057,15 +3183,17 @@ async function makeInstaVideo() {
   //    한 프레임이 에러나도 try/catch로 루프가 죽지 않게 한다.
   VIDEO.active = true;
   try { await ctxA.resume(); } catch (e) {}
-  recorder.start();
+  // 1초 단위 청크로 받으면 모바일에서 트랙이 중간에 멈춰도 그때까지의 영상이 보존됨.
+  try { recorder.start(1000); } catch (e) { recorder.start(); }
   srcNode.start();
   const startAudioTime = ctxA.currentTime;
 
   function stopDraw() {
     if (VIDEO.drawTimer) { clearInterval(VIDEO.drawTimer); VIDEO.drawTimer = null; }
   }
+  // 그리기 루프: 녹음이 끝날 때까지 캔버스 프레임을 계속 공급 → 영상 트랙이 도중에 멈추지 않게.
   VIDEO.drawTimer = setInterval(() => {
-    if (!VIDEO.active) { stopDraw(); return; }
+    if (!VIDEO.active || !recorder || recorder.state !== 'recording') { stopDraw(); return; }
     const elapsed = ctxA.currentTime - startAudioTime;
     try {
       analyser.getByteFrequencyData(freq);
@@ -3073,16 +3201,13 @@ async function makeInstaVideo() {
     } catch (e) { console.warn('frame err', e); }
     const pct = Math.min(elapsed / duration, 1);
     setVideoStatus('영상 만드는 중... ' + Math.round(pct * 100) + '% (' + Math.ceil(duration) + '초)', pct);
-    if (elapsed >= duration) stopDraw();
   }, 33);
 
   srcNode.onended = () => {
-    stopDraw();
     if (recorder.state === 'recording') { try { recorder.stop(); } catch (e) {} }
   };
   // 안전 타이머
   VIDEO.stopTimer = setTimeout(() => {
-    stopDraw();
     if (recorder.state === 'recording') { try { recorder.stop(); } catch (e) {} }
   }, (duration + 2) * 1000);
 
@@ -3101,10 +3226,14 @@ async function makeInstaVideo() {
   // 결과 표시
   document.getElementById('videoCanvasWrap').style.display = 'none';
   document.getElementById('videoProgressTrack').style.display = 'none';
+  const muteBtnDone = document.getElementById('videoMuteBtn');
+  if (muteBtnDone) muteBtnDone.style.display = 'none';
+  VIDEO.speakerGain = null;
   const v = document.getElementById('videoPreview');
   v.src = VIDEO.blobUrl;
   v.style.display = 'block';
   document.getElementById('videoActions').style.display = 'grid';
+  { const tip = document.getElementById('videoShareTip'); if (tip) tip.style.display = 'block'; }
   const isMp4 = outType.includes('mp4');
   setVideoStatus(isMp4 ? '✅ 완성! 공유하거나 저장하세요.'
     : '✅ 완성! (webm 형식) SNS에서 안 받으면 저장 후 올려주세요.');
@@ -3134,7 +3263,7 @@ async function shareInstaVideo() {
       console.warn('video share fail', e);
     }
   }
-  showToast('공유시트 미지원 — 저장 후 SNS에 올려주세요');
+  showToast('공유시트 미지원 — 저장 후 SNS 앱에 올려주세요');
   downloadInstaVideo();
 }
 
