@@ -1127,7 +1127,7 @@
   <div class="modal" style="max-width:360px;position:relative;">
     <button id="videoMuteBtn" type="button" onclick="toggleVideoMute()" title="만드는 동안 스피커 음소거 (저장될 영상에는 소리 그대로)"
       aria-label="스피커 음소거"
-      style="position:absolute;top:14px;right:14px;background:var(--bg-card-2);border:1px solid var(--border);border-radius:10px;width:38px;height:38px;cursor:pointer;color:var(--text);display:none;font-size:16px;line-height:1;padding:0;">🔊</button>
+      style="position:absolute;top:14px;right:14px;background:var(--bg-card-2);border:1px solid var(--border);border-radius:10px;width:38px;height:38px;cursor:pointer;color:var(--text);display:none;align-items:center;justify-content:center;padding:0;"></button>
     <div class="modal-title" id="videoModalTitle">📹 인스타·틱톡용 영상</div>
     <div class="modal-desc" id="videoStatus" style="margin-bottom:14px;">준비 중...</div>
 
@@ -2818,12 +2818,26 @@ function closeVideoModal() {
   document.getElementById('videoModal').classList.remove('active');
 }
 
+// 평면형 스피커 아이콘 (Lucide 스타일, 24x24 viewBox)
+const SPEAKER_ICON_ON =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>' +
+  '<path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>' +
+  '<path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>' +
+  '</svg>';
+const SPEAKER_ICON_OFF =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>' +
+  '<line x1="23" y1="9" x2="17" y2="15"/>' +
+  '<line x1="17" y1="9" x2="23" y2="15"/>' +
+  '</svg>';
+
 // 만드는 동안 스피커만 음소거. 녹음 경로(영상에 저장될 소리)는 영향 없음.
 function toggleVideoMute() {
   VIDEO.muted = !VIDEO.muted;
   if (VIDEO.speakerGain) VIDEO.speakerGain.gain.value = VIDEO.muted ? 0 : 1;
   const btn = document.getElementById('videoMuteBtn');
-  if (btn) btn.textContent = VIDEO.muted ? '🔇' : '🔊';
+  if (btn) btn.innerHTML = VIDEO.muted ? SPEAKER_ICON_OFF : SPEAKER_ICON_ON;
 }
 
 function wrapText(ctx, text, maxWidth) {
@@ -2994,6 +3008,8 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song) {
 async function makeInstaVideo() {
   const song = STATE.currentSong;
   if (!song || !song.audioUrl) { showToast('오디오가 없어요'); return; }
+  // 새 영상 만들 때마다 스피커 음소거 상태 초기화 (직전 시도의 상태가 남아있지 않도록)
+  VIDEO.muted = false;
 
   const mime = pickVideoMime();
   if (mime === null) {
@@ -3045,16 +3061,16 @@ async function makeInstaVideo() {
   srcNode.connect(analyser);
   analyser.connect(dest);
   const speakerGain = ctxA.createGain();
-  speakerGain.gain.value = VIDEO.muted ? 0 : 1;
+  speakerGain.gain.value = 1;   // 기본은 스피커 ON (버튼 누르면 무음으로 토글)
   srcNode.connect(speakerGain);
   speakerGain.connect(ctxA.destination);
   VIDEO.srcNode = srcNode;
   VIDEO.speakerGain = speakerGain;
-  // 만드는 동안만 무음 버튼 노출
+  // 만드는 동안만 무음 버튼 노출 (flex로 띄워서 SVG 가운데 정렬)
   const muteBtn = document.getElementById('videoMuteBtn');
   if (muteBtn) {
-    muteBtn.style.display = '';
-    muteBtn.textContent = VIDEO.muted ? '🔇' : '🔊';
+    muteBtn.style.display = 'flex';
+    muteBtn.innerHTML = SPEAKER_ICON_ON;
   }
 
   // 3) 캔버스 + 스트림 합치기 (모바일 부하 줄이려 540x960)
