@@ -24,6 +24,9 @@ const SHARE_REWARD = 2;       // 인스타 등 공유 보상 = 2포인트. 곡 1
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;   // 충전 포인트 유효기간 = 결제일로부터 1년
 const EXPIRE_WARN_MS = 30 * 24 * 60 * 60 * 1000;  // 소멸 30일 전부터 안내
 
+// 가장 최근 가사 생성 실패 원인 (관리자 진단용, /health에 노출)
+let LAST_LYRICS_ERROR = null;
+
 // 추천 코드 생성 (혼동되는 0/O/1/I 제외 8자리)
 function genRefCode() {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -2442,24 +2445,30 @@ async function tryClaude(prompt) {
   const models = ['claude-sonnet-4-6', 'claude-haiku-4-5-20251001'];
   const errors = [];
   for (const model of models) {
-    try {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model, max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
-      });
-      if (r.ok) {
-        const d = await r.json();
-        const text = (d.content || []).map(b => b.text || '').join('');
-        const p = extractLyricsJson(text);
-        if (p) return { success: true, data: p };
-        errors.push(`${model}: 200 bad JSON`); break;
-      }
-      const e = await r.text();
-      errors.push(`${model}: HTTP ${r.status} ${e.slice(0, 120)}`);
-      if (r.status === 404) continue;
-      break;
-    } catch (e) { errors.push(`${model}: ${e.message}`); }
+    let me = '';
+    // 429/503/529(과부하)는 1~2초 backoff 후 1회 재시도
+    for (let a = 0; a < 2; a++) {
+      try {
+        const r = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({ model, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] })
+        });
+        if (r.ok) {
+          const d = await r.json();
+          const text = (d.content || []).map(b => b.text || '').join('');
+          const p = extractLyricsJson(text);
+          if (p) return { success: true, data: p };
+          me = `${model}: 200 bad JSON`; break;
+        }
+        const e = await r.text();
+        me = `${model}: HTTP ${r.status} ${e.slice(0, 120)}`;
+        if (r.status === 429 || r.status === 503 || r.status === 529) { await new Promise(z => setTimeout(z, (a + 1) * 1000)); continue; }
+        if (r.status === 404) break;   // 모델명 문제 → 다음 모델로
+        break;
+      } catch (e) { me = `${model}: ${e.message}`; }
+    }
+    errors.push(me);
   }
   return { success: false, error: errors.join(' | ') };
 }
@@ -2476,7 +2485,7 @@ async function trySolar(prompt) {
         const r = await fetch('https://api.upstage.ai/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-          body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.9, max_tokens: 1500 })
+          body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.9, max_tokens: 2000 })
         });
         if (r.ok) {
           const d = await r.json();
@@ -2506,7 +2515,7 @@ async function tryGemini(prompt) {
       try {
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 1.0, maxOutputTokens: 1500, responseMimeType: 'application/json' } })
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 1.0, maxOutputTokens: 2000, responseMimeType: 'application/json' } })
         });
         if (r.ok) {
           const d = await r.json();
@@ -2548,7 +2557,8 @@ const server = http.createServer(async (req, res) => {
       cost_per_song: COST_PER_SONG,
       signup_bonus: SIGNUP_BONUS,
       referral_reward: REFERRAL_REWARD,
-      share_reward: SHARE_REWARD
+      share_reward: SHARE_REWARD,
+      last_lyrics_error: LAST_LYRICS_ERROR   // 가장 최근 가사 생성 실패 원인(진단용)
     });
   }
 
@@ -3278,7 +3288,21 @@ const server = http.createServer(async (req, res) => {
     const sErr = r.error;
     r = await tryGemini(prompt);
     if (r.success) { r.data._via = 'gemini'; return send(res, 200, maskResult(r.data)); }
-    return send(res, 503, { error: 'lyrics_failed', message: 'AI 서버가 지금 바빠요. 잠시 후 다시 시도해주세요.', debug: `claude[${cErr}] solar[${sErr}] gemini[${r.error}]` });
+    const debug = `claude[${cErr}] solar[${sErr}] gemini[${r.error}]`;
+    LAST_LYRICS_ERROR = { at: new Date().toISOString(), debug };
+    console.error('❌ 가사 생성 전체 실패:', debug);
+    // 실패 원인을 한국어로 분류해 사용자에게 힌트 제공
+    let hint = 'AI 서버가 지금 바빠요. 잠시 후 다시 시도해주세요.';
+    if (/401|403|invalid|authentication|x-api-key/i.test(debug)) {
+      hint = 'AI 인증 오류예요(API 키 문제). 관리자 확인이 필요해요.';
+    } else if (/credit|quota|billing|insufficient|402|payment/i.test(debug)) {
+      hint = 'AI 사용량(크레딧)이 소진된 것 같아요. 관리자 확인이 필요해요.';
+    } else if (/429|rate.?limit|overload|529|503/i.test(debug)) {
+      hint = 'AI 서버가 잠시 몰렸어요. 10~20초 후 다시 시도해주세요.';
+    } else if (/bad JSON/i.test(debug)) {
+      hint = '가사 형식 처리에 실패했어요. 한 번 더 시도해주세요.';
+    }
+    return send(res, 503, { error: 'lyrics_failed', message: hint, debug });
   }
 
   if (path === '/generate-song' && req.method === 'POST') {
