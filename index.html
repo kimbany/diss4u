@@ -2023,7 +2023,7 @@ document.addEventListener('click', () => {
 
 function openMyList() {
   renderMyList();
-  showScreen('mylist');
+  pushScreen('mylist');
 }
 
 // ===== 크레딧 확인 (적립/사용 내역) =====
@@ -2147,8 +2147,15 @@ function closeCreditHistory() {
 }
 
 function goHome() {
-  showScreen('input');
   loadHistory();
+  // 현재 history가 input 위에 쌓여 있으면 자연스러운 뒤로가기로 처리 → 브라우저 forward도 가능
+  try {
+    if (history.state && history.state.screen && history.state.screen !== 'input') {
+      history.back();
+      return;
+    }
+  } catch (e) {}
+  showScreen('input');
 }
 
 async function renderMyList() {
@@ -2521,6 +2528,30 @@ function showScreen(name) {
   }
 }
 
+// 화면 이동 + 브라우저 히스토리 push (뒤로가기 시 이전 화면으로 돌아갈 수 있게)
+function pushScreen(name) {
+  try {
+    if (!history.state || history.state.screen !== name) {
+      history.pushState({ screen: name }, '');
+    }
+  } catch (e) {}
+  showScreen(name);
+}
+
+// 초기 history 마커 + 뒤로가기 처리
+(function setupScreenHistory() {
+  try {
+    if (!history.state || !history.state.screen) {
+      history.replaceState({ screen: 'input' }, '');
+    }
+  } catch (e) {}
+  window.addEventListener('popstate', function (e) {
+    const target = (e && e.state && e.state.screen) || 'input';
+    // popstate일 때는 push하지 말고 UI만 전환
+    showScreen(target);
+  });
+})();
+
 function setProgress(pct, msg, sub) {
   document.getElementById('progressFill').style.width = pct + '%';
   document.getElementById('loadingMsg').textContent = msg;
@@ -2563,7 +2594,7 @@ function showResult() {
     audio.src = song.audioUrl;
     wrap.style.display = 'block';
   }
-  showScreen('result');
+  pushScreen('result');
   mountAd('adResult', AD_SLOT_RESULT);
   mountCoupangBanner('coupangResult');   // 노래 완성 하단 쿠팡 특가 배너
 }
