@@ -795,7 +795,7 @@ function buildPrompt(params) {
     rock: 'energetic Korean pop-rock, distorted electric guitars, driving live drums, punchy bass, anthemic shout-along chorus, rebellious fun mood',
     kids: 'cute Korean kids nursery song, simple bouncy melody, xylophone glockenspiel and hand claps, innocent childlike vocals, playful sing-song rhythm',
     lofi: 'chill Korean lo-fi hip hop, dusty mellow piano, soft boom-bap drums, vinyl crackle, lazy laid-back half-sung vocals, cozy sarcastic mood',
-    yodel: 'comic Alpine yodel folk song, accordion and cowbell, bouncy oom-pah waltz, bright alpine melody, playful yodel vocal flips between lines',
+    yodel: 'fast upbeat comic Alpine yodel polka, 165 BPM, energetic accordion and cowbell, fast bouncy oom-pah polka beat, lively galloping rhythm, bright playful yodel vocal flips, cheeky high-energy mood',
     samba: 'festive Brazilian samba, lively surdo and pandeiro percussion, fast carnival groove, bright brass horns, energetic call-and-response vocals',
     bollywood: 'energetic Bollywood dance number, tabla and dhol percussion, sitar riffs and lush Indian strings, dramatic cinematic melody, group chorus chanting, festive wedding-party mood'
   };
@@ -1810,20 +1810,22 @@ B줄 = 그걸 더 약오르게 만드는 한마디
 특징:
 
 * 밝고 익살스러운 산골/알프스풍 느낌
+* 빠르고 신나는 업템포 폴카 리듬 (느릿한 왈츠가 아니라 빠르게 통통 튀는 느낌)
 * “요들레이”, “요를레이히”, “요델리요” 같은 요들 추임새 사용
-* 음이 꺾이고 튀는 느낌
+* 음이 빠르게 꺾이고 튀는 느낌
 * 장난스럽고 약오르는 반복 Hook에 잘 어울림
 
 가사 반영:
 
+* 빠른 템포에 맞게 가사 줄을 짧고 경쾌하게 끊어 써라.
 * 요들 느낌의 추임새를 (괄호)로 넣어도 된다. 필수는 아니다.
 * 넣는다면 매번 다른 표현을 만들어라. 매 곡 똑같은 추임새 금지.
 * 너무 많이 넣어서 가사가 의미 없어지면 안 된다.
 * 놀리는 문장과 추임새가 자연스럽게 이어져야 한다.
-* 요들 느낌은 추임새보다 style(창법/멜로디)로 살리는 게 우선이다.
+* 요들 느낌은 추임새보다 style(빠른 템포/창법/멜로디)로 살리는 게 우선이다.
 
 style 예:
-"short complete 45-second Korean yodel song, no intro, no outro, no bridge, repeated strong hook, clear ending feel, bright alpine yodel melody, bouncy acoustic rhythm, comic yodel vocal flips"
+"fast upbeat Korean yodel polka, 165 BPM, energetic accordion and cowbell, fast bouncy oom-pah polka beat, lively galloping rhythm, bright playful yodel vocal flips, no intro, no outro, no bridge, repeated strong hook, clear ending feel, cheeky high-energy mood"
 
 ---
 
