@@ -911,7 +911,7 @@
       style="margin-bottom:6px;background:linear-gradient(135deg,var(--purple) 0%,var(--pink) 100%);color:#1a1a1f;box-shadow:0 8px 30px rgba(197,163,255,.35);">
       <span class="btn-mic" style="color:var(--purple);">📹</span>
       <span style="display:flex;flex-direction:column;align-items:center;line-height:1.25;">
-        <span>인스타&틱톡 용 영상 만들기</span>
+        <span>SNS 공유</span>
         <span style="font-size:11px;font-weight:600;opacity:.85;">인스타 공유 시 +2크레딧 증정 🎁</span>
       </span>
     </button>
@@ -1048,7 +1048,7 @@
         <span style="color:var(--text-dim);font-size:12px;">가입+첫곡 시 <b style="color:var(--lime);">+10p</b></span>
       </button>
       <div style="font-size:12px;color:var(--text-dim);text-align:center;line-height:1.5;">
-        📤 만든 곡을 인스타·틱톡에 공유하면 <b style="color:var(--lime);">곡당 +2p</b>
+        📤 만든 곡을 SNS에 공유하면 <b style="color:var(--lime);">곡당 +2p</b>
       </div>
     </div>
 
@@ -1125,7 +1125,7 @@
 <!-- ===== INSTA VIDEO MODAL ===== -->
 <div class="modal-overlay" id="videoModal">
   <div class="modal" style="max-width:360px;">
-    <div class="modal-title" id="videoModalTitle">📹 인스타·틱톡용 영상</div>
+    <div class="modal-title" id="videoModalTitle">📹 SNS 공유 영상</div>
     <div class="modal-desc" id="videoStatus" style="margin-bottom:14px;">준비 중...</div>
 
     <div id="videoCanvasWrap" style="display:flex;justify-content:center;margin-bottom:14px;">
@@ -3107,7 +3107,7 @@ async function makeInstaVideo() {
   document.getElementById('videoActions').style.display = 'grid';
   const isMp4 = outType.includes('mp4');
   setVideoStatus(isMp4 ? '✅ 완성! 공유하거나 저장하세요.'
-    : '✅ 완성! (webm 형식) 인스타·틱톡이 안 받으면 저장 후 올려주세요.');
+    : '✅ 완성! (webm 형식) SNS에서 안 받으면 저장 후 올려주세요.');
 }
 
 function videoFileName() {
@@ -3134,7 +3134,7 @@ async function shareInstaVideo() {
       console.warn('video share fail', e);
     }
   }
-  showToast('공유시트 미지원 — 저장 후 인스타·틱톡에 올려주세요');
+  showToast('공유시트 미지원 — 저장 후 SNS에 올려주세요');
   downloadInstaVideo();
 }
 
