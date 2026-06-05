@@ -863,8 +863,8 @@
   <div class="screen" id="screen-loading">
     <div class="loading-wrap">
       <div class="loading-orb"></div>
-      <div class="loading-msg" id="loadingMsg">가사 쓰는 중...</div>
-      <div class="loading-sub" id="loadingSub">잠시만 기다려주세요</div>
+      <div class="loading-msg" id="loadingMsg">킹받는 가사 쓰는 중... 🔥</div>
+      <div class="loading-sub" id="loadingSub">잠시만요, 명곡 나옵니다 ㅋㅋ</div>
       <div class="progress-track">
         <div class="progress-fill" id="progressFill"></div>
       </div>
@@ -2316,7 +2316,7 @@ async function startGeneration() {
 
   STATE.generationCancelled = false;
   showScreen('loading');
-  setProgress(5, '가사 쓰는 중...', 'AI가 작사 중이에요');
+  setProgress(5, '킹받는 가사 쓰는 중... 🔥', 'AI가 약점 분석 중이에요');
 
   try {
     const lyricsData = await callWorker('/generate-lyrics', {
@@ -2325,7 +2325,7 @@ async function startGeneration() {
     });
 
     if (STATE.generationCancelled) return;
-    setProgress(25, '노래 생성 시작!', '노래 준비 중이에요');
+    setProgress(25, '약오름 농도 조절 중... 😏', '디스 수위 맞추는 중이에요');
 
     const submitResult = await callWorker('/generate-song', {
       lyrics: lyricsData.lyrics,
@@ -2337,12 +2337,12 @@ async function startGeneration() {
     if (!jobId) throw new Error('노래 생성 시작 실패: jobId 없음');
 
     if (STATE.generationCancelled) return;
-    setProgress(35, '노래 만드는 중...', '보컬과 멜로디 합성 중 (1-2분)');
+    setProgress(35, '디스곡 굽는 중... 🎤', '보컬과 멜로디 합성 중 (1-2분)');
 
     const result = await pollSongStatus(jobId);
 
     if (STATE.generationCancelled) return;
-    setProgress(100, '완성!', '잠시만요...');
+    setProgress(100, '완성! 🎉', '드디어 나왔다 ㅋㅋ');
 
     STATE.currentSong = {
       id: null,
@@ -2434,7 +2434,7 @@ async function pollSongStatus(jobId) {
       }
 
       const pct = Math.min(35 + (elapsed / maxWait) * 60, 95);
-      setProgress(pct, '노래 만드는 중...', `${Math.round(elapsed / 1000)}초 경과`);
+      setProgress(pct, '디스곡 굽는 중... 🎤', `조금만요, 명곡 나옵니다 ㅋㅋ (${Math.round(elapsed / 1000)}초)`);
 
       try {
         const response = await fetch(getWorkerUrl() + '/song-status/' + jobId, {
