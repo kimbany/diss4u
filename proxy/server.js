@@ -780,6 +780,23 @@ function buildPrompt(params) {
     lofi: '로파이', yodel: '요들송', samba: '쌈바', bollywood: '발리우드'
   };
   const genre = GENRE_MAP[genreRaw] || genreRaw;
+  // 장르별 Suno style 키워드(영어) — AI 추측에 맡기지 않고 코드가 직접 주입한다.
+  // 각 키워드는 리듬·악기·창법·BPM·분위기를 구체적으로 담아 "장르 맛"을 강제한다.
+  const GENRE_STYLE = {
+    hiphop: 'Korean boom-bap hip hop, punchy 808 bass, crisp trap hi-hats, head-nodding groove, confident rap-sung flow, vinyl scratch accents',
+    rap: 'playful Korean comedy rap, bouncy old-school hip hop beat, witty fast rhythmic delivery, clappy snare, cartoonish punchlines',
+    ballad: 'dramatic Korean comedy ballad, emotional grand piano, lush strings, heartfelt powerful vocal with ironic over-serious tone, slow build',
+    trot: 'classic Korean trot, accordion and electric organ, ppongjjak two-beat rhythm, exaggerated vocal bends and kkeokgi, retro showy mood',
+    ppongjjak: 'Korean techno-trot ppongjjak, 145 BPM high energy, fast oom-pah polka bass, retro synthesizer stabs, cheesy saxophone and accordion riffs, exaggerated trot vocal bends, relentless four-on-the-floor beat',
+    kpop: 'bright modern K-pop, polished synth-pop production, punchy electronic drums, catchy melodic hook, layered idol-style vocals, sparkly pop energy',
+    rock: 'energetic Korean pop-rock, distorted electric guitars, driving live drums, punchy bass, anthemic shout-along chorus, rebellious fun mood',
+    kids: 'cute Korean kids nursery song, simple bouncy melody, xylophone glockenspiel and hand claps, innocent childlike vocals, playful sing-song rhythm',
+    lofi: 'chill Korean lo-fi hip hop, dusty mellow piano, soft boom-bap drums, vinyl crackle, lazy laid-back half-sung vocals, cozy sarcastic mood',
+    yodel: 'comic Alpine yodel folk song, accordion and cowbell, bouncy oom-pah waltz, bright alpine melody, playful yodel vocal flips between lines',
+    samba: 'festive Brazilian samba, lively surdo and pandeiro percussion, fast carnival groove, bright brass horns, energetic call-and-response vocals',
+    bollywood: 'energetic Bollywood dance number, tabla and dhol percussion, sitar riffs and lush Indian strings, dramatic cinematic melody, group chorus chanting, festive wedding-party mood'
+  };
+  const genreStyle = GENRE_STYLE[genreRaw] || 'upbeat playful Korean pop, catchy melodic hook, bright energetic mood';
   const genderText = { male: '남자', female: '여자', pet: '반려동물' }[gender] || '미지정';
   const langText = { ko: '한글', en: '영어', mix: '섞기' }[lang] || '한글';
   // 꼭 넣고 싶은 문장: 콤마(,) 또는 줄바꿈으로 여러 문장 구분 → 각 문장을 그대로 보존
@@ -871,6 +888,9 @@ ${langText}
 
 [장르]
 ${genre}
+
+[이 장르의 style 키워드 — style 필드에 반드시 그대로 포함할 것]
+${genreStyle}
 ${nameRule}
 ---
 
@@ -2083,6 +2103,91 @@ style 예:
 
 ---
 
+12. 힙합
+
+특징:
+
+* 자신감 넘치는 디스랩 느낌 (세게 까는 게 아니라 장난스럽게)
+* 묵직한 808 베이스 + 또박또박한 비트
+* 고개 까딱이는 그루브, 라임 살린 플로우
+* 펀치라인(한 방 먹이는 줄)이 잘 어울림
+
+가사 반영:
+
+* Verse는 라임을 살려 또박또박 끊어 쳐라.
+* Hook은 따라 외치기 쉬운 짧은 구호로.
+* 한 방 먹이는 펀치라인을 Hook이나 Verse 끝에 배치해라.
+
+---
+
+13. K-pop
+
+특징:
+
+* 밝고 세련된 아이돌 팝
+* 캐치한 멜로디 훅, 영어 포인트 한두 개 OK
+* 반짝이는 신스, 댄스 비트
+* 후렴이 화려하고 중독적
+
+가사 반영:
+
+* Hook을 가장 멜로딕하고 캐치하게 만들어라.
+* 영어 포인트 단어를 1~2개 정도 섞어도 좋다 (과하지 않게).
+* 밝고 통통 튀는 에너지를 유지해라.
+
+---
+
+14. 락
+
+특징:
+
+* 신나고 반항적인 밴드 사운드
+* 일렉기타 + 드럼 + 베이스, 떼창 후렴
+* 시원하게 내지르는 느낌
+* 답답한 상황을 외쳐서 푸는 맛
+
+가사 반영:
+
+* Hook은 다 같이 떼창하듯 시원하게 외치는 줄로.
+* Verse는 점점 고조되게 써라.
+* 짧고 강한 문장으로 내지르는 느낌을 살려라.
+
+---
+
+15. 로파이
+
+특징:
+
+* 잔잔하고 나른한 lo-fi 비트
+* 먼지 낀 피아노, 빈티지한 분위기
+* 힘 빼고 시크하게 읊조리는 느낌
+* 무심하게 툭 던지는 디스가 더 웃김
+
+가사 반영:
+
+* 힘주지 말고 무심하게 읊조리듯 써라.
+* 과장보다 담담하게 팩트로 놀리는 게 이 장르의 맛이다.
+* Hook도 나른하게, 조용히 반복되는 느낌으로.
+
+---
+
+16. 쌈바
+
+특징:
+
+* 흥겨운 브라질 카니발 리듬
+* 빠른 타악기(수르두/판데이루), 밝은 브라스
+* 다 같이 외치는 콜앤리스폰스
+* 신나서 몸이 들썩이는 분위기
+
+가사 반영:
+
+* Hook은 다 같이 외치고 받는 느낌으로.
+* 흥겹고 들썩이는 짧은 문장 위주로.
+* 추임새는 (괄호)로 소량만, 매번 다르게.
+
+---
+
 ★★ 추임새 표기 절대 규칙 ★★
 
 추임새("요를레이히", "얼쑤", "지화자", "올레", "둠칫", "짝짝", "헤이", "하나 둘" 등)는
@@ -2249,39 +2354,29 @@ Moonlight dancing in my galaxy fire"
 
 [style 작성 규칙]
 
-style 필드는 선택된 [장르]에 맞게 영어로 작성해라.
+style 필드는 Suno AI에 넘기는 영어 음악 스타일 설명이다.
+선택된 장르의 음악적 맛(악기·리듬·창법·분위기)이 또렷하게 드러나야 한다.
 
-style에는 반드시 아래 내용을 포함해라.
+style은 반드시 아래 두 부분을 합쳐서 작성해라.
 
-* short complete 45-second song
-* no intro
-* no outro
-* no bridge
-* strong hook played twice (후렴 2회 반복)
-* clear ending feel
-* 선택된 장르의 리듬
-* 선택된 장르의 악기
-* 선택된 장르의 창법
-* 선택된 장르의 멜로디 특징
-* 장난스럽고 킹받는 분위기
+(1) 위 [이 장르의 style 키워드]에 주어진 영어 키워드를 그대로 가져온다.
+    → 이 키워드가 그 장르의 핵심 악기·리듬·창법이다. 절대 빼거나 바꾸지 마라.
 
-나쁜 style 예:
+(2) 거기에 아래 공통 키워드를 덧붙인다:
+    "short complete 45-second song, no intro, no outro, no bridge,
+     strong hook played twice, clear ending feel, playful comic mood"
+
+즉 style = (1)장르 키워드 + (2)공통 키워드 를 한 문장으로 이어 쓴 것이다.
+
+★ 다른 장르의 악기/키워드를 섞지 마라.
+  예) [장르]=트로트인데 "kpop synth" 넣지 마라.
+  예) [장르]=요들송인데 "808 trap beat" 넣지 마라.
+
+나쁜 style 예 (장르 특징 없음, 뭉뚱그림):
 "short 45-second playful Korean comedy pop"
 
-왜 나쁜가:
-
-* 장르 특징이 부족함
-* 멜로디, 리듬, 악기, 창법 정보가 없음
-* 1절 완결감이 명시되지 않음
-
-좋은 style 예:
-"short complete 45-second Korean yodel song, no intro, no outro, no bridge, repeated strong hook, clear ending feel, bright alpine yodel melody, bouncy acoustic rhythm, comic yodel vocal flips"
-
-좋은 style 예:
-"short complete 45-second Korean techno-trot ppongjjak, 145 BPM high energy, fast oom-pah polka bass, retro synthesizer stabs, cheesy saxophone and accordion riffs, exaggerated trot vocal bends, no intro, no outro, no bridge, repeated strong hook, clear ending feel, comic energy"
-
-좋은 style 예:
-"short complete 45-second playful Korean comedy rap, no intro, no outro, no bridge, repeated strong hook, clear ending feel, bouncy hip-hop beat, witty rhythmic delivery"
+좋은 style 예 (장르 키워드 + 공통 키워드 결합):
+"Korean boom-bap hip hop, punchy 808 bass, crisp trap hi-hats, head-nodding groove, confident rap-sung flow, short complete 45-second song, no intro, no outro, no bridge, strong hook played twice, clear ending feel, playful comic mood"
 
 ---
 
