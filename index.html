@@ -1124,7 +1124,10 @@
 
 <!-- ===== INSTA VIDEO MODAL ===== -->
 <div class="modal-overlay" id="videoModal">
-  <div class="modal" style="max-width:360px;">
+  <div class="modal" style="max-width:360px;position:relative;">
+    <button id="videoMuteBtn" type="button" onclick="toggleVideoMute()" title="만드는 동안 스피커 음소거 (저장될 영상에는 소리 그대로)"
+      aria-label="스피커 음소거"
+      style="position:absolute;top:14px;right:14px;background:var(--bg-card-2);border:1px solid var(--border);border-radius:10px;width:38px;height:38px;cursor:pointer;color:var(--text);display:none;font-size:16px;line-height:1;padding:0;">🔊</button>
     <div class="modal-title" id="videoModalTitle">📹 인스타·틱톡용 영상</div>
     <div class="modal-desc" id="videoStatus" style="margin-bottom:14px;">준비 중...</div>
 
@@ -2730,8 +2733,9 @@ async function shareKakao() {
 // ===================== 인스타용 영상 만들기 =====================
 const VIDEO = {
   blob: null, blobUrl: null,
-  audioCtx: null, srcNode: null, recorder: null,
-  raf: null, drawTimer: null, stopTimer: null, active: false
+  audioCtx: null, srcNode: null, recorder: null, speakerGain: null,
+  raf: null, drawTimer: null, stopTimer: null, active: false,
+  muted: false
 };
 const VIDEO_PALETTE = ['#d4ff3a', '#a3e5ff', '#c5a3ff', '#ffb3d9'];
 
@@ -2806,10 +2810,20 @@ function closeVideoModal() {
   try { if (VIDEO.recorder && VIDEO.recorder.state === 'recording') VIDEO.recorder.stop(); } catch (e) {}
   try { if (VIDEO.srcNode) VIDEO.srcNode.stop(); } catch (e) {}
   try { if (VIDEO.audioCtx && VIDEO.audioCtx.state !== 'closed') VIDEO.audioCtx.close(); } catch (e) {}
-  VIDEO.recorder = null; VIDEO.srcNode = null; VIDEO.audioCtx = null;
+  VIDEO.recorder = null; VIDEO.srcNode = null; VIDEO.audioCtx = null; VIDEO.speakerGain = null;
+  const muteBtnClose = document.getElementById('videoMuteBtn');
+  if (muteBtnClose) muteBtnClose.style.display = 'none';
   const v = document.getElementById('videoPreview');
   v.pause(); v.removeAttribute('src'); v.load();
   document.getElementById('videoModal').classList.remove('active');
+}
+
+// 만드는 동안 스피커만 음소거. 녹음 경로(영상에 저장될 소리)는 영향 없음.
+function toggleVideoMute() {
+  VIDEO.muted = !VIDEO.muted;
+  if (VIDEO.speakerGain) VIDEO.speakerGain.gain.value = VIDEO.muted ? 0 : 1;
+  const btn = document.getElementById('videoMuteBtn');
+  if (btn) btn.textContent = VIDEO.muted ? '🔇' : '🔊';
 }
 
 function wrapText(ctx, text, maxWidth) {
@@ -3018,7 +3032,10 @@ async function makeInstaVideo() {
   const duration = audioBuffer.duration;
   const ctxA = VIDEO.audioCtx;
 
-  // 2) 오디오 그래프: source -> analyser -> mediaStreamDestination (+ 스피커)
+  // 2) 오디오 그래프:
+  //    녹음 경로: source -> analyser -> mediaStreamDestination  (영상 파일에 들어가는 소리, 항상 1.0)
+  //    스피커 경로: source -> speakerGain -> ctxA.destination   (사용자가 듣는 소리, 음소거 토글 가능)
+  //    두 경로가 분리돼 있어서 스피커를 끄더라도 저장될 영상의 오디오는 그대로 유지됨.
   const srcNode = ctxA.createBufferSource();
   srcNode.buffer = audioBuffer;
   const analyser = ctxA.createAnalyser();
@@ -3027,8 +3044,18 @@ async function makeInstaVideo() {
   const dest = ctxA.createMediaStreamDestination();
   srcNode.connect(analyser);
   analyser.connect(dest);
-  srcNode.connect(ctxA.destination);
+  const speakerGain = ctxA.createGain();
+  speakerGain.gain.value = VIDEO.muted ? 0 : 1;
+  srcNode.connect(speakerGain);
+  speakerGain.connect(ctxA.destination);
   VIDEO.srcNode = srcNode;
+  VIDEO.speakerGain = speakerGain;
+  // 만드는 동안만 무음 버튼 노출
+  const muteBtn = document.getElementById('videoMuteBtn');
+  if (muteBtn) {
+    muteBtn.style.display = '';
+    muteBtn.textContent = VIDEO.muted ? '🔇' : '🔊';
+  }
 
   // 3) 캔버스 + 스트림 합치기 (모바일 부하 줄이려 540x960)
   const W = 540, H = 960;
@@ -3057,15 +3084,17 @@ async function makeInstaVideo() {
   //    한 프레임이 에러나도 try/catch로 루프가 죽지 않게 한다.
   VIDEO.active = true;
   try { await ctxA.resume(); } catch (e) {}
-  recorder.start();
+  // 1초 단위 청크로 받으면 모바일에서 트랙이 중간에 멈춰도 그때까지의 영상이 보존됨.
+  try { recorder.start(1000); } catch (e) { recorder.start(); }
   srcNode.start();
   const startAudioTime = ctxA.currentTime;
 
   function stopDraw() {
     if (VIDEO.drawTimer) { clearInterval(VIDEO.drawTimer); VIDEO.drawTimer = null; }
   }
+  // 그리기 루프: 녹음이 끝날 때까지 캔버스 프레임을 계속 공급 → 영상 트랙이 도중에 멈추지 않게.
   VIDEO.drawTimer = setInterval(() => {
-    if (!VIDEO.active) { stopDraw(); return; }
+    if (!VIDEO.active || !recorder || recorder.state !== 'recording') { stopDraw(); return; }
     const elapsed = ctxA.currentTime - startAudioTime;
     try {
       analyser.getByteFrequencyData(freq);
@@ -3073,16 +3102,13 @@ async function makeInstaVideo() {
     } catch (e) { console.warn('frame err', e); }
     const pct = Math.min(elapsed / duration, 1);
     setVideoStatus('영상 만드는 중... ' + Math.round(pct * 100) + '% (' + Math.ceil(duration) + '초)', pct);
-    if (elapsed >= duration) stopDraw();
   }, 33);
 
   srcNode.onended = () => {
-    stopDraw();
     if (recorder.state === 'recording') { try { recorder.stop(); } catch (e) {} }
   };
   // 안전 타이머
   VIDEO.stopTimer = setTimeout(() => {
-    stopDraw();
     if (recorder.state === 'recording') { try { recorder.stop(); } catch (e) {} }
   }, (duration + 2) * 1000);
 
@@ -3101,6 +3127,9 @@ async function makeInstaVideo() {
   // 결과 표시
   document.getElementById('videoCanvasWrap').style.display = 'none';
   document.getElementById('videoProgressTrack').style.display = 'none';
+  const muteBtnDone = document.getElementById('videoMuteBtn');
+  if (muteBtnDone) muteBtnDone.style.display = 'none';
+  VIDEO.speakerGain = null;
   const v = document.getElementById('videoPreview');
   v.src = VIDEO.blobUrl;
   v.style.display = 'block';
