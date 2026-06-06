@@ -3031,6 +3031,45 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true, from, to, count: rows.length, gross, refunded, net: gross - refunded, payments: rows });
   }
 
+  // [관리자] 통계 (KST 기준). query: date 또는 from/to. 장르·키워드 집계.
+  if (path === '/admin/stats') {
+    if (!(await verifyAdmin(req))) return send(res, 401, { error: 'admin_auth_required', message: '관리자 인증이 필요해요' });
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    const singleDate = url.searchParams.get('date');
+    let from = url.searchParams.get('from');
+    let to = url.searchParams.get('to');
+    if (singleDate) { from = to = singleDate; }
+    if (!from || !to || !dateRe.test(from) || !dateRe.test(to)) {
+      return send(res, 400, { error: 'bad_date', message: '날짜 형식이 YYYY-MM-DD가 아니에요 (date 또는 from/to 필요)' });
+    }
+    if (from > to) { const t = from; from = to; to = t; }
+    const start = new Date(from + 'T00:00:00+09:00');
+    const end = new Date(new Date(to + 'T00:00:00+09:00').getTime() + 24 * 60 * 60 * 1000);
+    const genreMap = {};
+    const kwMap = {};
+    let count = 0, uniqueUsers = new Set();
+    try {
+      const qs = await fdb.collection('songs').where('createdAt', '>=', start).where('createdAt', '<', end).get();
+      qs.forEach(d => {
+        const x = d.data();
+        count++;
+        if (x.uid) uniqueUsers.add(x.uid);
+        const g = x.genre || 'unknown';
+        genreMap[g] = (genreMap[g] || 0) + 1;
+        const raw = String(x.keywords || '');
+        if (raw) {
+          const tokens = raw.split(',').map(s => s.trim().toLowerCase()).filter(s => s.length >= 2);
+          for (const k of tokens) kwMap[k] = (kwMap[k] || 0) + 1;
+        }
+      });
+    } catch (e) {
+      return send(res, 500, { error: 'stats_fail', message: '통계 조회 실패', detail: e.message });
+    }
+    const genres = Object.entries(genreMap).map(([genre, c]) => ({ genre, count: c })).sort((a, b) => b.count - a.count);
+    const keywords = Object.entries(kwMap).map(([keyword, c]) => ({ keyword, count: c })).sort((a, b) => b.count - a.count).slice(0, 30);
+    return send(res, 200, { ok: true, from, to, count, uniqueUsers: uniqueUsers.size, genres, keywords });
+  }
+
   // [관리자] 자동 환불: 포트원 취소(부분/전액) + 유료 크레딧 차감 + 기록
   if (path === '/refund-payment' && req.method === 'POST') {
     if (!(await verifyAdmin(req))) return send(res, 401, { error: 'admin_auth_required', message: '관리자 인증이 필요해요' });
