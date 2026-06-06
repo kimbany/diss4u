@@ -3232,6 +3232,81 @@ function fixWebmDurationBytes(u8, durationSec) {
   } catch (e) { console.warn('webm duration fix err', e); return null; }
 }
 
+// ── TikTok/SNS 호환 변환 (ffmpeg.wasm 재먹싱) ─────────────────────────────────
+// iOS Safari MediaRecorder가 만든 MP4/WebM은 메타데이터 atom 순서·duration 박스가
+// 비표준이라 TikTok 재인코더가 오디오/영상을 잘못 잘라낸다(끝 ~4초 끊김).
+// ffmpeg.wasm으로 표준 MP4(faststart)로 다시 mux하면 거의 잡힌다.
+//  · MP4 입력 → stream copy + faststart (재인코딩 X, ~5초)
+//  · WebM 입력 → libx264/aac로 트랜스코딩 (~30초+)
+// 라이브러리는 lazy 로드(첫 사용 시 ~26MB). 실패하면 null 반환 → 호출자가 원본 사용.
+async function ensureFfmpegLoaded() {
+  if (window._ffmpegInstance) return window._ffmpegInstance;
+  if (window._ffmpegLoadPromise) return window._ffmpegLoadPromise;
+  window._ffmpegLoadPromise = (async () => {
+    const BASE = 'https://cdn.jsdelivr.net/npm';
+    const FFMPEG_VER = '0.12.10', UTIL_VER = '0.12.1', CORE_VER = '0.12.6';
+    function loadScript(src) {
+      return new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = src; s.crossOrigin = 'anonymous';
+        s.onload = () => res();
+        s.onerror = () => rej(new Error('load fail: ' + src));
+        document.head.appendChild(s);
+      });
+    }
+    if (!window.FFmpegWASM) await loadScript(BASE + '/@ffmpeg/ffmpeg@' + FFMPEG_VER + '/dist/umd/ffmpeg.js');
+    if (!window.FFmpegUtil) await loadScript(BASE + '/@ffmpeg/util@' + UTIL_VER + '/dist/umd/util.js');
+    const { FFmpeg } = window.FFmpegWASM;
+    const ff = new FFmpeg();
+    await ff.load({
+      coreURL: BASE + '/@ffmpeg/core@' + CORE_VER + '/dist/umd/ffmpeg-core.js',
+      wasmURL: BASE + '/@ffmpeg/core@' + CORE_VER + '/dist/umd/ffmpeg-core.wasm',
+    });
+    window._ffmpegInstance = ff;
+    return ff;
+  })().catch(e => { window._ffmpegLoadPromise = null; throw e; });
+  return window._ffmpegLoadPromise;
+}
+
+async function convertForTikTokCompat(blob, onProgress) {
+  if (!blob || blob.size === 0) return null;
+  let ff;
+  try { ff = await ensureFfmpegLoaded(); }
+  catch (e) { console.warn('ffmpeg load fail', e); return null; }
+
+  const fetchFile = window.FFmpegUtil && window.FFmpegUtil.fetchFile;
+  if (!fetchFile) return null;
+
+  const isMp4 = (blob.type || '').includes('mp4');
+  const inputName = isMp4 ? 'in.mp4' : 'in.webm';
+  let progHandler = null;
+  if (onProgress) {
+    progHandler = ({ progress }) => {
+      try { onProgress(Math.max(0, Math.min(1, progress))); } catch (e) {}
+    };
+    try { ff.on('progress', progHandler); } catch (e) {}
+  }
+  try {
+    await ff.writeFile(inputName, await fetchFile(blob));
+    const args = isMp4
+      ? ['-y', '-i', inputName, '-c', 'copy', '-movflags', '+faststart', 'out.mp4']
+      : ['-y', '-i', inputName,
+         '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
+         '-c:a', 'aac', '-b:a', '128k',
+         '-movflags', '+faststart', 'out.mp4'];
+    await ff.exec(args);
+    const data = await ff.readFile('out.mp4');
+    try { await ff.deleteFile(inputName); } catch (e) {}
+    try { await ff.deleteFile('out.mp4'); } catch (e) {}
+    return new Blob([data.buffer], { type: 'video/mp4' });
+  } catch (e) {
+    console.warn('ffmpeg convert fail', e);
+    return null;
+  } finally {
+    if (progHandler) { try { ff.off('progress', progHandler); } catch (e) {} }
+  }
+}
+
 async function makeInstaVideo() {
   const song = STATE.currentSong;
   if (!song || !song.audioUrl) { showToast('오디오가 없어요'); return; }
@@ -3443,6 +3518,35 @@ async function makeInstaVideo() {
   const isMp4 = outType.includes('mp4');
   setVideoStatus(isMp4 ? '✅ 완성! 공유하거나 저장하세요.'
     : '✅ 완성! (webm 형식) SNS에서 안 받으면 저장 후 올려주세요.');
+
+  // 백그라운드: TikTok 호환 표준 MP4로 재먹싱.
+  //   · 미리보기는 원본으로 즉시 보이고, 공유/저장 시점에 변환 결과를 기다린다.
+  //   · 실패하면 VIDEO.compatBlob이 null로 남아 원본 사용 (현재 동작 그대로).
+  VIDEO.compatBlob = null;
+  VIDEO.compatBlobPromise = (async () => {
+    try {
+      const t0 = Date.now();
+      const firstUse = !window._ffmpegInstance;
+      setVideoStatus(firstUse
+        ? 'SNS 호환 변환 준비 중... (첫 사용은 잠시 걸려요)'
+        : 'SNS 호환 변환 중...');
+      const result = await convertForTikTokCompat(blob, (p) => {
+        // 미리보기 영역 status를 호환 변환 진행률로 갱신
+        setVideoStatus('SNS 호환 변환 중... ' + Math.round(p * 100) + '%');
+      });
+      if (result && result.size > 0) {
+        VIDEO.compatBlob = result;
+        const sec = Math.round((Date.now() - t0) / 1000);
+        setVideoStatus('✅ SNS 호환 변환 완료 (' + sec + '초) — 공유/저장하세요.');
+        return result;
+      }
+      setVideoStatus('✅ 완성! (호환 변환 생략) 공유하거나 저장하세요.');
+    } catch (e) {
+      console.warn('compat convert err', e);
+      setVideoStatus('✅ 완성! 공유하거나 저장하세요.');
+    }
+    return null;
+  })();
 }
 
 function videoFileName() {
@@ -3450,10 +3554,25 @@ function videoFileName() {
   return t.replace(/[^a-zA-Z0-9가-힣]/g, '_') || 'diss4u';
 }
 
+// 공유/저장 시점에 호출 — 호환 변환된 MP4가 있으면 그걸, 아니면 원본 blob 반환.
+// 변환이 아직 진행 중이면 잠깐 기다린다 ("변환 중에 공유" 케이스).
+async function getSharableBlob() {
+  if (VIDEO.compatBlob && VIDEO.compatBlob.size > 0) return VIDEO.compatBlob;
+  if (VIDEO.compatBlobPromise) {
+    try {
+      setVideoStatus('SNS 호환 변환 마무리 중... 잠시만요');
+      const r = await VIDEO.compatBlobPromise;
+      if (r && r.size > 0) return r;
+    } catch (e) {}
+  }
+  return VIDEO.blob;
+}
+
 async function shareInstaVideo() {
   if (!VIDEO.blob) return;
-  const ext = VIDEO.blob.type.includes('mp4') ? 'mp4' : 'webm';
-  const file = new File([VIDEO.blob], videoFileName() + '.' + ext, { type: VIDEO.blob.type });
+  const blob = await getSharableBlob();
+  const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+  const file = new File([blob], videoFileName() + '.' + ext, { type: blob.type });
   const song = STATE.currentSong || {};
   claimShareReward(song.id);   // 공유 의도 = 즉시 지급(곡당 1회, 서버에서 중복 차단)
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -3477,8 +3596,9 @@ async function shareInstaVideo() {
 // 공유시트가 없거나 PC면 파일 다운로드로 폴백한다.
 async function downloadInstaVideo() {
   if (!VIDEO.blob) return;
-  const ext = VIDEO.blob.type.includes('mp4') ? 'mp4' : 'webm';
-  const file = new File([VIDEO.blob], videoFileName() + '.' + ext, { type: VIDEO.blob.type });
+  const blob = await getSharableBlob();
+  const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+  const file = new File([blob], videoFileName() + '.' + ext, { type: blob.type });
   // 모바일 + 파일 공유 지원 → 공유시트로 (여기서 '비디오 저장'을 누르면 앨범에 저장됨)
   const canShareFile = navigator.canShare && navigator.canShare({ files: [file] });
   if (canShareFile) {
@@ -3502,15 +3622,27 @@ async function downloadInstaVideo() {
 }
 
 // 실제 파일 다운로드 (PC / 공유시트 미지원 폴백)
-function fileDownloadInstaVideo() {
+async function fileDownloadInstaVideo() {
   if (!VIDEO.blobUrl) return;
-  const ext = VIDEO.blob.type.includes('mp4') ? 'mp4' : 'webm';
+  // 호환 변환본이 있으면 그걸 다운받게 임시 URL을 만든다 (없으면 기존 blobUrl).
+  let href = VIDEO.blobUrl;
+  let ext = VIDEO.blob.type.includes('mp4') ? 'mp4' : 'webm';
+  let tempUrl = null;
+  try {
+    const blob = await getSharableBlob();
+    if (blob && blob !== VIDEO.blob) {
+      tempUrl = URL.createObjectURL(blob);
+      href = tempUrl;
+      ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+    }
+  } catch (e) {}
   const a = document.createElement('a');
-  a.href = VIDEO.blobUrl;
+  a.href = href;
   a.download = videoFileName() + '.' + ext;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+  if (tempUrl) setTimeout(() => URL.revokeObjectURL(tempUrl), 10000);
   showToast('⬇️ 저장 완료 (파일 앱에서 확인)');
   claimShareReward((STATE.currentSong || {}).id);   // 저장도 곡당 1회 +2p
 }
