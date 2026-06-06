@@ -3088,6 +3088,111 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song) {
   ctx.fillRect(0, H - 8, W * p, 8);
 }
 
+// ── WebM duration 패치 ─────────────────────────────────────────────
+// MediaRecorder가 만든 webm은 라이브 스트림이라 전체 길이(Duration)를 안 적는다.
+// → 플레이어/틱톡이 길이를 모른 채 재인코딩하면 오디오가 영상 길이에 안 맞게
+//    욱여넣어져 "소리만 빨라지는" A/V 동기 깨짐이 생긴다.
+// 우리는 정확한 길이를 알고 있으므로(audioBuffer.duration) Info 안에 Duration을
+// 직접 써넣어 고친다. 외부 라이브러리 없이 동작하며, SeekHead/Cues(=바이트 오프셋을
+// 참조하는 색인)가 있으면 깨질 위험이 있어 원본을 그대로 돌려준다(무회귀).
+function fixWebmDurationBytes(u8, durationSec) {
+  try {
+    if (!(durationSec > 0) || !isFinite(durationSec)) return null;
+    const n = u8.length;
+    const idLen = b => (b >= 0x80 ? 1 : b >= 0x40 ? 2 : b >= 0x20 ? 3 : 4);
+    const szLen = b => (b >= 0x80 ? 1 : b >= 0x40 ? 2 : b >= 0x20 ? 3 : b >= 0x10 ? 4
+                       : b >= 0x08 ? 5 : b >= 0x04 ? 6 : b >= 0x02 ? 7 : 8);
+    const readId = p => { const l = idLen(u8[p]); let v = 0; for (let i = 0; i < l; i++) v = v * 256 + u8[p + i]; return { len: l, val: v }; };
+    const readSize = p => {
+      const l = szLen(u8[p]); let v = u8[p] & (0xFF >> l);
+      let unknown = (u8[p] & (0xFF >> l)) === (0xFF >> l);
+      for (let i = 1; i < l; i++) { v = v * 256 + u8[p + i]; if (u8[p + i] !== 0xFF) unknown = false; }
+      return { len: l, val: v, unknown };
+    };
+    const encodeSize = v => {
+      let L = 1; while (v > Math.pow(2, 7 * L) - 2) L++;
+      const out = new Uint8Array(L); let x = v;
+      for (let i = L - 1; i >= 0; i--) { out[i] = x & 0xFF; x = Math.floor(x / 256); }
+      out[0] |= (1 << (8 - L));
+      return out;
+    };
+    const ID_SEGMENT = 0x18538067, ID_INFO = 0x1549A966, ID_SEEKHEAD = 0x114D9B74,
+          ID_CUES = 0x1C53BB6B, ID_DURATION = 0x4489, ID_TCSCALE = 0x2AD7B1;
+
+    // 1) 최상위에서 Segment 찾기
+    let p = 0, segPos = -1, segId, segSz, segDataStart;
+    while (p < n) {
+      const id = readId(p), sz = readSize(p + id.len);
+      const dStart = p + id.len + sz.len;
+      if (id.val === ID_SEGMENT) { segPos = p; segId = id; segSz = sz; segDataStart = dStart; break; }
+      if (sz.unknown) break;
+      p = dStart + sz.val;
+    }
+    if (segPos < 0) return null;
+    const segDataEnd = segSz.unknown ? n : Math.min(segDataStart + segSz.val, n);
+
+    // 2) Segment 자식 순회 — Info 찾고, SeekHead/Cues 있으면 중단(안전)
+    let infoPos = -1, infoId, infoSz, infoDataStart, infoDataEnd, tcScale = 1000000;
+    let q = segDataStart;
+    while (q < segDataEnd) {
+      const id = readId(q), sz = readSize(q + id.len);
+      const dStart = q + id.len + sz.len;
+      const dEnd = sz.unknown ? segDataEnd : dStart + sz.val;
+      if (id.val === ID_SEEKHEAD || id.val === ID_CUES) return null; // 색인 있음 → 손대지 않음
+      if (id.val === ID_INFO) {
+        infoPos = q; infoId = id; infoSz = sz; infoDataStart = dStart; infoDataEnd = dEnd;
+        let r = dStart;
+        while (r < dEnd) {
+          const cid = readId(r), csz = readSize(r + cid.len);
+          const cdStart = r + cid.len + csz.len;
+          if (cid.val === ID_DURATION) return null; // 이미 있음
+          if (cid.val === ID_TCSCALE) { let v = 0; for (let i = 0; i < csz.val; i++) v = v * 256 + u8[cdStart + i]; if (v > 0) tcScale = v; }
+          r = cdStart + csz.val;
+        }
+      }
+      if (sz.unknown) break;
+      q = dEnd;
+    }
+    if (infoPos < 0) return null;
+
+    // 3) Duration 엘리먼트(부동소수 8바이트, 단위 = TimecodeScale)
+    const durVal = durationSec * 1e9 / tcScale;
+    const durEl = new Uint8Array(11);
+    durEl[0] = 0x44; durEl[1] = 0x89; durEl[2] = 0x88;
+    new DataView(durEl.buffer).setFloat64(3, durVal, false);
+
+    // 4) Info 크기 갱신 + 재조립
+    const newInfoData = (infoDataEnd - infoDataStart) + durEl.length;
+    const newInfoSize = encodeSize(newInfoData);
+    const delta = durEl.length + (newInfoSize.length - infoSz.len);
+
+    // Segment 헤더(정의된 크기면 갱신, unknown이면 그대로)
+    let segHead;
+    if (segSz.unknown) {
+      segHead = u8.subarray(segPos, segDataStart); // ID + unknown-size 그대로
+    } else {
+      const newSeg = encodeSize((segDataEnd - segDataStart) + delta);
+      segHead = new Uint8Array(segId.len + newSeg.length);
+      segHead.set(u8.subarray(segPos, segPos + segId.len), 0);
+      segHead.set(newSeg, segId.len);
+    }
+
+    const parts = [
+      u8.subarray(0, segPos),                       // EBML 헤더 등
+      segHead,                                       // Segment 헤더
+      u8.subarray(segDataStart, infoPos + infoId.len), // Segment 자식 ~ Info ID
+      newInfoSize,                                   // 새 Info 크기
+      u8.subarray(infoDataStart, infoDataEnd),       // 기존 Info 데이터
+      durEl,                                         // 끼워넣은 Duration
+      u8.subarray(infoDataEnd, n)                    // 나머지(Tracks/Clusters)
+    ];
+    let total = 0; parts.forEach(a => total += a.length);
+    const out = new Uint8Array(total);
+    let off = 0; parts.forEach(a => { out.set(a, off); off += a.length; });
+    return out;
+  } catch (e) { console.warn('webm duration fix err', e); return null; }
+}
+
 async function makeInstaVideo() {
   const song = STATE.currentSong;
   if (!song || !song.audioUrl) { showToast('오디오가 없어요'); return; }
@@ -3218,7 +3323,16 @@ async function makeInstaVideo() {
   if (!document.getElementById('videoModal').classList.contains('active')) return; // 닫힘
 
   const outType = (mime || recorder.mimeType || 'video/webm');
-  const blob = new Blob(chunks, { type: outType });
+  let blob = new Blob(chunks, { type: outType });
+  // webm은 전체 길이 정보가 빠져 틱톡 등에서 오디오가 빨라지는 동기 깨짐이 생긴다.
+  // 우리가 아는 정확한 길이(duration)를 webm에 써넣어 고친다. (mp4는 불필요)
+  if (outType.includes('webm')) {
+    try {
+      const raw = new Uint8Array(await blob.arrayBuffer());
+      const fixed = fixWebmDurationBytes(raw, duration);
+      if (fixed && fixed.length) blob = new Blob([fixed], { type: outType });
+    } catch (e) { console.warn('duration fix skip', e); }
+  }
   VIDEO.blob = blob;
   if (VIDEO.blobUrl) URL.revokeObjectURL(VIDEO.blobUrl);
   VIDEO.blobUrl = URL.createObjectURL(blob);
