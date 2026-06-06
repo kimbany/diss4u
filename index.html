@@ -2570,6 +2570,13 @@ function findAudioUrl(obj, depth = 0) {
 }
 
 function showScreen(name) {
+  // 결과 화면을 벗어나면 재생 중인 노래를 멈춘다.
+  // (오디오 플레이어는 screen-result 안에 있어, 홈/리스트로 가도 화면만 숨겨지고
+  //  소리는 계속 나던 문제 방지) — goHome·뒤로가기·새 노래·리스트 이동 모두 여기로 모인다.
+  if (name !== 'result') {
+    const audio = document.getElementById('audioPlayer');
+    if (audio && !audio.paused) audio.pause();
+  }
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + name).classList.add('active');
   window.scrollTo(0, 0);
