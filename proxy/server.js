@@ -3386,7 +3386,11 @@ const server = http.createServer(async (req, res) => {
     const sErr = r.error;
     r = await tryGemini(prompt);
     if (r.success) { r.data._via = 'gemini'; return send(res, 200, maskResult(r.data)); }
-    const debug = `claude[${cErr}] solar[${sErr}] gemini[${r.error}]`;
+    // 보안: 에러 문자열에 API 키 값이 섞여 들어올 수 있다(예: 키 칸에 curl 명령을 통째로
+    // 붙여넣은 경우). LAST_LYRICS_ERROR는 공개 /health에 노출되므로 키 패턴을 반드시 가린다.
+    const debug = `claude[${cErr}] solar[${sErr}] gemini[${r.error}]`
+      .replace(/\b(up_[A-Za-z0-9]+|sk-[A-Za-z0-9_\-]+|AIza[A-Za-z0-9_\-]+)/g, '***')
+      .replace(/Bearer\s+\S+/gi, 'Bearer ***');
     LAST_LYRICS_ERROR = { at: new Date().toISOString(), debug };
     console.error('❌ 가사 생성 전체 실패:', debug);
     // 실패 원인을 한국어로 분류해 사용자에게 힌트 제공
