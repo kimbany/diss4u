@@ -830,10 +830,18 @@ function buildPrompt(params) {
    - "냉장고 문이 울었다" 같은 뜬금없고 의미 불명한 줄은 절대 금지.
    - 한 곡은 하나의 상황(장면)이 이어지는 짧은 이야기여야 한다.
    - 멋져 보이려고 의미 없는 비유를 넣지 마라. 말이 되는 게 먼저다.
+   ★ 라임(운율)을 맞추려고 뜻 없는 단어를 끼워넣지 마라.
+     라임과 뜻이 충돌하면 "라임을 포기하고" 뜻을 지켜라. 뜻이 깨진 라임은 0점이다.
+     - 나쁜 예: "맨날 쉽고 못 말린 바보 짓이야" → '쉽고'가 왜 들어갔나? 뜻이 안 통한다.
+       좋은 예: "맨날 똑같은 못 말리는 바보 짓이야" (뜻이 자연스럽게 이어짐)
 
-2. 입력된 [키워드]를 전부 자연스럽게 녹여야 한다.
+2. 입력된 [키워드]를 "뜻 그대로" 정확히 해석해서 전부 자연스럽게 녹여야 한다.
    - 키워드 하나에만 치중하고 나머지를 버리면 안 된다.
    - 단, 키워드를 욱여넣어 문맥을 깨면 안 된다. 자연스럽게 연결해라.
+   ★ 키워드의 진짜 의미를 멋대로 바꾸거나 엉뚱한 행동을 지어내지 마라.
+     - 나쁜 예: "강아지 스토커" → "강아지 따라다니면서 꼬집고" (왜 꼬집나? 스토커는 '집착해서 졸졸 따라다니는' 사람이다. '꼬집기'는 지어낸 엉뚱한 행동)
+       좋은 예: "강아지 뒤만 졸졸 하루 종일 따라다녀" / "개가 어디 가나 그림자처럼 붙어있네"
+     - "집순이"=집에만 있는 사람, "욕쟁이"=말이 거친 사람 → 키워드가 가리키는 그 사람의 실제 모습만 그려라. 없는 행동을 만들지 마라.
 
 3. 욕설·비속어는 절대 쓰지 마라.
    - "욕쟁이", "입이 거칠다" 같은 키워드가 들어와도
@@ -2493,10 +2501,17 @@ async function tryClaude(prompt) {
     // 429/503/529(과부하)는 1~2초 backoff 후 1회 재시도
     for (let a = 0; a < 2; a++) {
       try {
+        // adaptive thinking: 쓰기 전에 "이 줄이 말이 되나/키워드를 제대로 해석했나"를
+        // 실제로 검토하게 해서 문맥 깨짐(라임 채우기·키워드 오해)을 줄인다.
+        // thinking 블록은 응답 content에 별도로 들어오고, 가사 JSON은 text 블록에 그대로 남는다.
+        const body = { model, max_tokens: 4000, messages: [{ role: 'user', content: prompt }] };
+        if (model.startsWith('claude-sonnet-4-6') || model.startsWith('claude-opus')) {
+          body.thinking = { type: 'adaptive' };
+        }
         const r = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-          body: JSON.stringify({ model, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] })
+          body: JSON.stringify(body)
         });
         if (r.ok) {
           const d = await r.json();

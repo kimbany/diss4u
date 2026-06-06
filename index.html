@@ -3249,6 +3249,17 @@ async function makeInstaVideo() {
     return;
   }
 
+  // ★ AudioContext는 반드시 user gesture 안(=어떤 await보다 먼저)에서 만들고 resume.
+  //    이걸 await 이후에 하면 iOS Safari가 "사용자 입력 없음"으로 보고 AudioContext가
+  //    suspended에서 못 빠져나와 decodeAudioData가 멈춤 → 첫 클릭이 '아무 반응 없음'으로 보임.
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (VIDEO.audioCtx && VIDEO.audioCtx.state !== 'closed') {
+    try { VIDEO.audioCtx.close(); } catch (e) {}
+  }
+  VIDEO.audioCtx = new AudioCtx();
+  // resume()는 Promise를 반환하지만 await하지 않음 — gesture 안에서 호출만 하면 충분.
+  try { VIDEO.audioCtx.resume(); } catch (e) {}
+
   openVideoModal();
   setVideoStatus('오디오 불러오는 중...', 0);
 
@@ -3257,15 +3268,12 @@ async function makeInstaVideo() {
 
   const lines = parseLyricLines(song.lyrics);
 
-  // 1) 오디오 받아서 디코딩
+  // 1) 오디오 받아서 디코딩 (AudioContext는 위에서 이미 생성·resume 됨)
   let audioBuffer;
   try {
     const resp = await fetch(song.audioUrl);
     const arr = await resp.arrayBuffer();
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    VIDEO.audioCtx = new AudioCtx();
-    // Safari 모바일에서 새 AudioContext가 suspended로 시작하면 첫 decodeAudioData가 늦거나 멈추는 케이스가 있음 → 먼저 resume
-    try { await VIDEO.audioCtx.resume(); } catch (e) {}
+    try { await VIDEO.audioCtx.resume(); } catch (e) {}   // 보강: gesture가 살아있을 때 한 번 더
     audioBuffer = await VIDEO.audioCtx.decodeAudioData(arr);
   } catch (e) {
     console.warn('audio load fail', e);
@@ -3303,13 +3311,11 @@ async function makeInstaVideo() {
   }
 
   // 3) 캔버스 + 스트림 합치기
-  //    좌표는 540x960(논리)로 유지하되, 실제 캔버스는 2배(1080x1920)로 그려서 TikTok 권장 해상도 충족.
-  //    ctx.scale로 좌표계를 2배로 맞추면 drawVideoFrame은 변경 없이 그대로 동작.
+  //    540x960 + 3Mbps — TikTok 등 외부 인코더와 가장 호환성이 좋은 보수적 설정.
+  //    (고해상도·고비트레이트는 iOS Safari MediaRecorder에서 외부 import 시 깨지는 사례가 보고됨)
   const W = 540, H = 960;
-  const SCALE = 2;
-  canvasEl.width = W * SCALE; canvasEl.height = H * SCALE;
+  canvasEl.width = W; canvasEl.height = H;
   const ctx = canvasEl.getContext('2d');
-  ctx.scale(SCALE, SCALE);
   const videoStream = canvasEl.captureStream(30);
   const mixed = new MediaStream([
     ...videoStream.getVideoTracks(),
@@ -3318,7 +3324,7 @@ async function makeInstaVideo() {
 
   let recorder;
   try {
-    recorder = mime ? new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 8000000, audioBitsPerSecond: 192000 })
+    recorder = mime ? new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 3000000, audioBitsPerSecond: 192000 })
                     : new MediaRecorder(mixed);
   } catch (e) {
     recorder = new MediaRecorder(mixed);
@@ -3333,7 +3339,8 @@ async function makeInstaVideo() {
   //    한 프레임이 에러나도 try/catch로 루프가 죽지 않게 한다.
   VIDEO.active = true;
   try { await ctxA.resume(); } catch (e) {}
-  recorder.start();   // 한 덩어리로 받아 파일 메타데이터가 깔끔해지도록 (TikTok 호환)
+  // 일부 iOS Safari/Chrome에서 인자 없이 start() 하면 첫 청크가 늦게 도착해 멈춘 듯 보이는 경우가 있음 → 1초 단위 청크.
+  try { recorder.start(1000); } catch (e) { recorder.start(); }
   srcNode.start();
   const startAudioTime = ctxA.currentTime;
 
