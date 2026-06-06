@@ -3285,12 +3285,30 @@ async function makeInstaVideo() {
   const duration = audioBuffer.duration;
   const ctxA = VIDEO.audioCtx;
 
+  // 오디오 끝에 무음 0.5초를 덧붙인 확장 버퍼를 사용 → 영상·오디오 트랙 길이가 자연스럽게 일치
+  //  · 일부 브라우저의 WebM은 SeekHead/Cues를 포함해 컨테이너 duration 패치가 안 먹는 경우가 있음
+  //  · 그래도 트랙 자체의 길이가 같으면 TikTok 재인코딩 시 audio < video 차이가 사라짐
+  //  · 영상이 0.5초 더 길어지지만 마지막 프레임 정적 + 무음이라 사용자 인지 거의 없음
+  const TAIL_PAD_SEC = 0.5;
+  let playbackBuffer = audioBuffer;
+  let recordingDuration = duration;
+  try {
+    const padFrames = Math.round(TAIL_PAD_SEC * audioBuffer.sampleRate);
+    const padded = ctxA.createBuffer(audioBuffer.numberOfChannels, audioBuffer.length + padFrames, audioBuffer.sampleRate);
+    for (let ch = 0; ch < audioBuffer.numberOfChannels; ch++) {
+      padded.getChannelData(ch).set(audioBuffer.getChannelData(ch));
+      // 나머지 padFrames는 createBuffer가 0(무음)으로 초기화
+    }
+    playbackBuffer = padded;
+    recordingDuration = padded.duration; // = duration + TAIL_PAD_SEC
+  } catch (e) { console.warn('tail pad fail', e); }
+
   // 2) 오디오 그래프:
   //    녹음 경로: source -> analyser -> mediaStreamDestination  (영상 파일에 들어가는 소리, 항상 1.0)
   //    스피커 경로: source -> speakerGain -> ctxA.destination   (사용자가 듣는 소리, 음소거 토글 가능)
   //    두 경로가 분리돼 있어서 스피커를 끄더라도 저장될 영상의 오디오는 그대로 유지됨.
   const srcNode = ctxA.createBufferSource();
-  srcNode.buffer = audioBuffer;
+  srcNode.buffer = playbackBuffer;
   const analyser = ctxA.createAnalyser();
   analyser.fftSize = 256;
   const freq = new Uint8Array(analyser.frequencyBinCount);
@@ -3360,7 +3378,8 @@ async function makeInstaVideo() {
     } catch (e) { console.warn('frame err', e); }
     const pct = Math.min(elapsed / duration, 1);
     setVideoStatus('영상 만드는 중... ' + Math.round(pct * 100) + '% (' + Math.ceil(duration) + '초)', pct);
-    if (elapsed >= duration) { stopDraw(); return false; }
+    // 녹화는 recordingDuration까지 (= 본 곡 + 0.5초 무음). 그리기를 계속해서 영상 트랙도 같은 길이가 되게 함.
+    if (elapsed >= recordingDuration) { stopDraw(); return false; }
     return true;
   }
   // 메인 루프 — rAF (모니터 리프레시에 동기, 프레임 간격이 균일 → CFR에 가까운 영상이 만들어짐)
@@ -3387,7 +3406,7 @@ async function makeInstaVideo() {
   }
   srcNode.onended = finalizeRecording;
   // 안전 타이머 — onended가 발화 안 하는 브라우저 버그 대비. 버퍼를 +0.5s로 최소화해 잉여 영상이 거의 안 생기게.
-  VIDEO.stopTimer = setTimeout(finalizeRecording, (duration + 0.5) * 1000);
+  VIDEO.stopTimer = setTimeout(finalizeRecording, (recordingDuration + 0.5) * 1000);
 
   await finished;
   VIDEO.active = false;
@@ -3402,7 +3421,7 @@ async function makeInstaVideo() {
   if (outType.includes('webm')) {
     try {
       const raw = new Uint8Array(await blob.arrayBuffer());
-      const fixed = fixWebmDurationBytes(raw, duration);
+      const fixed = fixWebmDurationBytes(raw, recordingDuration);
       if (fixed && fixed.length) blob = new Blob([fixed], { type: outType });
     } catch (e) { console.warn('duration fix skip', e); }
   }
