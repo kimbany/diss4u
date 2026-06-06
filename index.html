@@ -2863,8 +2863,9 @@ const VIDEO = {
 };
 const VIDEO_PALETTE = ['#d4ff3a', '#a3e5ff', '#c5a3ff', '#ffb3d9'];
 
-// 인스타 영상 중앙에 합성할 PNG 레이어들 (깔끔하게 누끼 딴 새 이미지)
-const LAYER_SRCS = { mascot: 'mascot2.png', wordmark: 'logo1.png', badge: 'badge2.png' };
+// 인스타 영상 중앙에 합성할 PNG 레이어 — Diss4U 워드마크 하나만 유지.
+// (마스코트/배지는 캔버스 드로잉으로 대체. 캐릭터 이미지 의존 제거 → 첫 로드 더 가볍고 일관된 톤.)
+const LAYER_SRCS = { wordmark: 'logo1.png' };
 const LAYERS = {};
 let LAYERS_READY = false;
 function loadLayers() {
@@ -2877,7 +2878,7 @@ function loadLayers() {
     setTimeout(() => finish(!!(img.complete && img.naturalWidth)), 3000);
     img.src = src + '?v=2';
   }))).then(() => {
-    LAYERS_READY = !!(LAYERS.mascot && LAYERS.mascot.naturalWidth);
+    LAYERS_READY = !!(LAYERS.wordmark && LAYERS.wordmark.naturalWidth);
     return LAYERS_READY;
   });
 }
@@ -2978,8 +2979,9 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
-// 중앙 장식 — 펄스 링/그라데이션 오브 위에 PNG 레이어(마스코트/워드마크/배지) 합성
-function drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed) {
+// 중앙 장식 — 펄스 링/그라데이션 오브 위에 캔버스 드로잉(네온 폴리곤·도트·이퀄라이저)과
+// Diss4U 워드마크(PNG)를 합성. 마스코트/배지는 코드로 그리는 추상 비주얼로 대체했다.
+function drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed, freq) {
   const beat = 1 + bass * 0.22;
   const bob = Math.sin(elapsed * 5) * (3 + bass * 12);
   const r = orbR * beat;
@@ -3018,28 +3020,107 @@ function drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed) {
   ctx.beginPath(); ctx.arc(cx, cy + bob, r, 0, Math.PI * 2); ctx.stroke();
   ctx.restore();
 
-  // 4) 마스코트(mascot2.png) — 오브 위에 합성, 비트 바운스
-  if (LAYERS.mascot) {
+  // 4) (마스코트 자리) 캐릭터 대신 코드로 그리는 추상 비주얼.
+  //    회전 6각형(브랜드 그라데이션) + 안쪽 펄스 도트 5개(역회전) + 중앙 작은 🎤.
+  //    모든 요소가 비트(bass)에 반응해 시각 임팩트가 강하고, 어떤 곡/장르에도 톤이 어울린다.
+  {
+    const cx2 = cx, cy2 = cy + bob;
+
+    // 외부 6각형 (천천히 시계방향)
     ctx.save();
-    ctx.shadowColor = 'rgba(255, 64, 175, 0.55)';
-    ctx.shadowBlur = 22 + bass * 30;
-    drawImgCentered(ctx, LAYERS.mascot, cx, cy + bob, orbR * 1.6 * beat);
+    ctx.translate(cx2, cy2);
+    ctx.rotate(elapsed * 0.4);
+    const polyR = orbR * 0.72 * beat;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+      const x = Math.cos(a) * polyR, y = Math.sin(a) * polyR;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    const pg = ctx.createLinearGradient(-polyR, -polyR, polyR, polyR);
+    pg.addColorStop(0, 'rgba(212, 255, 58, 0.92)');   // lime
+    pg.addColorStop(0.5, 'rgba(163, 229, 255, 0.78)'); // cyan
+    pg.addColorStop(1, 'rgba(255, 64, 175, 0.92)');   // hot pink
+    ctx.fillStyle = pg;
+    ctx.shadowColor = 'rgba(255, 64, 175, 0.6)';
+    ctx.shadowBlur = 30 + bass * 50;
+    ctx.fill();
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = 'rgba(212, 255, 58, 0.95)';
+    ctx.shadowColor = '#d4ff3a';
+    ctx.shadowBlur = 14;
+    ctx.stroke();
     ctx.restore();
-  } else {
-    // 폴백: 이미지 로드 실패 시 마이크 이모지
-    ctx.font = (r * 0.95) + 'px sans-serif';
+
+    // 내부 도트 5개 (역회전, 비트마다 펄스)
+    ctx.save();
+    ctx.translate(cx2, cy2);
+    ctx.rotate(-elapsed * 1.1);
+    const dotsR = orbR * 0.4;
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const dotSize = 4 + bass * 8;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * dotsR, Math.sin(a) * dotsR, dotSize, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#ffffff';
+      ctx.shadowBlur = 12;
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // 정중앙 작은 마이크 — 비트마다 살짝 커지고 빛남
+    ctx.save();
+    const micSize = orbR * 0.42 * (1 + bass * 0.18);
+    ctx.font = micSize + 'px sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('🎤', cx, cy + bob);
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.85)';
+    ctx.shadowBlur = 10 + bass * 20;
+    ctx.fillText('🎤', cx2, cy2);
+    ctx.restore();
   }
 
-  // 5) 배지(badge2.png) — THIS 4 U: 오브 바로 아래, 워드마크 위에 배치
-  let belowY = cy + orbR * 1.25;
-  if (LAYERS.badge) {
-    const bh = drawImgCentered(ctx, LAYERS.badge, cx, belowY, orbR * 1.1);
-    belowY += bh * 0.55 + orbR * 0.08;
+  // 5) (배지 자리) 작은 비트 이퀄라이저 5개 바 — 오디오 주파수 실시간 반응.
+  let belowY = cy + orbR * 1.28;
+  {
+    const eqW = orbR * 1.05;
+    const eqH = orbR * 0.22;
+    const barCount = 5;
+    const barW = (eqW / barCount) * 0.55;
+    const gap = (eqW / barCount) * 0.45;
+    const startX = cx - eqW / 2 + barW / 2;
+    const bins = freq ? freq.length : 0;
+    ctx.save();
+    for (let i = 0; i < barCount; i++) {
+      const idx = bins ? Math.floor(i / barCount * (bins * 0.5)) : 0;
+      const v = bins ? freq[idx] / 255 : 0.3;
+      const h = eqH * (0.32 + v * 0.78);
+      const x = startX + i * (barW + gap);
+      const color = VIDEO_PALETTE[i % VIDEO_PALETTE.length];
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 10;
+      // 라운드된 바
+      const rx = x - barW / 2, ry = belowY - h / 2, rw = barW, rh = h, rr = Math.min(barW / 2, 6);
+      ctx.beginPath();
+      ctx.moveTo(rx + rr, ry);
+      ctx.lineTo(rx + rw - rr, ry);
+      ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + rr);
+      ctx.lineTo(rx + rw, ry + rh - rr);
+      ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - rr, ry + rh);
+      ctx.lineTo(rx + rr, ry + rh);
+      ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - rr);
+      ctx.lineTo(rx, ry + rr);
+      ctx.quadraticCurveTo(rx, ry, rx + rr, ry);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+    belowY += eqH * 0.7 + orbR * 0.12;
   }
 
-  // 6) 워드마크(logo1.png) — Diss4U: 배지 아래
+  // 6) 워드마크(logo1.png) — Diss4U: 이퀄라이저 아래 (사용자가 유지하기로 한 유일한 PNG)
   if (LAYERS.wordmark) {
     drawImgCentered(ctx, LAYERS.wordmark, cx, belowY, orbR * 2.2);
   } else {
@@ -3101,8 +3182,9 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song) {
   }
   ctx.globalAlpha = 1;
 
-  // 중앙: 순수 캔버스 드로잉(브랜드 컬러 오브 + 마이크 + Diss4U 워드마크)
-  drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed);
+  // 중앙: 순수 캔버스 드로잉(네온 폴리곤 + 펄스 도트 + 이퀄라이저 + Diss4U 워드마크).
+  // 이퀄라이저가 freq를 직접 사용하므로 함께 전달.
+  drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed, freq);
 
   // 상단 제목
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
