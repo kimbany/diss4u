@@ -3217,8 +3217,7 @@ async function makeInstaVideo() {
   //    한 프레임이 에러나도 try/catch로 루프가 죽지 않게 한다.
   VIDEO.active = true;
   try { await ctxA.resume(); } catch (e) {}
-  // 1초 단위 청크로 받으면 모바일에서 트랙이 중간에 멈춰도 그때까지의 영상이 보존됨.
-  try { recorder.start(1000); } catch (e) { recorder.start(); }
+  recorder.start();   // 한 덩어리로 받아 파일 메타데이터가 깔끔해지도록 (TikTok 호환)
   srcNode.start();
   const startAudioTime = ctxA.currentTime;
 
@@ -3226,7 +3225,9 @@ async function makeInstaVideo() {
     if (VIDEO.raf) { cancelAnimationFrame(VIDEO.raf); VIDEO.raf = null; }
     if (VIDEO.drawTimer) { clearInterval(VIDEO.drawTimer); VIDEO.drawTimer = null; }
   }
-  // 한 프레임 그리기 — rAF/백업 setInterval에서 공용으로 호출
+  // 한 프레임 그리기 — rAF/백업 setInterval에서 공용으로 호출.
+  // elapsed가 오디오 duration을 넘으면 그리기 중단 → 영상 트랙이 오디오보다 길어지지 않게
+  // (TikTok import 시 트랙 길이 차이를 오디오 늘리기로 보정해버리는 문제 방지)
   function renderOneFrame() {
     if (!VIDEO.active || !recorder || recorder.state !== 'recording') { stopDraw(); return false; }
     const elapsed = ctxA.currentTime - startAudioTime;
@@ -3236,6 +3237,7 @@ async function makeInstaVideo() {
     } catch (e) { console.warn('frame err', e); }
     const pct = Math.min(elapsed / duration, 1);
     setVideoStatus('영상 만드는 중... ' + Math.round(pct * 100) + '% (' + Math.ceil(duration) + '초)', pct);
+    if (elapsed >= duration) { stopDraw(); return false; }
     return true;
   }
   // 메인 루프 — rAF (모니터 리프레시에 동기, 프레임 간격이 균일 → CFR에 가까운 영상이 만들어짐)
@@ -3248,10 +3250,12 @@ async function makeInstaVideo() {
   VIDEO.drawTimer = setInterval(renderOneFrame, 200);
 
   srcNode.onended = () => {
+    stopDraw();
     if (recorder.state === 'recording') { try { recorder.stop(); } catch (e) {} }
   };
   // 안전 타이머
   VIDEO.stopTimer = setTimeout(() => {
+    stopDraw();
     if (recorder.state === 'recording') { try { recorder.stop(); } catch (e) {} }
   }, (duration + 2) * 1000);
 
