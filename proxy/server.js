@@ -2487,7 +2487,44 @@ function extractLyricsJson(text) {
   let t = text.replace(/```json|```/g, '').trim();
   const m = t.match(/\{[\s\S]*\}/);
   if (m) t = m[0];
+  // 1. 엄격 파싱 시도
   try { const p = JSON.parse(t); if (p.lyrics && p.title) return p; } catch {}
+  // 2. 자주 깨지는 패턴 보정 후 재시도
+  //    - 스마트 따옴표(curly quotes)를 일반 따옴표로
+  //    - 문자열 내부의 진짜 줄바꿈/탭/제어문자를 \\n/\\t로 이스케이프
+  let repaired = t
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"');
+  let out = '', inStr = false, esc = false;
+  for (let i = 0; i < repaired.length; i++) {
+    const c = repaired[i];
+    if (esc) { out += c; esc = false; continue; }
+    if (c === '\\') { out += c; esc = true; continue; }
+    if (c === '"') { out += c; inStr = !inStr; continue; }
+    if (inStr) {
+      if (c === '\n') { out += '\\n'; continue; }
+      if (c === '\r') { continue; }            // CR 제거
+      if (c === '\t') { out += '\\t'; continue; }
+      const code = c.charCodeAt(0);
+      if (code < 0x20) { continue; }            // 기타 제어문자 제거
+    }
+    out += c;
+  }
+  try { const p = JSON.parse(out); if (p.lyrics && p.title) return p; } catch {}
+  // 3. 최후 폴백: 정규식으로 title/style/lyrics 직접 추출 (lyrics는 진짜 줄바꿈 허용)
+  try {
+    const titleM = t.match(/"title"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    const styleM = t.match(/"style"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    const lyricsM = t.match(/"lyrics"\s*:\s*"([\s\S]*?)"\s*(?:,|\})/);
+    if (titleM && lyricsM) {
+      const unescape = s => s.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      return {
+        title: unescape(titleM[1]).trim(),
+        style: styleM ? unescape(styleM[1]).trim() : 'playful korean kpop',
+        lyrics: unescape(lyricsM[1]).trim()
+      };
+    }
+  } catch {}
   return null;
 }
 
