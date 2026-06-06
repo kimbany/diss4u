@@ -3249,6 +3249,17 @@ async function makeInstaVideo() {
     return;
   }
 
+  // ★ AudioContext는 반드시 user gesture 안(=어떤 await보다 먼저)에서 만들고 resume.
+  //    이걸 await 이후에 하면 iOS Safari가 "사용자 입력 없음"으로 보고 AudioContext가
+  //    suspended에서 못 빠져나와 decodeAudioData가 멈춤 → 첫 클릭이 '아무 반응 없음'으로 보임.
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (VIDEO.audioCtx && VIDEO.audioCtx.state !== 'closed') {
+    try { VIDEO.audioCtx.close(); } catch (e) {}
+  }
+  VIDEO.audioCtx = new AudioCtx();
+  // resume()는 Promise를 반환하지만 await하지 않음 — gesture 안에서 호출만 하면 충분.
+  try { VIDEO.audioCtx.resume(); } catch (e) {}
+
   openVideoModal();
   setVideoStatus('오디오 불러오는 중...', 0);
 
@@ -3257,15 +3268,12 @@ async function makeInstaVideo() {
 
   const lines = parseLyricLines(song.lyrics);
 
-  // 1) 오디오 받아서 디코딩
+  // 1) 오디오 받아서 디코딩 (AudioContext는 위에서 이미 생성·resume 됨)
   let audioBuffer;
   try {
     const resp = await fetch(song.audioUrl);
     const arr = await resp.arrayBuffer();
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    VIDEO.audioCtx = new AudioCtx();
-    // Safari 모바일에서 새 AudioContext가 suspended로 시작하면 첫 decodeAudioData가 늦거나 멈추는 케이스가 있음 → 먼저 resume
-    try { await VIDEO.audioCtx.resume(); } catch (e) {}
+    try { await VIDEO.audioCtx.resume(); } catch (e) {}   // 보강: gesture가 살아있을 때 한 번 더
     audioBuffer = await VIDEO.audioCtx.decodeAudioData(arr);
   } catch (e) {
     console.warn('audio load fail', e);
