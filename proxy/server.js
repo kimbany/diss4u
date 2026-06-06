@@ -872,7 +872,7 @@ function buildPrompt(params) {
 * 밈처럼 중독되는 Hook
 * 자연스럽게 이어지는 상황극
 * 너무 심하지 않고 귀엽게 킹받는 분위기
-* 40~50초 안에 끝나는 짧은 숏폼 노래
+* 50~60초(1분 안팎) 안에 끝나는 짧은 숏폼 노래
 * Hook이 가장 기억에 남는 구조
 * 1절만으로도 완성된 한 곡처럼 들리는 구성
 * 선택된 장르의 리듬, 멜로디, 추임새, 창법이 살아나는 것
@@ -906,6 +906,9 @@ function buildPrompt(params) {
 * 1분 이상으로 길어질 수 있는 긴 구성
 * 장르명을 style에만 쓰고 실제 가사에는 반영하지 않는 것
 * 노래가 중간에 끊긴 것처럼 끝나는 것
+* Hook을 너무 많이 반복해서 곡이 늘어지고 마지막 클로징 줄이 잘리게 만드는 것
+  (같은 Hook 줄은 최대 6줄 안쪽으로, 마지막에는 다른 변형(클로징) 줄을 한 줄 두고 끝내라.
+   그 클로징 줄이 노래에 반드시 불려야 한다)
 
 을 하지 마라.
 
@@ -3464,8 +3467,12 @@ const server = http.createServer(async (req, res) => {
       return send(res, 400, { error: '필수 항목 누락' });
     }
 
-    // 노래 길이 단축 힌트: Suno가 더 짧게 만들도록 style/lyrics에 보조 마커 추가
-    const SHORT_HINT = ', short song around 45 seconds, no long intro or outro, fade out at end';
+    // Suno 곡 생성 힌트:
+    //  · 사용자 요청 — 1분 안팎 길이 + 가사에 적힌 모든 줄이 반드시 노래에 불려야 함
+    //  · 'fade out at end' 는 빼야 한다. Suno가 페이드를 너무 일찍 시작해 마지막 변형 가사 줄
+    //    (예: 후크의 마지막 클로징 라인)을 삼키는 회귀가 보고됨.
+    //  · 대신 [End] 마커(아래에서 가사 끝에 자동 추가)와 'brief natural outro' 지시로 자연스럽게 끝맺음.
+    const SHORT_HINT = ', short song around 60 seconds, no long intro, sing every lyric line including the final line completely, then brief natural outro';
     const finalStyle = /short|seconds|outro|fade/i.test(style) ? style : (style + SHORT_HINT);
     const finalLyrics = /\[End\]\s*$/i.test(lyrics.trim()) ? lyrics : (lyrics.trim() + '\n\n[End]');
 
