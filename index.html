@@ -2227,11 +2227,13 @@ function closeCreditHistory() {
 
 function goHome() {
   loadHistory();
-  // 현재 history가 input 위에 쌓여 있으면 자연스러운 뒤로가기로 처리 → 브라우저 forward도 가능
+  // 로고/홈 버튼: 어디 화면에 있든 무조건 노래 제작 화면(input)으로 이동.
+  // 이전 구현은 history.back()을 호출해 뒤로가기처럼 동작했는데, 두 단계 이상 들어간
+  // 경우 한 번의 back으로 input까지 못 가서 "로고 눌렀는데 엉뚱한 화면"이 되는 회귀가 있었음.
+  // pushState로 새 entry를 추가해 뒤로가기로는 직전 화면으로 갈 수 있게(=히스토리 보존).
   try {
-    if (history.state && history.state.screen && history.state.screen !== 'input') {
-      history.back();
-      return;
+    if (!history.state || history.state.screen !== 'input') {
+      history.pushState({ screen: 'input' }, '');
     }
   } catch (e) {}
   showScreen('input');
