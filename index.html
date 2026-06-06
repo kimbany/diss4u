@@ -3333,7 +3333,8 @@ async function makeInstaVideo() {
   //    한 프레임이 에러나도 try/catch로 루프가 죽지 않게 한다.
   VIDEO.active = true;
   try { await ctxA.resume(); } catch (e) {}
-  recorder.start();   // 한 덩어리로 받아 파일 메타데이터가 깔끔해지도록 (TikTok 호환)
+  // 일부 iOS Safari/Chrome에서 인자 없이 start() 하면 첫 청크가 늦게 도착해 멈춘 듯 보이는 경우가 있음 → 1초 단위 청크.
+  try { recorder.start(1000); } catch (e) { recorder.start(); }
   srcNode.start();
   const startAudioTime = ctxA.currentTime;
 
