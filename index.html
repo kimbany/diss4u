@@ -1259,16 +1259,42 @@ const db = firebase.firestore();
 let currentUser = null;
 
 // 내 노래 Firestore에서 가져오기 (uid 기준, 최신순)
-async function fetchMySongs() {
+// 30초 메모리 캐시 — 모달 여닫이/리스트 다시 그리기 시 즉시 반응
+let _mySongsCache = { uid: null, at: 0, data: null };
+const MY_SONGS_CACHE_TTL = 30 * 1000;
+const MY_SONGS_PAGE_SIZE = 100;
+
+function invalidateMySongsCache() { _mySongsCache.at = 0; }
+
+async function fetchMySongs(opts) {
   if (!currentUser) return [];
+  const force = !!(opts && opts.force);
+  if (!force && _mySongsCache.uid === currentUser.uid
+      && (Date.now() - _mySongsCache.at) < MY_SONGS_CACHE_TTL) {
+    return _mySongsCache.data;
+  }
   try {
-    const snap = await db.collection('songs').where('uid', '==', currentUser.uid).get();
+    let snap;
+    try {
+      // 1차: 서버에서 최신순 N개만 받아옴 (필요 인덱스: songs (uid asc, createdAt desc))
+      snap = await db.collection('songs')
+        .where('uid', '==', currentUser.uid)
+        .orderBy('createdAt', 'desc')
+        .limit(MY_SONGS_PAGE_SIZE)
+        .get();
+    } catch (idxErr) {
+      // 인덱스 미생성 등으로 실패 시 안전 폴백 — 기존처럼 전체 받고 클라에서 정렬
+      console.warn('orderBy query failed (composite index?), falling back', idxErr);
+      snap = await db.collection('songs').where('uid', '==', currentUser.uid).get();
+    }
     const arr = snap.docs.map(d => {
       const x = d.data();
       return { id: d.id, ...x, createdAt: (x.createdAt && x.createdAt.toDate) ? x.createdAt.toDate().toISOString() : (x.createdAt || new Date().toISOString()) };
     }).filter(s => !s.blocked); // 관리자가 차단한 곡은 만든 사람에게도 숨김
     arr.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-    return arr;
+    const result = arr.slice(0, MY_SONGS_PAGE_SIZE);
+    _mySongsCache = { uid: currentUser.uid, at: Date.now(), data: result };
+    return result;
   } catch (e) {
     console.warn('fetchMySongs fail', e);
     return [];
@@ -1293,6 +1319,7 @@ async function saveSong(song) {
       audioUrl: song.audioUrl || '',
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    invalidateMySongsCache();
     return ref.id;
   } catch (e) {
     console.warn('saveSong fail', e);
@@ -2702,15 +2729,18 @@ async function loadSong(id) {
 async function deleteSong(id) {
   if (!confirm('이 노래를 삭제할까요?')) return;
   try { await db.collection('songs').doc(id).delete(); } catch (e) { console.warn('delete fail', e); }
-  await loadHistory();
+  invalidateMySongsCache();
+  // 한 번만 다시 그림 — 마이리스트 화면이 활성이면 그쪽, 아니면 홈의 history만
   const mylist = document.getElementById('screen-mylist');
-  if (mylist && mylist.classList.contains('active')) renderMyList();
+  if (mylist && mylist.classList.contains('active')) await renderMyList();
+  else await loadHistory();
 }
 
 async function clearAllHistory() {
   if (!confirm('모든 노래 기록을 삭제할까요?')) return;
   const songs = await fetchMySongs();
   await Promise.all(songs.map(s => db.collection('songs').doc(s.id).delete().catch(() => {})));
+  invalidateMySongsCache();
   await loadHistory();
 }
 
