@@ -2690,6 +2690,29 @@ function showResult() {
 
 function newSong() {
   STATE.currentSong = null;
+  // 새 노래 시작 — 폼 입력값과 선택 상태를 모두 기본값으로 초기화
+  try {
+    const ids = ['targetName', 'relationship', 'keywords', 'mustInclude'];
+    ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    const useName = document.getElementById('useNameInLyrics');
+    if (useName) useName.checked = true;   // 기본 ON
+
+    // 장르 / 성별 / 언어를 기본값으로 되돌림
+    function resetPills(rowId, attr, defaultValue) {
+      document.querySelectorAll('#' + rowId + ' .pill').forEach(p => {
+        p.classList.toggle('selected', p.dataset[attr] === defaultValue);
+      });
+    }
+    resetPills('genreRow', 'genre', 'yodel');
+    resetPills('genderRow', 'gender', 'male');
+    document.querySelectorAll('.lang-toggle button').forEach(b => {
+      b.classList.toggle('active', b.dataset.lang === 'ko');
+    });
+    STATE.selectedGenre = 'yodel';
+    STATE.selectedGender = 'male';
+    STATE.selectedLang = 'ko';
+  } catch (e) { console.warn('newSong reset fail', e); }
+
   showScreen('input');
   loadHistory();
 }
