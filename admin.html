@@ -109,6 +109,23 @@
   .sales-summary { display: flex; gap: 18px; flex-wrap: wrap; padding: 10px 0 14px; font-size: 14px; color: var(--text); }
   .sales-summary span b { font-size: 16px; margin-left: 4px; }
   input[type="date"] { max-width: 180px; }
+  /* 통계 */
+  .stats-row { display: flex; gap: 18px; flex-wrap: wrap; }
+  .stats-col { flex: 1 1 320px; min-width: 280px; }
+  .stats-h { font-size: 14px; color: var(--text); margin: 4px 0 10px; }
+  .stat-bar-row {
+    display: grid; grid-template-columns: 110px 1fr 44px;
+    align-items: center; gap: 10px; padding: 6px 0;
+    border-bottom: 1px solid var(--line); font-size: 13px;
+  }
+  .stat-bar-row:last-child { border-bottom: none; }
+  .stat-bar-label { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stat-bar-wrap { background: var(--panel2); height: 8px; border-radius: 4px; overflow: hidden; }
+  .stat-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+  .stat-bar-count { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 700; text-align: right; }
+  @media (max-width: 480px) {
+    .stat-bar-row { grid-template-columns: 90px 1fr 40px; gap: 8px; font-size: 12px; }
+  }
 </style>
 </head>
 <body>
@@ -142,6 +159,7 @@
     <div class="tabs">
       <button class="tab active" data-tab="customers">👥 고객관리</button>
       <button class="tab" data-tab="sales">💰 매출</button>
+      <button class="tab" data-tab="stats">📊 통계</button>
       <button class="tab" data-tab="settings">⚙️ 설정</button>
     </div>
 
@@ -224,6 +242,35 @@
           </table>
         </div>
         <div class="msg" id="salesMsg"></div>
+      </div>
+    </div>
+
+    <!-- 통계 탭 -->
+    <div class="tab-panel" data-panel="stats">
+      <div class="card">
+        <h2>📊 통계</h2>
+        <div class="toolbar">
+          <label for="statsFrom" style="margin:0;">시작</label>
+          <input type="date" id="statsFrom" />
+          <label for="statsTo" style="margin:0;">종료</label>
+          <input type="date" id="statsTo" />
+          <button class="btn small" id="loadStatsBtn">조회</button>
+          <button class="btn secondary small" id="statsTodayBtn">오늘</button>
+          <button class="btn secondary small" id="stats7Btn">최근 7일</button>
+          <button class="btn secondary small" id="stats30Btn">최근 30일</button>
+        </div>
+        <div class="sales-summary" id="statsSummary"></div>
+        <div class="stats-row">
+          <div class="stats-col">
+            <h3 class="stats-h">🎵 장르별 제작 수</h3>
+            <div id="statsGenres"><div class="msg" style="color:var(--dim)">조회를 눌러주세요</div></div>
+          </div>
+          <div class="stats-col">
+            <h3 class="stats-h">🏷️ 키워드 TOP 30</h3>
+            <div id="statsKeywords"><div class="msg" style="color:var(--dim)">조회를 눌러주세요</div></div>
+          </div>
+        </div>
+        <div class="msg" id="statsMsg"></div>
       </div>
     </div>
 
@@ -677,6 +724,7 @@ function switchTab(name) {
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.getAttribute('data-panel') === name));
   if (name === 'sales') loadSales();
+  else if (name === 'stats') loadStats();
 }
 document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => switchTab(b.getAttribute('data-tab'))));
 
@@ -742,6 +790,61 @@ $('salesTodayBtn').addEventListener('click', () => { setSalesRange(todayKST(), t
 $('sales7Btn').addEventListener('click',  () => { setSalesRange(shiftKST(-6), todayKST()); loadSales(); });
 $('sales30Btn').addEventListener('click', () => { setSalesRange(shiftKST(-29), todayKST()); loadSales(); });
 setSalesRange(todayKST(), todayKST());
+
+// ===== 통계 =====
+const GENRE_NAMES_ADMIN = {
+  hiphop: '힙합', ballad: '발라드', trot: '트로트',
+  kpop: 'K-pop', rock: '락', kids: '동요', lofi: '로파이', random: '랜덤'
+};
+function setStatsRange(from, to) { $('statsFrom').value = from; $('statsTo').value = to; }
+async function loadStats() {
+  if (!$('statsFrom').value) $('statsFrom').value = todayKST();
+  if (!$('statsTo').value) $('statsTo').value = todayKST();
+  let from = $('statsFrom').value, to = $('statsTo').value;
+  if (from > to) { const t = from; from = to; to = t; setStatsRange(from, to); }
+  $('statsGenres').innerHTML = '<div class="msg" style="color:var(--dim)">조회 중…</div>';
+  $('statsKeywords').innerHTML = '<div class="msg" style="color:var(--dim)">조회 중…</div>';
+  $('statsSummary').innerHTML = '';
+  setMsg($('statsMsg'), '');
+  const r = await api('/admin/stats?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to));
+  if (r.status === 401) { logout(); return; }
+  if (!r.ok || !r.data.ok) {
+    setMsg($('statsMsg'), (r.data && r.data.message) || '통계 조회 실패', 'err');
+    $('statsGenres').innerHTML = ''; $('statsKeywords').innerHTML = '';
+    return;
+  }
+  renderStats(r.data);
+}
+function renderStatBars(items, getLabel, maxBars) {
+  if (!items.length) return '<div class="msg" style="color:var(--dim)">데이터가 없어요</div>';
+  const max = items[0].count || 1;
+  const shown = items.slice(0, maxBars);
+  return shown.map(it => {
+    const pct = Math.max(4, Math.round((it.count / max) * 100));
+    return '<div class="stat-bar-row">'
+      + '<div class="stat-bar-label">' + escapeHtml(getLabel(it)) + '</div>'
+      + '<div class="stat-bar-wrap"><div class="stat-bar-fill" style="width:' + pct + '%;"></div></div>'
+      + '<div class="stat-bar-count">' + it.count + '</div>'
+      + '</div>';
+  }).join('');
+}
+function renderStats(d) {
+  $('statsSummary').innerHTML =
+    '<span>기간 <b>' + d.from + (d.from === d.to ? '' : ' ~ ' + d.to) + '</b></span>'
+    + '<span>제작 곡 <b style="color:var(--accent)">' + d.count + '</b>건</span>'
+    + '<span>제작 회원 <b>' + d.uniqueUsers + '</b>명</span>';
+  $('statsGenres').innerHTML = renderStatBars(d.genres || [], it => (GENRE_NAMES_ADMIN[it.genre] || it.genre), 12);
+  $('statsKeywords').innerHTML = renderStatBars(d.keywords || [], it => it.keyword, 30);
+}
+$('loadStatsBtn').addEventListener('click', loadStats);
+$('statsFrom').addEventListener('change', loadStats);
+$('statsTo').addEventListener('change', loadStats);
+$('statsFrom').addEventListener('keydown', e => { if (e.key === 'Enter') loadStats(); });
+$('statsTo').addEventListener('keydown', e => { if (e.key === 'Enter') loadStats(); });
+$('statsTodayBtn').addEventListener('click', () => { setStatsRange(todayKST(), todayKST()); loadStats(); });
+$('stats7Btn').addEventListener('click',  () => { setStatsRange(shiftKST(-6), todayKST()); loadStats(); });
+$('stats30Btn').addEventListener('click', () => { setStatsRange(shiftKST(-29), todayKST()); loadStats(); });
+setStatsRange(todayKST(), todayKST());
 
 // 시작: 토큰 있으면 대시보드 시도
 if (TOKEN) { showDash(); } else { showLogin(); }
