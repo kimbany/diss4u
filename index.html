@@ -2675,6 +2675,9 @@ function showResult() {
   }
   pushScreen('result');
   mountAd('adResult', AD_SLOT_RESULT);
+  // SNS 공유 영상에 쓰는 PNG 레이어를 결과 화면 진입 시점에 미리 받아둠
+  // → 사용자가 'SNS 공유' 버튼을 누를 때 캐시 히트로 즉시 진행
+  try { loadLayers(); } catch (e) {}
   mountCoupangBanner('coupangResult');   // 노래 완성 하단 쿠팡 특가 배너
 }
 
@@ -2710,6 +2713,12 @@ async function loadHistory() {
 }
 
 async function loadSong(id) {
+  // 1) 메모리 캐시에 있으면 네트워크 없이 즉시 화면 전환
+  if (currentUser && _mySongsCache.uid === currentUser.uid && Array.isArray(_mySongsCache.data)) {
+    const hit = _mySongsCache.data.find(s => s.id === id);
+    if (hit) { STATE.currentSong = hit; showResult(); return; }
+  }
+  // 2) 캐시 미스(공유 링크에서 진입 등) — 서버 조회 폴백
   try {
     const doc = await db.collection('songs').doc(id).get();
     if (doc.exists) {
@@ -3255,6 +3264,8 @@ async function makeInstaVideo() {
     const arr = await resp.arrayBuffer();
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     VIDEO.audioCtx = new AudioCtx();
+    // Safari 모바일에서 새 AudioContext가 suspended로 시작하면 첫 decodeAudioData가 늦거나 멈추는 케이스가 있음 → 먼저 resume
+    try { await VIDEO.audioCtx.resume(); } catch (e) {}
     audioBuffer = await VIDEO.audioCtx.decodeAudioData(arr);
   } catch (e) {
     console.warn('audio load fail', e);
