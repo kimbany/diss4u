@@ -2501,14 +2501,13 @@ async function tryClaude(prompt) {
     // 429/503/529(과부하)는 1~2초 backoff 후 1회 재시도
     for (let a = 0; a < 2; a++) {
       try {
-        // adaptive thinking: 쓰기 전에 "이 줄이 말이 되나/키워드를 제대로 해석했나"를
-        // 실제로 검토하게 해서 문맥 깨짐(라임 채우기·키워드 오해)을 줄인다.
-        // thinking 블록은 응답 content에 별도로 들어오고, 가사 JSON은 text 블록에 그대로 남는다.
-        // Opus/Sonnet 4.6은 adaptive thinking으로 쓰기 전에 문맥을 자체검토하게 한다.
-        // thinking이 토큰을 쓰므로 가사 JSON이 잘리지 않도록 max_tokens를 넉넉히 둔다.
-        const useThinking = model.startsWith('claude-opus') || model.startsWith('claude-sonnet-4-6');
-        const body = { model, max_tokens: useThinking ? 6000 : 2000, messages: [{ role: 'user', content: prompt }] };
-        if (useThinking) body.thinking = { type: 'adaptive' };
+        // ⚠️ thinking은 켜지 않는다.
+        // 가사는 "짧은 창작 + JSON 한 덩어리" 출력 작업인데, adaptive thinking을 켜면
+        // 모델이 생각(thinking)에 max_tokens를 다 써버려 정작 가사 JSON(text 블록)이
+        // 안 나오는 "200 bad JSON"이 발생한다(실측 확인됨).
+        // Opus 4.8은 thinking 없이도 충분히 똑똑하므로, 프롬프트의 자체검토 지시(4번 규칙)에
+        // 맡기고 바로 JSON을 쓰게 한다 → 품질 유지 + JSON 안정 + 속도 향상.
+        const body = { model, max_tokens: 3000, messages: [{ role: 'user', content: prompt }] };
         const r = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
@@ -3392,7 +3391,9 @@ const server = http.createServer(async (req, res) => {
     console.error('❌ 가사 생성 전체 실패:', debug);
     // 실패 원인을 한국어로 분류해 사용자에게 힌트 제공
     let hint = 'AI 서버가 지금 바빠요. 잠시 후 다시 시도해주세요.';
-    if (/401|403|invalid|authentication|x-api-key/i.test(debug)) {
+    // 주의: 그냥 "invalid"로 매칭하면 Solar의 "invalid header value"(키 값 오타) 같은
+    // 비-인증 에러까지 "인증 오류"로 오진된다. 진짜 인증 신호만 좁게 매칭한다.
+    if (/\b401\b|\b403\b|authentication|invalid x-api-key|invalid api key|permission_error/i.test(debug)) {
       hint = 'AI 인증 오류예요(API 키 문제). 관리자 확인이 필요해요.';
     } else if (/credit|quota|billing|insufficient|402|payment/i.test(debug)) {
       hint = 'AI 사용량(크레딧)이 소진된 것 같아요. 관리자 확인이 필요해요.';
