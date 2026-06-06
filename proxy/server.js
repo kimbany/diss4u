@@ -2494,7 +2494,7 @@ function extractLyricsJson(text) {
 async function tryClaude(prompt) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return { success: false, error: 'no_key' };
-  const models = ['claude-sonnet-4-6', 'claude-haiku-4-5-20251001'];
+  const models = ['claude-opus-4-8', 'claude-sonnet-4-6'];
   const errors = [];
   for (const model of models) {
     let me = '';
@@ -2504,10 +2504,11 @@ async function tryClaude(prompt) {
         // adaptive thinking: 쓰기 전에 "이 줄이 말이 되나/키워드를 제대로 해석했나"를
         // 실제로 검토하게 해서 문맥 깨짐(라임 채우기·키워드 오해)을 줄인다.
         // thinking 블록은 응답 content에 별도로 들어오고, 가사 JSON은 text 블록에 그대로 남는다.
-        const body = { model, max_tokens: 4000, messages: [{ role: 'user', content: prompt }] };
-        if (model.startsWith('claude-sonnet-4-6') || model.startsWith('claude-opus')) {
-          body.thinking = { type: 'adaptive' };
-        }
+        // Opus/Sonnet 4.6은 adaptive thinking으로 쓰기 전에 문맥을 자체검토하게 한다.
+        // thinking이 토큰을 쓰므로 가사 JSON이 잘리지 않도록 max_tokens를 넉넉히 둔다.
+        const useThinking = model.startsWith('claude-opus') || model.startsWith('claude-sonnet-4-6');
+        const body = { model, max_tokens: useThinking ? 6000 : 2000, messages: [{ role: 'user', content: prompt }] };
+        if (useThinking) body.thinking = { type: 'adaptive' };
         const r = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
