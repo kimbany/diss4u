@@ -3318,7 +3318,7 @@ async function makeInstaVideo() {
 
   let recorder;
   try {
-    recorder = mime ? new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 8000000 })
+    recorder = mime ? new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 8000000, audioBitsPerSecond: 192000 })
                     : new MediaRecorder(mixed);
   } catch (e) {
     recorder = new MediaRecorder(mixed);
@@ -3365,15 +3365,22 @@ async function makeInstaVideo() {
   // 안전 백업 — 탭이 백그라운드로 가면 rAF가 멈출 수 있으므로 저빈도 setInterval로 프레임 공급 유지
   VIDEO.drawTimer = setInterval(renderOneFrame, 200);
 
-  srcNode.onended = () => {
+  // 오디오 종료 → A/V 트랙 길이를 정확히 맞춰서 닫는 절차
+  //   ① 그리기 중단 (캔버스 정지)
+  //   ② 비디오 트랙 즉시 stop → captureStream(30)이 마지막 프레임을 30fps로 더 emit하지 않게 차단
+  //   ③ 100ms 후 recorder.stop → MediaStreamAudioDestinationNode 내부 버퍼의 마지막 오디오 샘플들이
+  //      recorder로 flush될 시간 확보. (트랙은 이미 끊겨 있어 영상은 더 길어지지 않음)
+  //   이렇게 해야 TikTok 재인코딩 시 video > audio 길이 차이로 오디오가 먼저 끝나는 현상이 사라짐.
+  function finalizeRecording() {
     stopDraw();
-    if (recorder.state === 'recording') { try { recorder.stop(); } catch (e) {} }
-  };
-  // 안전 타이머
-  VIDEO.stopTimer = setTimeout(() => {
-    stopDraw();
-    if (recorder.state === 'recording') { try { recorder.stop(); } catch (e) {} }
-  }, (duration + 2) * 1000);
+    try { videoStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+    setTimeout(() => {
+      if (recorder.state === 'recording') { try { recorder.stop(); } catch (e) {} }
+    }, 100);
+  }
+  srcNode.onended = finalizeRecording;
+  // 안전 타이머 — onended가 발화 안 하는 브라우저 버그 대비. 버퍼를 +0.5s로 최소화해 잉여 영상이 거의 안 생기게.
+  VIDEO.stopTimer = setTimeout(finalizeRecording, (duration + 0.5) * 1000);
 
   await finished;
   VIDEO.active = false;
