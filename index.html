@@ -3156,10 +3156,14 @@ async function makeInstaVideo() {
     muteBtn.innerHTML = SPEAKER_ICON_ON;
   }
 
-  // 3) 캔버스 + 스트림 합치기 (모바일 부하 줄이려 540x960)
+  // 3) 캔버스 + 스트림 합치기
+  //    좌표는 540x960(논리)로 유지하되, 실제 캔버스는 2배(1080x1920)로 그려서 TikTok 권장 해상도 충족.
+  //    ctx.scale로 좌표계를 2배로 맞추면 drawVideoFrame은 변경 없이 그대로 동작.
   const W = 540, H = 960;
-  canvasEl.width = W; canvasEl.height = H;
+  const SCALE = 2;
+  canvasEl.width = W * SCALE; canvasEl.height = H * SCALE;
   const ctx = canvasEl.getContext('2d');
+  ctx.scale(SCALE, SCALE);
   const videoStream = canvasEl.captureStream(30);
   const mixed = new MediaStream([
     ...videoStream.getVideoTracks(),
@@ -3168,7 +3172,7 @@ async function makeInstaVideo() {
 
   let recorder;
   try {
-    recorder = mime ? new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 3000000 })
+    recorder = mime ? new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 8000000 })
                     : new MediaRecorder(mixed);
   } catch (e) {
     recorder = new MediaRecorder(mixed);
@@ -3189,11 +3193,12 @@ async function makeInstaVideo() {
   const startAudioTime = ctxA.currentTime;
 
   function stopDraw() {
+    if (VIDEO.raf) { cancelAnimationFrame(VIDEO.raf); VIDEO.raf = null; }
     if (VIDEO.drawTimer) { clearInterval(VIDEO.drawTimer); VIDEO.drawTimer = null; }
   }
-  // 그리기 루프: 녹음이 끝날 때까지 캔버스 프레임을 계속 공급 → 영상 트랙이 도중에 멈추지 않게.
-  VIDEO.drawTimer = setInterval(() => {
-    if (!VIDEO.active || !recorder || recorder.state !== 'recording') { stopDraw(); return; }
+  // 한 프레임 그리기 — rAF/백업 setInterval에서 공용으로 호출
+  function renderOneFrame() {
+    if (!VIDEO.active || !recorder || recorder.state !== 'recording') { stopDraw(); return false; }
     const elapsed = ctxA.currentTime - startAudioTime;
     try {
       analyser.getByteFrequencyData(freq);
@@ -3201,7 +3206,16 @@ async function makeInstaVideo() {
     } catch (e) { console.warn('frame err', e); }
     const pct = Math.min(elapsed / duration, 1);
     setVideoStatus('영상 만드는 중... ' + Math.round(pct * 100) + '% (' + Math.ceil(duration) + '초)', pct);
-  }, 33);
+    return true;
+  }
+  // 메인 루프 — rAF (모니터 리프레시에 동기, 프레임 간격이 균일 → CFR에 가까운 영상이 만들어짐)
+  function tick() {
+    if (!renderOneFrame()) return;
+    VIDEO.raf = requestAnimationFrame(tick);
+  }
+  VIDEO.raf = requestAnimationFrame(tick);
+  // 안전 백업 — 탭이 백그라운드로 가면 rAF가 멈출 수 있으므로 저빈도 setInterval로 프레임 공급 유지
+  VIDEO.drawTimer = setInterval(renderOneFrame, 200);
 
   srcNode.onended = () => {
     if (recorder.state === 'recording') { try { recorder.stop(); } catch (e) {} }
