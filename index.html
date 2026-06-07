@@ -3023,7 +3023,37 @@ function drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed) {
   }
 }
 
-function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song) {
+// 오디오 파형을 분석해 "실제로 소리가 큰(=노래가 불리는) 구간"의 시작/끝 시각(초)을 구한다.
+// 앞 전주·뒤 아웃트로의 조용한 부분을 가사 분배에서 제외하기 위함. 실패하면 null → 전체 길이 사용.
+function computeVocalSpan(buffer) {
+  try {
+    const ch = buffer.getChannelData(0);
+    const sr = buffer.sampleRate;
+    const hop = Math.max(1, Math.floor(sr * 0.05));   // 50ms 단위 RMS 엔벨로프
+    const env = [];
+    for (let i = 0; i < ch.length; i += hop) {
+      let sum = 0; const end = Math.min(i + hop, ch.length);
+      for (let j = i; j < end; j++) sum += ch[j] * ch[j];
+      env.push(Math.sqrt(sum / Math.max(1, end - i)));
+    }
+    if (!env.length) return null;
+    let peak = 0;
+    for (const v of env) if (v > peak) peak = v;
+    if (peak <= 0) return null;
+    const thr = peak * 0.15;                          // 피크의 15% 넘으면 "소리 있음"
+    let s = -1, e = -1;
+    for (let k = 0; k < env.length; k++) { if (env[k] > thr) { s = k; break; } }
+    for (let k = env.length - 1; k >= 0; k--) { if (env[k] > thr) { e = k; break; } }
+    if (s < 0 || e < 0 || e <= s) return null;
+    const dur = buffer.duration;
+    let start = Math.max(0, (s * hop) / sr - 0.3);    // 보컬보다 살짝 먼저 가사가 뜨도록 0.3s 당김
+    let end = Math.min(dur, (e * hop) / sr + 0.3);
+    if (end - start < dur * 0.35) return null;        // 구간이 비정상적으로 짧으면 분석 실패로 보고 전체 사용
+    return { start, end };
+  } catch (e) { return null; }
+}
+
+function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song, lyricStart, lyricEnd) {
   // 배경
   const bg = ctx.createLinearGradient(0, 0, 0, H);
   bg.addColorStop(0, '#0d0d10');
@@ -3082,14 +3112,18 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song) {
   ctx.fillText('🎯 ' + (song.name || '') + ' 에게', cx, ty + 6);
 
   // ── 가사 자막 ──────────────────────────────────────────────
-  // Suno가 줄별 타임스탬프를 안 주므로, 전체 길이에 맞춰 가사 줄을 고르게 분배해
-  // "지금 줄"을 한 줄(길면 자동 줄바꿈)씩 보여준다 → 노래를 따라 읽을 수 있게.
+  // Suno가 줄별 타임스탬프를 안 주므로, 가사 줄을 "노래가 실제로 불리는 구간"에
+  // 고르게 분배해 한 줄씩 보여준다. 전주·아웃트로(조용한 구간)는 오디오 파형 분석
+  // (computeVocalSpan)으로 빼서, 가사가 미리 다 지나가버리지 않게 한다.
   if (lines && lines.length && duration > 0) {
-    const per = duration / lines.length;
-    let li = Math.floor(elapsed / per);
-    if (li < 0) li = 0;
-    if (li > lines.length - 1) li = lines.length - 1;
-    const into = (elapsed - li * per) / per;     // 현재 줄 진행도(0~1)
+    const ls = (typeof lyricStart === 'number') ? lyricStart : 0;
+    const le = (typeof lyricEnd === 'number' && lyricEnd > ls) ? lyricEnd : duration;
+    const span = le - ls;
+    const per = span / lines.length;
+    let li = Math.floor((elapsed - ls) / per);
+    if (li < 0) li = 0;                          // 전주 동안엔 첫 줄을 띄워둔다
+    if (li > lines.length - 1) li = lines.length - 1;  // 아웃트로엔 마지막 줄 유지
+    const into = ((elapsed - ls) - li * per) / per;    // 현재 줄 진행도(0~1)
     const fade = Math.max(0, Math.min(1, into / 0.12));  // 줄 바뀔 때 살짝 페이드인
     ctx.save();
     ctx.textAlign = 'center';
@@ -3270,6 +3304,10 @@ async function makeInstaVideo() {
   if (!document.getElementById('videoModal').classList.contains('active')) return; // 닫힘
 
   const duration = audioBuffer.duration;
+  // 가사를 분배할 "노래가 실제로 불리는 구간"을 미리 계산(전주·아웃트로 제외)
+  const vspan = computeVocalSpan(audioBuffer);
+  const lyricStart = vspan ? vspan.start : 0;
+  const lyricEnd = vspan ? vspan.end : duration;
   const ctxA = VIDEO.audioCtx;
 
   // 2) 오디오 그래프:
@@ -3338,7 +3376,7 @@ async function makeInstaVideo() {
     const elapsed = ctxA.currentTime - startAudioTime;
     try {
       analyser.getByteFrequencyData(freq);
-      drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song);
+      drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song, lyricStart, lyricEnd);
     } catch (e) { console.warn('frame err', e); }
     const pct = Math.min(elapsed / duration, 1);
     setVideoStatus('영상 만드는 중... ' + Math.round(pct * 100) + '% (' + Math.ceil(duration) + '초)', pct);
