@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>가사 싱크 검증 미리보기 (staging)</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Pretendard, system-ui, sans-serif; background: #0d0f14; color: #fff;
+         min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
+  header { padding: 18px; text-align: center; }
+  header h1 { font-size: 18px; margin: 0 0 4px; }
+  header p { margin: 0; color: #9aa3b2; font-size: 13px; }
+  .badge { display: inline-block; background: #1c2230; color: #d4ff3a; border-radius: 999px;
+           padding: 2px 10px; font-size: 12px; margin-top: 6px; }
+  #stage { width: min(92vw, 480px); aspect-ratio: 9/16; max-height: 70vh; background: linear-gradient(160deg,#141a26,#0a0c11);
+           border: 1px solid #232a39; border-radius: 18px; margin: 8px 0 14px; position: relative; overflow: hidden;
+           display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
+  #line { font-size: 30px; font-weight: 800; line-height: 1.35; text-align: center; }
+  #line .w { color: #56607a; transition: color .08s, text-shadow .08s; margin: 0 .12em; }
+  #line .w.on { color: #fff; text-shadow: 0 0 18px rgba(212,255,58,.9); }
+  #line .w.done { color: #c7d0e0; }
+  #nextline { position: absolute; bottom: 26px; left: 0; right: 0; text-align: center;
+              color: #67708a; font-size: 16px; padding: 0 20px; }
+  audio { width: min(92vw, 480px); margin-bottom: 10px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; padding: 0 12px 30px; }
+  .controls button, .controls label { background: #1c2230; color: #fff; border: 1px solid #2c3445;
+           border-radius: 10px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
+  .err { color: #ff8a8a; max-width: 480px; text-align: center; padding: 14px; font-size: 14px; line-height: 1.5; }
+  .ok { color: #d4ff3a; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>🎤 가사 싱크 검증 미리보기</h1>
+    <p>실제 타임스탬프로 단어가 노래에 맞춰 켜지는지 확인하세요</p>
+    <div class="badge" id="meta">데이터 로딩 중…</div>
+  </header>
+
+  <div id="stage">
+    <div id="line">로딩 중…</div>
+    <div id="nextline"></div>
+  </div>
+
+  <audio id="audio" controls></audio>
+  <div class="controls">
+    <label>오프셋 보정:
+      <input id="offset" type="range" min="-1500" max="1500" step="50" value="0" style="vertical-align:middle">
+      <span id="offsetVal">0ms</span>
+    </label>
+  </div>
+  <div class="err" id="msg"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const audio = $('#audio'), lineEl = $('#line'), nextEl = $('#nextline'), msg = $('#msg');
+let WORDS = [], LINES = [], offsetMs = 0;
+
+$('#offset').addEventListener('input', (e) => { offsetMs = +e.target.value; $('#offsetVal').textContent = offsetMs + 'ms'; });
+
+// 단어들을 "줄"로 묶는다: 큰 시간 간격(0.7s 이상)이 생기면 줄바꿈으로 본다.
+function groupLines(words) {
+  const lines = []; let cur = [];
+  for (let i = 0; i < words.length; i++) {
+    cur.push(words[i]);
+    const gap = i + 1 < words.length ? (words[i + 1].start - words[i].end) : Infinity;
+    if (cur.length >= 9 || gap > 0.7) { lines.push(cur); cur = []; }
+  }
+  if (cur.length) lines.push(cur);
+  return lines.map((ws) => ({ words: ws, start: ws[0].start, end: ws[ws.length - 1].end }));
+}
+
+function render() {
+  const t = audio.currentTime + offsetMs / 1000;
+  // 현재 줄 찾기
+  let li = LINES.findIndex((l) => t >= l.start && t <= l.end + 0.4);
+  if (li < 0) {
+    // 줄 사이 공백이면 다음에 올 줄을 미리 보여줌
+    li = LINES.findIndex((l) => l.start > t);
+    if (li < 0) li = LINES.length - 1;
+  }
+  const line = LINES[li];
+  if (!line) return;
+  lineEl.innerHTML = line.words.map((w) => {
+    let cls = 'w';
+    if (t >= w.start && t <= w.end) cls += ' on';
+    else if (t > w.end) cls += ' done';
+    return `<span class="${cls}">${escapeHtml(w.word)}</span>`;
+  }).join('');
+  const nx = LINES[li + 1];
+  nextEl.textContent = nx ? nx.words.map((w) => w.word).join(' ') : '';
+}
+function escapeHtml(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+function loop() { render(); requestAnimationFrame(loop); }
+
+(async () => {
+  let data;
+  try {
+    const r = await fetch('./out/timestamps.json', { cache: 'no-store' });
+    if (!r.ok) throw new Error('out/timestamps.json 없음 (HTTP ' + r.status + ')');
+    data = await r.json();
+  } catch (e) {
+    msg.innerHTML = '⚠️ 아직 검증 데이터가 없어요.<br><br>먼저 터미널에서 검증 스크립트를 돌려주세요:<br>'
+      + '<code style="color:#d4ff3a">PROVIDER=kie KIE_API_KEY=키 node staging/kie-verify.js</code><br><br>'
+      + '그러면 staging/out/ 에 song.mp3 와 timestamps.json 이 생기고, 이 페이지를 새로고침하면 싱크가 보여요.<br>'
+      + '<small style="color:#67708a">(' + e.message + ')</small>';
+    lineEl.textContent = '데이터 대기 중';
+    return;
+  }
+  WORDS = (data.words || []).filter((w) => w.word && w.word.trim());
+  LINES = groupLines(WORDS);
+  $('#meta').innerHTML = `업체 <b>${data.provider}</b> · 모델 ${data.model||''} · 단어 ${WORDS.length}개`
+    + (data.confidence != null ? ` · 신뢰도지표 ${data.confidence}` : '');
+  audio.src = data.audioLocal ? ('./out/' + data.audioLocal) : data.audioUrl;
+  msg.innerHTML = '<span class="ok">✅ 재생 버튼을 누르고 단어가 노래에 맞춰 켜지는지 보세요.</span> '
+    + '안 맞으면 위 \'오프셋 보정\'으로 전체를 앞뒤로 밀어보세요.';
+  loop();
+})();
+</script>
+</body>
+</html>
