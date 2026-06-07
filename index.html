@@ -3143,6 +3143,35 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song) {
   ctx.fillStyle = '#8a8a99';
   ctx.fillText('🎯 ' + (song.name || '') + ' 에게', cx, ty + 6);
 
+  // ── 가사 자막 ──────────────────────────────────────────────
+  // Suno가 줄별 타임스탬프를 안 주므로, 전체 길이에 맞춰 가사 줄을 고르게 분배해
+  // "지금 줄"을 한 줄(길면 자동 줄바꿈)씩 보여준다 → 노래를 따라 읽을 수 있게.
+  if (lines && lines.length && duration > 0) {
+    const per = duration / lines.length;
+    let li = Math.floor(elapsed / per);
+    if (li < 0) li = 0;
+    if (li > lines.length - 1) li = lines.length - 1;
+    const into = (elapsed - li * per) / per;     // 현재 줄 진행도(0~1)
+    const fade = Math.max(0, Math.min(1, into / 0.12));  // 줄 바뀔 때 살짝 페이드인
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '800 36px "Black Han Sans", Pretendard, sans-serif';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = fade;
+    const wrapped = wrapText(ctx, lines[li], W * 0.84).slice(0, 3);
+    let ly = H * 0.72 - (wrapped.length - 1) * 24;
+    for (const wl of wrapped) {
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';   // 검은 외곽선으로 가독성 확보
+      ctx.strokeText(wl, cx, ly);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(wl, cx, ly);
+      ly += 48;
+    }
+    ctx.restore();
+  }
+
   // 워터마크
   ctx.font = '700 26px "Black Han Sans", Pretendard, sans-serif';
   ctx.fillStyle = '#d4ff3a';
