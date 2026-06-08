@@ -142,6 +142,24 @@ async function jget(url) {
   return { ok: r.ok, status: r.status, json, text };
 }
 
+// 구간별 미세 보정: staging/nudges.json 이 있으면 단어별로 타이밍을 당기거나(−) 민다(+).
+//   { "8": -0.15, "17": 0.2 }   ← 키는 가사 단어 번호(1부터), 값은 초.
+//   −값 = 그 단어 강조를 더 일찍 / +값 = 더 늦게.
+// 검증용 수동 보정이라 코드 로직(전역 LEAD)과 분리해 둔다.
+function applyNudges(words) {
+  const f = path.join(__dirname, 'nudges.json');
+  if (!fs.existsSync(f)) return words;
+  let map; try { map = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return words; }
+  for (const k of Object.keys(map)) {
+    const i = Number(k) - 1, dt = Number(map[k]) || 0;
+    if (words[i]) {
+      words[i].start = Math.max(0, words[i].start + dt);
+      words[i].end = Math.max(words[i].start, words[i].end + dt);
+    }
+  }
+  return words;
+}
+
 // 재생성 모드: API 호출 없이 staging/out/timestamps-raw.json + song.mp3 로
 // 정규화 + preview-standalone.html 만 다시 만든다. (크레딧 소모 없음)
 //   node staging/kie-verify.js --rebuild   (또는 REBUILD=1)
@@ -151,7 +169,7 @@ async function rebuildFromDisk() {
   const raw = JSON.parse(fs.readFileSync(rawPath, 'utf8'));
   const tdata = raw.data || raw;
   const aligned = pick(tdata, 'alignedWords', 'aligned_words', 'words') || [];
-  const words = normalizeWords(aligned);
+  const words = applyNudges(normalizeWords(aligned));
   if (!words.length) { console.error('❌ 정규화 후 단어가 비어있어요.'); process.exit(1); }
 
   // 기존 메타(있으면 재사용)
@@ -253,7 +271,7 @@ function group_preview(ws){let n=0,c=0;const useBr=ws.some(w=>w.br>0);for(let i=
     process.exit(1);
   }
   // 단어 배열을 정리(태그 제거·공백 트림·줄바꿈 보존)해서 preview가 쓰기 쉬운 형태로
-  const words = normalizeWords(aligned);
+  const words = applyNudges(normalizeWords(aligned));
 
   // ── 4) 음원 다운로드 + 결과 저장 ───────────────────────────────────
   console.log('④ 음원 다운로드 중...');
