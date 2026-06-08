@@ -1170,9 +1170,9 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// [복제본] 기본 워커 = kie 테스트 서버. (운영은 chinolsong-proxy.onrender.com)
-// 워커 URL 입력칸에서 바꿀 수 있음. 테스트 서버: node staging/test-server.js
-const DEFAULT_WORKER_URL = 'http://localhost:3100';
+// [복제본] 기본 워커 = 같은 서버(상대경로). 테스트 서버가 사이트와 API를 함께 서빙하므로
+// 같은 주소로 호출하면 됨(로컬·임시링크 어디서든 동작, CORS 없음). (운영은 chinolsong-proxy.onrender.com)
+const DEFAULT_WORKER_URL = '';
 
 // [복제본] 테스트 모드: 로그인·크레딧·가사AI(운영 워커)를 전부 건너뛰고,
 //   샘플 가사로 바로 kie 곡 생성 + 단어 싱크 영상만 확인한다. (우리가 바꾼 부분만 순수 테스트)

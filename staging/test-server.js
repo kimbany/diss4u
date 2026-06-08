@@ -16,7 +16,32 @@
  */
 
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const kie = require('./kie-music');
+
+const ROOT = path.join(__dirname, '..');     // 저장소 루트(이미지 등 정적 파일)
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
+  '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json',
+  '.txt': 'text/plain; charset=utf-8', '.webmanifest': 'application/manifest+json', '.mp3': 'audio/mpeg',
+};
+// 정적 파일 서빙: '/'·'/clone.html' → 복제본, 그 외엔 staging/ 또는 루트에서 찾아준다.
+function serveStatic(req, res, pathname) {
+  let rel = decodeURIComponent(pathname);
+  if (rel === '/' || rel === '/clone.html') rel = '/clone.html';
+  rel = rel.replace(/\.\.+/g, '');           // 경로 탈출 방지
+  const candidates = [path.join(__dirname, rel), path.join(ROOT, rel)];
+  for (const f of candidates) {
+    if (fs.existsSync(f) && fs.statSync(f).isFile()) {
+      const buf = fs.readFileSync(f);
+      res.writeHead(200, { 'Content-Type': MIME[path.extname(f).toLowerCase()] || 'application/octet-stream', 'Content-Length': buf.length, ...CORS });
+      return res.end(buf);
+    }
+  }
+  return send(res, 404, { error: 'not found', path: pathname });
+}
 
 const PORT = process.env.PORT || 3100;
 // 가사 생성(/generate-lyrics)은 kie 소관이 아니라 운영 워커(Claude/Solar/Gemini)로 패스스루.
@@ -100,6 +125,8 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, out);
     }
 
+    // 그 외 GET 은 정적 파일(복제 사이트·이미지)로 서빙
+    if (req.method === 'GET') return serveStatic(req, res, path);
     return send(res, 404, { error: 'Invalid path' });
   } catch (e) {
     console.error('✖', path, e.message);
@@ -108,6 +135,6 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`🎤 kie 테스트 서버: http://localhost:${PORT}  (key ${process.env.KIE_API_KEY ? 'OK' : '없음'})`);
-  console.log('   POST /generate-song  ·  GET /song-status/:id  ·  GET /health');
+  console.log(`🎤 복제 사이트 + kie 서버 한 번에: http://localhost:${PORT}/  (key ${process.env.KIE_API_KEY ? 'OK' : '없음'})`);
+  console.log('   → 브라우저에서 위 주소 열면 바로 테스트 (python·터미널 2개 불필요)');
 });
