@@ -1174,6 +1174,28 @@
 // 워커 URL 입력칸에서 바꿀 수 있음. 테스트 서버: node staging/test-server.js
 const DEFAULT_WORKER_URL = 'http://localhost:3100';
 
+// [복제본] 테스트 모드: 로그인·크레딧·가사AI(운영 워커)를 전부 건너뛰고,
+//   샘플 가사로 바로 kie 곡 생성 + 단어 싱크 영상만 확인한다. (우리가 바꾼 부분만 순수 테스트)
+//   진짜 운영에 옮길 땐 이 모드 없이 원래 로그인/가사AI 흐름 그대로 쓴다.
+const TEST_MODE = true;
+function testLyrics(name, keywords) {
+  const who = name || '너';
+  return {
+    title: name ? (name + ' 디스') : '테스트 디스곡',
+    style: 'korean hiphop diss',
+    lyrics: [
+      '[Verse]',
+      who + ' 자신감은 어디서 나오는지',
+      '거울 속 모습부터 다시 봐야 할 텐데',
+      keywords ? (keywords + ' 그게 너의 현실') : '말은 번지르르 행동은 빈 깡통',
+      '[Hook]',
+      '체크 체크 마이크 잡고',
+      '한 마디면 너는 게임 끝',
+      '[End]',
+    ].join('\n'),
+  };
+}
+
 // === 구글 애드센스 ===
 // 가입 후 게시자 ID와 광고 슬롯 ID를 채우면 자동으로 광고가 표시됩니다. (비워두면 광고 안 나옴)
 const ADSENSE_CLIENT = 'ca-pub-1822729436086485';
@@ -2356,11 +2378,13 @@ function saveSettings() {
 }
 
 async function startGeneration() {
-  if (!currentUser) { showError('노래 만들려면 구글 로그인 먼저!'); loginGoogle(); return; }
-  if (STATE.creditsEnabled && STATE.credits != null && STATE.credits < STATE.costPerSong) {
-    showError('💎 크레딧이 부족해요. 충전 후 다시 시도해주세요.');
-    openChargeModal();
-    return;
+  if (!TEST_MODE) {  // [복제본] 테스트 모드에선 로그인·크레딧 검사 건너뜀
+    if (!currentUser) { showError('노래 만들려면 구글 로그인 먼저!'); loginGoogle(); return; }
+    if (STATE.creditsEnabled && STATE.credits != null && STATE.credits < STATE.costPerSong) {
+      showError('💎 크레딧이 부족해요. 충전 후 다시 시도해주세요.');
+      openChargeModal();
+      return;
+    }
   }
   const name = document.getElementById('targetName').value.trim();
   const relationship = document.getElementById('relationship').value.trim();
@@ -2368,8 +2392,10 @@ async function startGeneration() {
   const mustInclude = document.getElementById('mustInclude').value.trim();
   const useNameInLyrics = !!(document.getElementById('useNameInLyrics') || {}).checked;
 
-  if (!name) { showError('놀릴 사람 이름을 입력해주세요'); return; }
-  if (!keywords) { showError('놀릴 포인트를 입력해주세요'); return; }
+  if (!TEST_MODE) {  // [복제본] 테스트 모드에선 빈 값이면 샘플로 대체
+    if (!name) { showError('놀릴 사람 이름을 입력해주세요'); return; }
+    if (!keywords) { showError('놀릴 포인트를 입력해주세요'); return; }
+  }
 
   let genre = STATE.selectedGenre;
   if (genre === 'random') {
@@ -2383,10 +2409,12 @@ async function startGeneration() {
   setProgress(5, '킹받는 가사 쓰는 중... 🔥', 'AI가 약점 분석 중이에요');
 
   try {
-    const lyricsData = await callWorker('/generate-lyrics', {
-      name, relationship, keywords, genre, lang: STATE.selectedLang,
-      gender: STATE.selectedGender, mustInclude, useNameInLyrics
-    });
+    const lyricsData = TEST_MODE
+      ? testLyrics(name, keywords)  // [복제본] 가사AI 건너뛰고 샘플 가사 사용
+      : await callWorker('/generate-lyrics', {
+          name, relationship, keywords, genre, lang: STATE.selectedLang,
+          gender: STATE.selectedGender, mustInclude, useNameInLyrics
+        });
 
     if (STATE.generationCancelled) return;
     setProgress(25, '약오름 농도 조절 중... 😏', '디스 수위 맞추는 중이에요');
