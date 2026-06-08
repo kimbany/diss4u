@@ -77,8 +77,12 @@ async function songStatus(jobId, { apiKey = process.env.KIE_API_KEY, withTimesta
 
   const out = { status: 'COMPLETED', jobId, audioId, audioUrl };
   if (withTimestamps && audioId) {
-    try { out.timestampedLyrics = await getTimestampedLyrics(jobId, audioId, { apiKey }); }
-    catch (e) { out.timestampError = e.message; }
+    // 타임스탬프는 곡 완성 직후 몇 초 뒤에 준비됨 → 짧게 재시도.
+    // 그래도 없으면 곡만 완료(프론트는 균등분배로 폴백).
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try { out.timestampedLyrics = await getTimestampedLyrics(jobId, audioId, { apiKey }); break; }
+      catch (e) { out.timestampError = e.message; if (attempt < 3) await new Promise((r) => setTimeout(r, 3000)); }
+    }
   }
   return out;
 }
