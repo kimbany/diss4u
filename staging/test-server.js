@@ -19,6 +19,9 @@ const http = require('http');
 const kie = require('./kie-music');
 
 const PORT = process.env.PORT || 3100;
+// 가사 생성(/generate-lyrics)은 kie 소관이 아니라 운영 워커(Claude/Solar/Gemini)로 패스스루.
+// → 복제본은 워커 URL만 이 서버로 바꾸면 가사+곡 둘 다 동작(곡만 kie).
+const LYRICS_UPSTREAM = process.env.LYRICS_UPSTREAM || 'https://chinolsong-proxy.onrender.com';
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -54,6 +57,18 @@ const server = http.createServer(async (req, res) => {
       const out = await kie.generateSong({ lyrics, title, style });
       console.log('▶ generate-song →', out.jobId);
       return send(res, 200, out);
+    }
+
+    // 가사 생성·기타 워커 라우트는 운영으로 패스스루 (곡 생성/상태만 kie)
+    if (path === '/generate-lyrics' && req.method === 'POST') {
+      const body = await readBody(req);
+      const up = await fetch(LYRICS_UPSTREAM + '/generate-lyrics', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const text = await up.text();
+      console.log('↪ generate-lyrics 패스스루 →', up.status);
+      res.writeHead(up.status, { 'Content-Type': 'application/json; charset=utf-8', ...CORS });
+      return res.end(text);
     }
 
     if (path.startsWith('/song-status/') && req.method === 'GET') {
