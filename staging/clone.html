@@ -3089,8 +3089,9 @@ function computeVocalSpan(buffer) {
 //   현재 단어 = 라임색 강조, 지난 단어 = 흰색, 다음 단어 = 흐리게.
 //   적응형 lead(빽빽=일찍/띄엄=onset)는 검증 단계에서 맞춘 값을 그대로 사용.
 function drawTimedLyrics(ctx, W, H, cx, LINES, t) {
-  const LINE_LEAD = 0.28;
-  // 시작된 줄 중 가장 최근 줄(살짝 선행)
+  // 줄 전환은 그 줄이 "실제로 불리기 시작할 때" 한다(선행 0). 미리 당기면 한 줄 앞서 보임.
+  const LINE_LEAD = 0;
+  // 시작된 줄 중 가장 최근 줄 = 지금 불리는 줄 (오디오보다 앞서지 않음)
   let i = 0;
   for (let k = 0; k < LINES.length; k++) { if (LINES[k].start - LINE_LEAD <= t) i = k; else break; }
   const ln = LINES[i]; if (!ln || !ln.words || !ln.words.length) return;
