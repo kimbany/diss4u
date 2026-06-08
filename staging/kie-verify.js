@@ -123,9 +123,12 @@ const WORDS=(DATA.words||[]).filter(w=>w.word&&w.word.trim());
 const HAS_BR=ws=>ws.some(w=>w.br>0);
 function group(ws){const useBr=HAS_BR(ws);const L=[];let c=[];for(let i=0;i<ws.length;i++){c.push(ws[i]);const brk=useBr?(ws[i].br>0):(c.length>=9||(i+1<ws.length?ws[i+1].start-ws[i].end:Infinity)>0.7);if(brk){L.push(c);c=[]}}if(c.length)L.push(c);return L.map(x=>({words:x,start:x[0].start,end:x[x.length-1].end}))}
 const LINES=group(WORDS);
+// 적응형 선행값(lead): 단어가 빽빽하면 더 일찍, 띄엄띄엄하면 onset 가깝게.
+// IOI(다음 단어까지 간격)로 자동 계산 → 곡마다 손댈 필요 없음. (0.05~0.30초로 제한)
+for(let i=0;i<WORDS.length;i++){const ioi=(i+1<WORDS.length?WORDS[i+1].start-WORDS[i].start:0.6);WORDS[i].lead=Math.max(0.05,Math.min(0.30,0.33-0.28*ioi));}
 document.getElementById('meta').innerHTML='업체 <b>'+DATA.provider+'</b> · '+(DATA.model||'')+' · 단어 '+WORDS.length+'개'+(DATA.confidence!=null?' · 신뢰도 '+DATA.confidence:'');
 function esc(s){return(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
-function render(){const t=audio.currentTime+offset/1000;const LINE_LEAD=0.32,WORD_LEAD=0.14;let i=0;for(let k=0;k<LINES.length;k++){if(LINES[k].start<=t+LINE_LEAD)i=k;else break}const ln=LINES[i];if(!ln)return;lineEl.innerHTML=ln.words.map((w,wi)=>{const we=Math.max(w.end,w.start+0.12);const nx=ln.words[wi+1];const onEnd=nx?Math.min(we,nx.start-WORD_LEAD):we;let c='w';if(t>=w.start-WORD_LEAD&&t<=onEnd)c+=' on';else if(t>onEnd)c+=' done';return'<span class="'+c+'">'+esc(w.word)+'</span>'}).join('');const nl=LINES[i+1];nextEl.textContent=nl?nl.words.map(w=>w.word).join(' '):''}
+function render(){const t=audio.currentTime+offset/1000;const LINE_LEAD=0.28;let i=0;for(let k=0;k<LINES.length;k++){if(LINES[k].start-LINE_LEAD<=t)i=k;else break}const ln=LINES[i];if(!ln)return;lineEl.innerHTML=ln.words.map((w,wi)=>{const we=Math.max(w.end,w.start+0.12);const nx=ln.words[wi+1];const onEnd=nx?Math.min(we,nx.start-(nx.lead||0.1)):we;let c='w';if(t>=w.start-(w.lead||0.1)&&t<=onEnd)c+=' on';else if(t>onEnd)c+=' done';return'<span class="'+c+'">'+esc(w.word)+'</span>'}).join('');const nl=LINES[i+1];nextEl.textContent=nl?nl.words.map(w=>w.word).join(' '):''}
 (function loop(){render();requestAnimationFrame(loop)})();</script></body></html>`;
 }
 
