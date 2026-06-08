@@ -34,7 +34,8 @@ const PROVIDERS = {
 const which = (process.env.PROVIDER || 'kie').toLowerCase();
 const P = PROVIDERS[which];
 if (!P) { console.error(`❌ PROVIDER는 kie 또는 sunoapi 여야 해요 (지금: ${which})`); process.exit(1); }
-if (!P.key) { console.error(`❌ API 키가 없어요. 예) PROVIDER=${which} ${which === 'kie' ? 'KIE_API_KEY' : 'SUNOAPI_KEY'}=키 node staging/kie-verify.js`); process.exit(1); }
+const REBUILD = !!(process.env.REBUILD || process.argv.includes('--rebuild'));
+if (!P.key && !REBUILD) { console.error(`❌ API 키가 없어요. 예) PROVIDER=${which} ${which === 'kie' ? 'KIE_API_KEY' : 'SUNOAPI_KEY'}=키 node staging/kie-verify.js`); process.exit(1); }
 
 const MODEL = process.env.MODEL || 'V5';
 const TITLE = process.env.TITLE || '테스트 디스곡';
@@ -59,6 +60,40 @@ const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer $
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function pick(obj, ...keys) { for (const k of keys) if (obj && obj[k] != null) return obj[k]; return undefined; }
+
+// 업체가 주는 타임스탬프 토큰을 깔끔하게 정리한다.
+//   - [Verse] [Hook] [End] 같은 섹션 태그 제거 (한 단어에 붙어오거나 두 토큰에 쪼개진 것까지)
+//   - 단어 뒤 공백 트림
+//   - 줄바꿈(\n)은 버리지 않고 br(=그 단어 뒤 줄바꿈 수)로 보존 → 프리뷰가 실제 줄 단위로 묶음
+// 반환: [{ word, start, end, br }]  (br>=1: 줄 끝, br>=2: 절 바뀜)
+function normalizeWords(aligned) {
+  const out = [];
+  let inTag = false;            // [ ... ] 태그 안인지 (토큰 경계를 넘어 유지)
+  for (const t of aligned) {
+    let visible = '';
+    for (const ch of String(pick(t, 'word', 'text', 'w') || '')) {
+      if (inTag) { if (ch === ']') inTag = false; continue; }
+      if (ch === '[') { inTag = true; continue; }
+      visible += ch;
+    }
+    const leadNL = (visible.match(/^[ \t]*\n+/) || [''])[0].split('\n').length - 1;
+    const tailNL = (visible.match(/\n+[ \t]*$/) || [''])[0].split('\n').length - 1;
+    const text = visible.replace(/\s+/g, ' ').trim();
+    // 앞쪽 줄바꿈(태그 떼고 남은 것)은 직전 단어 뒤 줄바꿈으로 귀속
+    if (leadNL && out.length) out[out.length - 1].br = Math.max(out[out.length - 1].br || 0, leadNL);
+    if (!text) { // 태그만 있던(또는 쪼개진 태그) 빈 토큰 — 줄바꿈만 직전 단어에 반영하고 버림
+      if (tailNL && out.length) out[out.length - 1].br = Math.max(out[out.length - 1].br || 0, tailNL);
+      continue;
+    }
+    out.push({
+      word: text,
+      start: Number(pick(t, 'startS', 'start_s', 'start') || 0),
+      end: Number(pick(t, 'endS', 'end_s', 'end') || 0),
+      br: tailNL,
+    });
+  }
+  return out;
+}
 
 // 음원(base64)·타임스탬프를 통째로 박아 넣은 단일 HTML 미리보기를 만든다.
 // 서버 없이 더블클릭(file://)으로 열어도 동작 → 사용자에게 그대로 전달 가능.
@@ -85,7 +120,8 @@ audio{width:min(92vw,460px);margin-bottom:10px}.controls{display:flex;gap:8px;ju
 const audio=document.getElementById('audio'),lineEl=document.getElementById('line'),nextEl=document.getElementById('nextline');
 let offset=0;document.getElementById('offset').addEventListener('input',e=>{offset=+e.target.value;document.getElementById('ov').textContent=offset+'ms'});
 const WORDS=(DATA.words||[]).filter(w=>w.word&&w.word.trim());
-function group(ws){const L=[];let c=[];for(let i=0;i<ws.length;i++){c.push(ws[i]);const g=i+1<ws.length?ws[i+1].start-ws[i].end:Infinity;if(c.length>=9||g>0.7){L.push(c);c=[]}}if(c.length)L.push(c);return L.map(x=>({words:x,start:x[0].start,end:x[x.length-1].end}))}
+const HAS_BR=ws=>ws.some(w=>w.br>0);
+function group(ws){const useBr=HAS_BR(ws);const L=[];let c=[];for(let i=0;i<ws.length;i++){c.push(ws[i]);const brk=useBr?(ws[i].br>0):(c.length>=9||(i+1<ws.length?ws[i+1].start-ws[i].end:Infinity)>0.7);if(brk){L.push(c);c=[]}}if(c.length)L.push(c);return L.map(x=>({words:x,start:x[0].start,end:x[x.length-1].end}))}
 const LINES=group(WORDS);
 document.getElementById('meta').innerHTML='업체 <b>'+DATA.provider+'</b> · '+(DATA.model||'')+' · 단어 '+WORDS.length+'개'+(DATA.confidence!=null?' · 신뢰도 '+DATA.confidence:'');
 function esc(s){return(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
@@ -106,7 +142,49 @@ async function jget(url) {
   return { ok: r.ok, status: r.status, json, text };
 }
 
+// 재생성 모드: API 호출 없이 staging/out/timestamps-raw.json + song.mp3 로
+// 정규화 + preview-standalone.html 만 다시 만든다. (크레딧 소모 없음)
+//   node staging/kie-verify.js --rebuild   (또는 REBUILD=1)
+async function rebuildFromDisk() {
+  const rawPath = path.join(OUT, 'timestamps-raw.json');
+  if (!fs.existsSync(rawPath)) { console.error('❌ 재생성할 원본이 없어요:', rawPath); process.exit(1); }
+  const raw = JSON.parse(fs.readFileSync(rawPath, 'utf8'));
+  const tdata = raw.data || raw;
+  const aligned = pick(tdata, 'alignedWords', 'aligned_words', 'words') || [];
+  const words = normalizeWords(aligned);
+  if (!words.length) { console.error('❌ 정규화 후 단어가 비어있어요.'); process.exit(1); }
+
+  // 기존 메타(있으면 재사용)
+  let meta = {};
+  const tsPath = path.join(OUT, 'timestamps.json');
+  if (fs.existsSync(tsPath)) { try { meta = JSON.parse(fs.readFileSync(tsPath, 'utf8')); } catch {} }
+
+  const out = {
+    provider: meta.provider || which, model: meta.model || MODEL,
+    taskId: meta.taskId, audioId: meta.audioId,
+    audioUrl: meta.audioUrl, audioLocal: meta.audioLocal,
+    title: meta.title || TITLE, lyrics: meta.lyrics || SAMPLE_LYRICS,
+    confidence: pick(tdata, 'hootCer', 'confidence') ?? meta.confidence,
+    words,
+  };
+  fs.writeFileSync(tsPath, JSON.stringify(out, null, 2));
+
+  const mp3 = path.join(OUT, 'song.mp3');
+  const audioSrc = fs.existsSync(mp3)
+    ? `data:audio/mpeg;base64,${fs.readFileSync(mp3).toString('base64')}`
+    : (out.audioUrl || '');
+  fs.writeFileSync(path.join(OUT, 'preview-standalone.html'), buildStandalone(out, audioSrc));
+
+  const lines = group_preview(words);
+  console.log(`\n🔁 재생성 완료 — 단어 ${words.length}개, 줄 ${lines}개 (태그 제거·줄바꿈 정리)`);
+  console.log('   ✅ staging/out/preview-standalone.html, timestamps.json 갱신');
+  process.exit(0);
+}
+// 콘솔 요약용 줄 수 계산(프리뷰 group과 동일 규칙)
+function group_preview(ws){let n=0,c=0;const useBr=ws.some(w=>w.br>0);for(let i=0;i<ws.length;i++){c++;const brk=useBr?ws[i].br>0:false;if(brk){n++;c=0}}if(c)n++;return n;}
+
 (async () => {
+  if (REBUILD) return rebuildFromDisk();
   console.log(`\n🎤 [1단계 검증] 업체=${which}  모델=${MODEL}`);
   console.log(`   base=${P.base}\n`);
 
@@ -174,13 +252,8 @@ async function jget(url) {
     console.error('❌ 정렬된 단어가 비어있어요. timestamps-raw.json 확인.');
     process.exit(1);
   }
-  // 단어 배열을 preview.html이 쓰기 쉬운 형태로 정규화
-  const words = aligned.map((w) => ({
-    word: pick(w, 'word', 'text', 'w') || '',
-    start: Number(pick(w, 'startS', 'start_s', 'start') || 0),
-    end: Number(pick(w, 'endS', 'end_s', 'end') || 0),
-    success: pick(w, 'success'),
-  }));
+  // 단어 배열을 정리(태그 제거·공백 트림·줄바꿈 보존)해서 preview가 쓰기 쉬운 형태로
+  const words = normalizeWords(aligned);
 
   // ── 4) 음원 다운로드 + 결과 저장 ───────────────────────────────────
   console.log('④ 음원 다운로드 중...');
