@@ -125,7 +125,7 @@ function group(ws){const useBr=HAS_BR(ws);const L=[];let c=[];for(let i=0;i<ws.l
 const LINES=group(WORDS);
 document.getElementById('meta').innerHTML='업체 <b>'+DATA.provider+'</b> · '+(DATA.model||'')+' · 단어 '+WORDS.length+'개'+(DATA.confidence!=null?' · 신뢰도 '+DATA.confidence:'');
 function esc(s){return(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
-function render(){const t=audio.currentTime+offset/1000;let i=LINES.findIndex(l=>t>=l.start&&t<=l.end+0.4);if(i<0){i=LINES.findIndex(l=>l.start>t);if(i<0)i=LINES.length-1}const ln=LINES[i];if(!ln)return;lineEl.innerHTML=ln.words.map(w=>{let c='w';if(t>=w.start&&t<=w.end)c+=' on';else if(t>w.end)c+=' done';return'<span class="'+c+'">'+esc(w.word)+'</span>'}).join('');const nx=LINES[i+1];nextEl.textContent=nx?nx.words.map(w=>w.word).join(' '):''}
+function render(){const t=audio.currentTime+offset/1000;const LEAD=0.18;let i=0;for(let k=0;k<LINES.length;k++){if(LINES[k].start<=t+LEAD)i=k;else break}const ln=LINES[i];if(!ln)return;lineEl.innerHTML=ln.words.map(w=>{const we=Math.max(w.end,w.start+0.12);let c='w';if(t>=w.start&&t<=we)c+=' on';else if(t>we)c+=' done';return'<span class="'+c+'">'+esc(w.word)+'</span>'}).join('');const nx=LINES[i+1];nextEl.textContent=nx?nx.words.map(w=>w.word).join(' '):''}
 (function loop(){render();requestAnimationFrame(loop)})();</script></body></html>`;
 }
 
