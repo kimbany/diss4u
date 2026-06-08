@@ -122,6 +122,18 @@ const server = http.createServer(async (req, res) => {
         out.audioUrl = self + '/audio?u=' + encodeURIComponent(out.audioUrl);
       }
       console.log('· song-status', jobId, '→', out.status);
+      // 완성 시 줄별 타이밍을 표로 출력 + 파일 저장 → 싱크 진단용(터미널 캡처해서 보내면 됨)
+      if (out.status === 'COMPLETED' && out.timestampedLyrics && out.timestampedLyrics.lines) {
+        try {
+          const outDir = path.join(__dirname, 'out');
+          fs.mkdirSync(outDir, { recursive: true });
+          fs.writeFileSync(path.join(outDir, 'last-song.json'), JSON.stringify(out.timestampedLyrics, null, 2));
+        } catch (e) {}
+        const L = out.timestampedLyrics.lines;
+        console.log('┌── 싱크 진단: 줄별 타이밍 (start~end 초) ─────────────');
+        L.forEach((ln, i) => console.log('│ ' + String(i + 1).padStart(2) + '줄 ' + ln.start.toFixed(2) + '~' + ln.end.toFixed(2) + 's  ' + ln.text));
+        console.log('└──────────────────────  (staging/out/last-song.json 에도 저장됨)');
+      }
       return send(res, 200, out);
     }
 
