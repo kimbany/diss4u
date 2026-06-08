@@ -60,6 +60,39 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function pick(obj, ...keys) { for (const k of keys) if (obj && obj[k] != null) return obj[k]; return undefined; }
 
+// 음원(base64)·타임스탬프를 통째로 박아 넣은 단일 HTML 미리보기를 만든다.
+// 서버 없이 더블클릭(file://)으로 열어도 동작 → 사용자에게 그대로 전달 가능.
+function buildStandalone(data, audioSrc) {
+  const json = JSON.stringify({ ...data, audioUrl: undefined }).replace(/</g, '\\u003c');
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>가사 싱크 검증</title>
+<style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:#0d0f14;color:#fff;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+header{padding:18px;text-align:center}header h1{font-size:18px;margin:0 0 4px}header p{margin:0;color:#9aa3b2;font-size:13px}
+.badge{display:inline-block;background:#1c2230;color:#d4ff3a;border-radius:999px;padding:2px 10px;font-size:12px;margin-top:6px}
+#stage{width:min(92vw,460px);aspect-ratio:9/16;max-height:66vh;background:linear-gradient(160deg,#141a26,#0a0c11);border:1px solid #232a39;border-radius:18px;margin:8px 0 14px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:24px}
+#line{font-size:30px;font-weight:800;line-height:1.35;text-align:center}#line .w{color:#56607a;transition:color .08s,text-shadow .08s;margin:0 .12em}
+#line .w.on{color:#fff;text-shadow:0 0 18px rgba(212,255,58,.9)}#line .w.done{color:#c7d0e0}
+#nextline{position:absolute;bottom:26px;left:0;right:0;text-align:center;color:#67708a;font-size:16px;padding:0 20px}
+audio{width:min(92vw,460px);margin-bottom:10px}.controls{display:flex;gap:8px;justify-content:center;padding:0 12px 24px;align-items:center}
+.controls label{background:#1c2230;color:#fff;border:1px solid #2c3445;border-radius:10px;padding:8px 14px;font-size:13px}
+.msg{color:#d4ff3a;font-size:13px;text-align:center;max-width:460px;padding:0 14px 30px;line-height:1.5}</style></head>
+<body><header><h1>🎤 가사 싱크 검증</h1><p>단어가 노래에 맞춰 켜지는지 확인하세요</p><div class="badge" id="meta"></div></header>
+<div id="stage"><div id="line"></div><div id="nextline"></div></div>
+<audio id="audio" controls src="${audioSrc}"></audio>
+<div class="controls"><label>오프셋: <input id="offset" type="range" min="-1500" max="1500" step="50" value="0" style="vertical-align:middle"><span id="ov">0ms</span></label></div>
+<div class="msg">▶ 재생을 누르고 단어가 노래에 맞춰 켜지는지 보세요. 살짝 밀리면 ‘오프셋’으로 맞춰보세요.</div>
+<script>const DATA=${json};
+const audio=document.getElementById('audio'),lineEl=document.getElementById('line'),nextEl=document.getElementById('nextline');
+let offset=0;document.getElementById('offset').addEventListener('input',e=>{offset=+e.target.value;document.getElementById('ov').textContent=offset+'ms'});
+const WORDS=(DATA.words||[]).filter(w=>w.word&&w.word.trim());
+function group(ws){const L=[];let c=[];for(let i=0;i<ws.length;i++){c.push(ws[i]);const g=i+1<ws.length?ws[i+1].start-ws[i].end:Infinity;if(c.length>=9||g>0.7){L.push(c);c=[]}}if(c.length)L.push(c);return L.map(x=>({words:x,start:x[0].start,end:x[x.length-1].end}))}
+const LINES=group(WORDS);
+document.getElementById('meta').innerHTML='업체 <b>'+DATA.provider+'</b> · '+(DATA.model||'')+' · 단어 '+WORDS.length+'개'+(DATA.confidence!=null?' · 신뢰도 '+DATA.confidence:'');
+function esc(s){return(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+function render(){const t=audio.currentTime+offset/1000;let i=LINES.findIndex(l=>t>=l.start&&t<=l.end+0.4);if(i<0){i=LINES.findIndex(l=>l.start>t);if(i<0)i=LINES.length-1}const ln=LINES[i];if(!ln)return;lineEl.innerHTML=ln.words.map(w=>{let c='w';if(t>=w.start&&t<=w.end)c+=' on';else if(t>w.end)c+=' done';return'<span class="'+c+'">'+esc(w.word)+'</span>'}).join('');const nx=LINES[i+1];nextEl.textContent=nx?nx.words.map(w=>w.word).join(' '):''}
+(function loop(){render();requestAnimationFrame(loop)})();</script></body></html>`;
+}
+
 async function jpost(url, body) {
   const r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
   const text = await r.text();
@@ -152,13 +185,14 @@ async function jget(url) {
   // ── 4) 음원 다운로드 + 결과 저장 ───────────────────────────────────
   console.log('④ 음원 다운로드 중...');
   let savedAudio = null;
+  let audioBuffer = null;
   try {
     const ar = await fetch(audioUrl);
     if (ar.ok) {
-      const buf = Buffer.from(await ar.arrayBuffer());
-      fs.writeFileSync(path.join(OUT, 'song.mp3'), buf);
+      audioBuffer = Buffer.from(await ar.arrayBuffer());
+      fs.writeFileSync(path.join(OUT, 'song.mp3'), audioBuffer);
       savedAudio = 'song.mp3';
-      console.log(`   ✅ staging/out/song.mp3 (${(buf.length / 1024 / 1024).toFixed(1)}MB)`);
+      console.log(`   ✅ staging/out/song.mp3 (${(audioBuffer.length / 1024 / 1024).toFixed(1)}MB)`);
     } else {
       console.log('   ⚠️ 음원 다운로드 실패(만료/권한). preview는 원격 URL로 재생 시도.');
     }
@@ -173,12 +207,23 @@ async function jget(url) {
   };
   fs.writeFileSync(path.join(OUT, 'timestamps.json'), JSON.stringify(out, null, 2));
 
+  // ── 자체완결 미리보기 1개 파일 생성 (음원·데이터를 통째로 박아넣음) ─────────
+  // 서버 없이 더블클릭만 하면 노래 들으며 싱크를 볼 수 있는 단일 HTML. (전달용)
+  try {
+    const audioSrc = audioBuffer
+      ? `data:audio/mpeg;base64,${audioBuffer.toString('base64')}`
+      : audioUrl;
+    const html = buildStandalone(out, audioSrc);
+    fs.writeFileSync(path.join(OUT, 'preview-standalone.html'), html);
+    console.log('   ✅ staging/out/preview-standalone.html (더블클릭으로 바로 확인 가능)');
+  } catch (e) { console.log('   ⚠️ 자체완결 미리보기 생성 실패:', e.message); }
+
   // 요약 출력
   console.log('\n──────── 결과 요약 ────────');
   console.log(`단어 개수: ${words.length}`);
   console.log('처음 8단어 타이밍:');
   words.slice(0, 8).forEach((w) => console.log(`  ${w.start.toFixed(2)}s ~ ${w.end.toFixed(2)}s  "${w.word}"`));
-  console.log('\n✅ 저장 완료: staging/out/timestamps.json , song.mp3');
-  console.log('👉 다음: staging/preview.html 을 브라우저로 열어 실제 싱크를 눈으로 확인하세요.');
-  console.log('   (로컬에서: staging 폴더에서  npx serve  또는  python3 -m http.server  후 preview.html 접속)\n');
+  console.log('\n✅ 저장 완료: staging/out/  (timestamps.json, song.mp3, preview-standalone.html)');
+  console.log('👉 더블클릭 확인: staging/out/preview-standalone.html (서버 불필요, 음원 내장)');
+  console.log('   또는 staging 폴더에서  python3 -m http.server  후 preview.html 접속\n');
 })().catch((e) => { console.error('❌ 예외:', e); process.exit(1); });
