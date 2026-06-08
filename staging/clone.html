@@ -2409,8 +2409,9 @@ async function startGeneration() {
   setProgress(5, '킹받는 가사 쓰는 중... 🔥', 'AI가 약점 분석 중이에요');
 
   try {
-    const lyricsData = TEST_MODE
-      ? testLyrics(name, keywords)  // [복제본] 가사AI 건너뛰고 샘플 가사 사용
+    // [복제본] 로그인했으면 진짜 가사AI(기존 프롬프트) 사용, 로그인 안 했으면 샘플.
+    const lyricsData = (TEST_MODE && !currentUser)
+      ? testLyrics(name, keywords)
       : await callWorker('/generate-lyrics', {
           name, relationship, keywords, genre, lang: STATE.selectedLang,
           gender: STATE.selectedGender, mustInclude, useNameInLyrics

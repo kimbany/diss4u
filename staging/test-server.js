@@ -60,10 +60,13 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 가사 생성·기타 워커 라우트는 운영으로 패스스루 (곡 생성/상태만 kie)
+    // 로그인 토큰(Authorization)도 그대로 넘겨서, 로그인하면 진짜 가사AI가 동작.
     if (path === '/generate-lyrics' && req.method === 'POST') {
       const body = await readBody(req);
+      const fwd = { 'Content-Type': 'application/json' };
+      if (req.headers.authorization) fwd['Authorization'] = req.headers.authorization;
       const up = await fetch(LYRICS_UPSTREAM + '/generate-lyrics', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        method: 'POST', headers: fwd, body: JSON.stringify(body),
       });
       const text = await up.text();
       console.log('↪ generate-lyrics 패스스루 →', up.status);
@@ -71,10 +74,28 @@ const server = http.createServer(async (req, res) => {
       return res.end(text);
     }
 
+    // 오디오 중계: kie 오디오는 외부 CDN(aiquickdraw)이라 브라우저가 영상 만들 때
+    // CORS로 막힘 → 우리 서버가 받아서 CORS 붙여 다시 내보낸다. (운영도 동일 필요)
+    if (path === '/audio' && req.method === 'GET') {
+      const u = url.searchParams.get('u');
+      if (!u) return send(res, 400, { error: 'no url' });
+      const up = await fetch(u);
+      if (!up.ok) return send(res, up.status, { error: 'audio fetch fail' });
+      const buf = Buffer.from(await up.arrayBuffer());
+      res.writeHead(200, { 'Content-Type': up.headers.get('content-type') || 'audio/mpeg', 'Content-Length': buf.length, ...CORS });
+      return res.end(buf);
+    }
+
     if (path.startsWith('/song-status/') && req.method === 'GET') {
       const jobId = decodeURIComponent(path.replace('/song-status/', ''));
       if (!jobId) return send(res, 400, { error: 'jobId 없음' });
       const out = await kie.songStatus(jobId);
+      // 오디오 주소를 우리 중계 주소로 바꿔서 영상 만들 때 CORS 안 걸리게.
+      if (out.audioUrl) {
+        const self = 'http://' + (req.headers.host || ('localhost:' + PORT));
+        out.audioUrlOriginal = out.audioUrl;
+        out.audioUrl = self + '/audio?u=' + encodeURIComponent(out.audioUrl);
+      }
       console.log('· song-status', jobId, '→', out.status);
       return send(res, 200, out);
     }
