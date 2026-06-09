@@ -1317,6 +1317,7 @@ async function saveSong(song) {
       gender: song.gender || '',
       lang: song.lang || '',
       audioUrl: song.audioUrl || '',
+      timestampedLyrics: song.timestampedLyrics || null,   // kie 단어별 타임스탬프 — 영상 가사 싱크에 필요
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     invalidateMySongsCache();
@@ -3208,6 +3209,51 @@ function drawTimedLyrics(ctx, W, H, cx, LINES, t) {
   ctx.restore();
 }
 
+// 단어별 타임스탬프가 없을 때의 폴백 — 가사 줄을 노래 시간에 균등 분배해서 한 줄씩 표시.
+// 정확한 단어 싱크는 안 되지만, 가사 텍스트 자체는 영상에 나오게 한다.
+// (옛 곡 / 저장 누락 / kie 응답 실패 케이스 — 가사 안 보임은 가장 큰 회귀라 폴백 필수)
+function drawSimpleLyrics(ctx, W, H, cx, lines, elapsed, duration, lyricStart, lyricEnd) {
+  if (!lines || !lines.length || !(duration > 0)) return;
+  const ls = (typeof lyricStart === 'number') ? lyricStart : 0;
+  const le = (typeof lyricEnd === 'number' && lyricEnd > ls) ? lyricEnd : duration;
+  const span = le - ls;
+  const per = span / lines.length;
+  let li = Math.floor((elapsed - ls) / per);
+  if (li < 0) li = 0;
+  if (li > lines.length - 1) li = lines.length - 1;
+  const into = ((elapsed - ls) - li * per) / per;
+  const fade = Math.max(0, Math.min(1, into / 0.12));
+
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '800 46px "Black Han Sans", Pretendard, sans-serif';
+  ctx.lineJoin = 'round';
+  ctx.globalAlpha = fade;
+
+  const wrapped = wrapText(ctx, lines[li], W * 0.88).slice(0, 3);
+  const lineH = 60;
+  let ly = H * 0.66 - (wrapped.length - 1) * (lineH / 2);
+
+  for (const wl of wrapped) {
+    ctx.lineWidth = 9;
+    ctx.strokeStyle = 'rgba(0,0,0,0.82)';
+    ctx.shadowColor = 'rgba(0,0,0,0.55)';
+    ctx.shadowBlur = 6;
+    ctx.strokeText(wl, cx, ly);
+
+    ctx.shadowBlur = 0;
+    const grad = ctx.createLinearGradient(cx, ly - 24, cx, ly + 24);
+    grad.addColorStop(0, '#d4ff3a');
+    grad.addColorStop(1, '#a3e5ff');
+    ctx.fillStyle = grad;
+    ctx.fillText(wl, cx, ly);
+
+    ly += lineH;
+  }
+  ctx.restore();
+}
+
 function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song, lyricStart, lyricEnd) {
   // 배경
   const bg = ctx.createLinearGradient(0, 0, 0, H);
@@ -3268,10 +3314,16 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song, lyricSt
   ctx.fillStyle = '#8a8a99';
   ctx.fillText('🎯 ' + (song.name || '') + ' 에게', cx, ty + 6);
 
-  // ── 가사 자막: kie 단어별 타임스탬프가 있을 때만 노래방식으로 켠다.
-  //    (타임스탬프 없는 구버전 곡은 가사 미표시 — 균등분배 추측은 싱크가 안 맞아 제거됨)
+  // ── 가사 자막
+  //   1) kie 단어별 타임스탬프가 있으면 노래방 모드(단어별 하이라이트, 정확한 싱크)
+  //   2) 없으면 폴백으로 가사 줄을 시간에 균등분배해서 한 줄씩 표시 (싱크는 약하지만 가사는 나옴)
+  //   ‒ 옛 곡(DB에 timestampedLyrics 저장 안 된 시기) 사용자가 영상 만들면 가사가 아예 안
+  //     나오던 회귀를 막기 위해 폴백을 항상 켠다. saveSong에 timestampedLyrics 저장이 추가돼
+  //     앞으로 만들 곡은 노래방 모드로 정확히 동작한다.
   if (song && song.timestampedLyrics && song.timestampedLyrics.lines && song.timestampedLyrics.lines.length) {
     drawTimedLyrics(ctx, W, H, cx, song.timestampedLyrics.lines, elapsed);
+  } else if (lines && lines.length) {
+    drawSimpleLyrics(ctx, W, H, cx, lines, elapsed, duration, lyricStart, lyricEnd);
   }
 
   // ── 하단 영역: 워드마크 → 워터마크 → 진행바 (위에서 아래로) ─────────
