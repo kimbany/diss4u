@@ -2414,6 +2414,7 @@ async function startGeneration() {
       gender: STATE.selectedGender,
       lang: STATE.selectedLang,
       audioUrl: result.audioUrl,
+      timestampedLyrics: result.timestampedLyrics || null,  // kie 단어별 타임스탬프(가사 싱크용)
       createdAt: new Date().toISOString()
     };
 
@@ -2513,7 +2514,7 @@ async function pollSongStatus(jobId) {
             clearInterval(STATE.pollInterval);
             console.log('✅ Audio URL found:', audioUrl);
             console.log('Full response:', data);
-            resolve({ audioUrl });
+            resolve({ audioUrl, timestampedLyrics: data.timestampedLyrics || null });
           } else {
             clearInterval(STATE.pollInterval);
             console.error('❌ No audio URL in response:', data);
@@ -3053,6 +3054,54 @@ function computeVocalSpan(buffer) {
   } catch (e) { return null; }
 }
 
+// kie 단어별 타임스탬프로 가사를 단어 단위로 그린다(노래방 하이라이트).
+//   현재 단어 = 라임색, 지난 단어 = 흰색, 다음 단어 = 흐리게.
+//   줄 전환은 그 줄이 실제로 불리기 시작할 때(선행 0) → 오디오보다 앞서지 않음.
+function drawTimedLyrics(ctx, W, H, cx, LINES, t) {
+  const LINE_LEAD = 0;
+  let i = 0;
+  for (let k = 0; k < LINES.length; k++) { if (LINES[k].start - LINE_LEAD <= t) i = k; else break; }
+  const ln = LINES[i]; if (!ln || !ln.words || !ln.words.length) return;
+  const ws = ln.words;
+  const state = ws.map((w, j) => {
+    const we = Math.max(w.end, w.start + 0.12);
+    const nx = ws[j + 1];
+    const onEnd = nx ? Math.min(we, nx.start - (nx.lead || 0.1)) : we;
+    if (t >= w.start - (w.lead || 0.1) && t <= onEnd) return 'on';
+    if (t > onEnd) return 'done';
+    return 'future';
+  });
+  ctx.save();
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.font = '800 36px "Black Han Sans", Pretendard, sans-serif';
+  ctx.lineJoin = 'round';
+  const maxW = W * 0.84, spaceW = ctx.measureText(' ').width;
+  const rows = []; let row = [], rowW = 0;
+  for (let j = 0; j < ws.length; j++) {
+    const ww = ctx.measureText(ws[j].word).width;
+    if (row.length && rowW + spaceW + ww > maxW) { rows.push({ items: row, w: rowW }); row = []; rowW = 0; }
+    row.push({ text: ws[j].word, ww, st: state[j] });
+    rowW += (row.length > 1 ? spaceW : 0) + ww;
+  }
+  if (row.length) rows.push({ items: row, w: rowW });
+  const show = rows.slice(0, 3);
+  let ly = H * 0.72 - (show.length - 1) * 24;
+  for (const r of show) {
+    let lx = cx - r.w / 2;
+    for (const it of r.items) {
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.strokeText(it.text, lx, ly);
+      ctx.fillStyle = it.st === 'on' ? '#d4ff3a' : it.st === 'done' ? '#ffffff' : 'rgba(255,255,255,0.42)';
+      ctx.fillText(it.text, lx, ly);
+      lx += it.ww + spaceW;
+    }
+    ly += 48;
+  }
+  ctx.restore();
+}
+
 function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song, lyricStart, lyricEnd) {
   // 배경
   const bg = ctx.createLinearGradient(0, 0, 0, H);
@@ -3112,10 +3161,12 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song, lyricSt
   ctx.fillText('🎯 ' + (song.name || '') + ' 에게', cx, ty + 6);
 
   // ── 가사 자막 ──────────────────────────────────────────────
-  // Suno가 줄별 타임스탬프를 안 주므로, 가사 줄을 "노래가 실제로 불리는 구간"에
-  // 고르게 분배해 한 줄씩 보여준다. 전주·아웃트로(조용한 구간)는 오디오 파형 분석
-  // (computeVocalSpan)으로 빼서, 가사가 미리 다 지나가버리지 않게 한다.
-  if (lines && lines.length && duration > 0) {
+  // kie 단어별 타임스탬프가 있으면 단어 단위로 정확히 켠다(노래방식). 없으면(구버전 곡)
+  // 가사 줄을 "노래가 불리는 구간"에 고르게 분배하는 폴백(아래)을 쓴다.
+  const TL = song && song.timestampedLyrics;
+  if (TL && TL.lines && TL.lines.length) {
+    drawTimedLyrics(ctx, W, H, cx, TL.lines, elapsed);
+  } else if (lines && lines.length && duration > 0) {
     const ls = (typeof lyricStart === 'number') ? lyricStart : 0;
     const le = (typeof lyricEnd === 'number' && lyricEnd > ls) ? lyricEnd : duration;
     const span = le - ls;

@@ -4,6 +4,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import admin from 'firebase-admin';
+import * as kie from './kie-music.js';   // 곡 생성: APIFRAME → kie.ai (단어별 타임스탬프 제공)
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -3388,54 +3389,59 @@ const server = http.createServer(async (req, res) => {
       return send(res, 400, { error: '필수 항목 누락' });
     }
 
-    // 노래 길이 단축 힌트: Suno가 더 짧게 만들도록 style/lyrics에 보조 마커 추가
-    const SHORT_HINT = ', short song around 45 seconds, no long intro or outro, fade out at end';
-    const finalStyle = /short|seconds|outro|fade/i.test(style) ? style : (style + SHORT_HINT);
-    const finalLyrics = /\[End\]\s*$/i.test(lyrics.trim()) ? lyrics : (lyrics.trim() + '\n\n[End]');
-
-    let r, text;
+    // 곡 생성: kie.ai(Suno). 길이 단축 힌트·[End] 마커는 kie-music.js가 처리.
+    let jobId;
     try {
-      r = await fetch('https://api.apiframe.ai/v2/music/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': process.env.APIFRAME_API_KEY },
-        body: JSON.stringify({ model: 'suno', prompt: finalLyrics, sunoParams: { custom_mode: true, title, style: finalStyle, model_version: 'V5' } })
-      });
-      text = await r.text();
+      ({ jobId } = await kie.generateSong({ lyrics, title, style }));
     } catch (e) {
-      if (uid) await refundCredits(uid, COST_PER_SONG);
-      return send(res, 502, { error: 'apiframe_unreachable', message: '노래 생성 서버 연결 실패' });
-    }
-
-    if (!r.ok) {
       // 제출 실패 → 즉시 환불
       if (uid) await refundCredits(uid, COST_PER_SONG);
-      return send(res, r.status, text);
+      return send(res, e.status || 502, { error: 'kie_generate_failed', message: '노래 생성 시작 실패', debug: (e.message || '').slice(0, 300) });
     }
 
     // 제출 성공 → jobId 기록(비동기 실패 시 1회 환불용) + 첫 곡이면 추천 보상 처리
     if (uid) {
-      let jobId = null;
-      try { const j = JSON.parse(text); jobId = j.jobId || j.job_id || j.id || (j.data && (j.data.jobId || j.data.job_id || j.data.id)); } catch (e) {}
-      if (jobId) await recordJob(jobId, uid, COST_PER_SONG);
+      await recordJob(jobId, uid, COST_PER_SONG);
       await onSongMade(uid);
     }
-    return send(res, r.status, text);
+    return send(res, 200, { jobId });
   }
 
   if (path.startsWith('/song-status/')) {
-    const jobId = path.replace('/song-status/', '');
-    const r = await fetch(`https://api.apiframe.ai/v2/jobs/${jobId}`, { headers: { 'X-API-Key': process.env.APIFRAME_API_KEY } });
-    const text = await r.text();
-    // 상태에 따라 job 정산(실패 시 환불, 성공 시 done) — CREDITS_ENABLED일 때만
-    if (CREDITS_ENABLED && r.ok) {
-      try {
-        const d = JSON.parse(text);
-        const st = (d.status || (d.data && d.data.status) || '').toUpperCase();
-        if (st === 'FAILED' || st === 'ERROR') await settleJob(jobId, 'failed');
-        else if (st === 'COMPLETED' || st === 'FINISHED' || st === 'SUCCESS') await settleJob(jobId, 'done');
-      } catch (e) {}
+    const jobId = decodeURIComponent(path.replace('/song-status/', ''));
+    let out;
+    try {
+      out = await kie.songStatus(jobId);
+    } catch (e) {
+      return send(res, e.status || 502, { error: 'kie_status_failed', message: '상태 확인 실패', debug: (e.message || '').slice(0, 300) });
     }
-    return send(res, r.status, text);
+    // 상태에 따라 job 정산(실패 시 환불, 성공 시 done) — CREDITS_ENABLED일 때만
+    if (CREDITS_ENABLED) {
+      if (out.status === 'FAILED') await settleJob(jobId, 'failed');
+      else if (out.status === 'COMPLETED') await settleJob(jobId, 'done');
+    }
+    // kie 오디오는 외부 CDN이라 브라우저 영상 생성 시 CORS로 막힘 → 우리 /audio 로 중계.
+    if (out.audioUrl) {
+      const self = 'https://' + (req.headers.host || '');
+      out.audioUrlOriginal = out.audioUrl;
+      out.audioUrl = self + '/audio?u=' + encodeURIComponent(out.audioUrl);
+    }
+    return send(res, 200, out);
+  }
+
+  // 오디오 중계(CORS): kie 오디오를 받아서 CORS 헤더 붙여 다시 내보낸다.
+  if (path === '/audio' && req.method === 'GET') {
+    const u = url.searchParams.get('u');
+    if (!u) return send(res, 400, { error: 'no url' });
+    try {
+      const up = await fetch(u);
+      if (!up.ok) return send(res, up.status, { error: 'audio fetch fail' });
+      const buf = Buffer.from(await up.arrayBuffer());
+      res.writeHead(200, { 'Content-Type': up.headers.get('content-type') || 'audio/mpeg', 'Content-Length': buf.length, ...CORS });
+      return res.end(buf);
+    } catch (e) {
+      return send(res, 502, { error: 'audio_proxy_failed' });
+    }
   }
 
   return send(res, 404, { error: 'Invalid path' });
