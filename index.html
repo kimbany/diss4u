@@ -2893,7 +2893,9 @@ const VIDEO = {
 const VIDEO_PALETTE = ['#d4ff3a', '#a3e5ff', '#c5a3ff', '#ffb3d9'];
 
 // 인스타 영상 중앙에 합성할 PNG 레이어들 (깔끔하게 누끼 딴 새 이미지)
-const LAYER_SRCS = { mascot: 'mascot2.png', wordmark: 'logo1.png', badge: 'badge2.png' };
+// 인스타 영상 중앙에 합성할 PNG 레이어 — Diss4U 워드마크 하나만 유지.
+// 마스코트(캐릭터)/배지는 캔버스 드로잉으로 대체하고, 가사 자막을 메인 콘텐츠로 띄운다.
+const LAYER_SRCS = { wordmark: 'logo1.png' };
 const LAYERS = {};
 let LAYERS_READY = false;
 function loadLayers() {
@@ -2906,7 +2908,7 @@ function loadLayers() {
     setTimeout(() => finish(!!(img.complete && img.naturalWidth)), 3000);
     img.src = src + '?v=2';
   }))).then(() => {
-    LAYERS_READY = !!(LAYERS.mascot && LAYERS.mascot.naturalWidth);
+    LAYERS_READY = !!(LAYERS.wordmark && LAYERS.wordmark.naturalWidth);
     return LAYERS_READY;
   });
 }
@@ -3007,10 +3009,12 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
-// 중앙 장식 — 펄스 링/그라데이션 오브 위에 PNG 레이어(마스코트/워드마크/배지) 합성
+// 중앙 장식 — 펄스 링 + 그라데이션 오브 + 캔버스 추상 비주얼(회전 6각형/도트/마이크).
+// 마스코트(캐릭터) PNG는 제거됐고, 워드마크는 drawVideoFrame에서 하단으로 분리해 그린다.
+// 가사 자막이 메인 콘텐츠로 떠야 하므로 중앙 요소는 가능한 한 작게/위쪽으로 모은다.
 function drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed) {
   const beat = 1 + bass * 0.22;
-  const bob = Math.sin(elapsed * 5) * (3 + bass * 12);
+  const bob = Math.sin(elapsed * 5) * (3 + bass * 10);
   const r = orbR * beat;
 
   // 1) 외곽 펄스 링 3개 — 비트에 맞춰 퍼져나가는 반향
@@ -3025,7 +3029,7 @@ function drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed) {
     ctx.stroke();
   }
 
-  // 2) 배경 오브 — 마스코트 뒤에 깔리는 글로우 (white→pink→purple→cyan)
+  // 2) 배경 오브 — 그라데이션 (white→pink→purple→cyan)
   ctx.save();
   ctx.shadowColor = 'rgba(255, 64, 175, 0.55)';
   ctx.shadowBlur = 35 + bass * 55;
@@ -3038,7 +3042,7 @@ function drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed) {
   ctx.beginPath(); ctx.arc(cx, cy + bob, r, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 
-  // 3) 오브 가장자리 핫핑크 외곽선
+  // 3) 오브 외곽선 (핫핑크 글로우)
   ctx.save();
   ctx.lineWidth = 5;
   ctx.strokeStyle = 'rgba(255, 64, 175, 0.9)';
@@ -3047,43 +3051,59 @@ function drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed) {
   ctx.beginPath(); ctx.arc(cx, cy + bob, r, 0, Math.PI * 2); ctx.stroke();
   ctx.restore();
 
-  // 4) 마스코트(mascot2.png) — 오브 위에 합성, 비트 바운스
-  if (LAYERS.mascot) {
-    ctx.save();
-    ctx.shadowColor = 'rgba(255, 64, 175, 0.55)';
-    ctx.shadowBlur = 22 + bass * 30;
-    drawImgCentered(ctx, LAYERS.mascot, cx, cy + bob, orbR * 1.6 * beat);
-    ctx.restore();
-  } else {
-    // 폴백: 이미지 로드 실패 시 마이크 이모지
-    ctx.font = (r * 0.95) + 'px sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('🎤', cx, cy + bob);
+  // 4) (마스코트 자리) 회전하는 네온 6각형 — 캐릭터 대신 코드로 그리는 추상 비주얼
+  ctx.save();
+  ctx.translate(cx, cy + bob);
+  ctx.rotate(elapsed * 0.4);
+  const polyR = orbR * 0.7 * beat;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+    const x = Math.cos(a) * polyR, y = Math.sin(a) * polyR;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
   }
+  ctx.closePath();
+  const pg = ctx.createLinearGradient(-polyR, -polyR, polyR, polyR);
+  pg.addColorStop(0, 'rgba(212, 255, 58, 0.92)');   // lime
+  pg.addColorStop(0.5, 'rgba(163, 229, 255, 0.78)'); // cyan
+  pg.addColorStop(1, 'rgba(255, 64, 175, 0.92)');   // hot pink
+  ctx.fillStyle = pg;
+  ctx.shadowColor = 'rgba(255, 64, 175, 0.6)';
+  ctx.shadowBlur = 30 + bass * 50;
+  ctx.fill();
+  ctx.lineWidth = 3.5;
+  ctx.strokeStyle = 'rgba(212, 255, 58, 0.95)';
+  ctx.shadowColor = '#d4ff3a';
+  ctx.shadowBlur = 14;
+  ctx.stroke();
+  ctx.restore();
 
-  // 5) 배지(badge2.png) — THIS 4 U: 오브 바로 아래, 워드마크 위에 배치
-  let belowY = cy + orbR * 1.25;
-  if (LAYERS.badge) {
-    const bh = drawImgCentered(ctx, LAYERS.badge, cx, belowY, orbR * 1.1);
-    belowY += bh * 0.55 + orbR * 0.08;
+  // 5) 내부 도트 5개 — 역회전, 비트마다 펄스
+  ctx.save();
+  ctx.translate(cx, cy + bob);
+  ctx.rotate(-elapsed * 1.1);
+  const dotsR = orbR * 0.4;
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const dotSize = 4 + bass * 8;
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * dotsR, Math.sin(a) * dotsR, dotSize, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur = 12;
+    ctx.fill();
   }
+  ctx.restore();
 
-  // 6) 워드마크(logo1.png) — Diss4U: 배지 아래
-  if (LAYERS.wordmark) {
-    drawImgCentered(ctx, LAYERS.wordmark, cx, belowY, orbR * 2.2);
-  } else {
-    // 폴백: 캔버스 텍스트로 Diss4U
-    ctx.font = '900 64px "Black Han Sans", Pretendard, sans-serif';
-    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-    const dW = ctx.measureText('Diss').width;
-    const fW = ctx.measureText('4').width;
-    const uW = ctx.measureText('U').width;
-    const gap = 4, totalW = dW + fW + uW + gap * 2;
-    let x = cx - totalW / 2;
-    ctx.fillStyle = '#ffffff'; ctx.fillText('Diss', x, belowY); x += dW + gap;
-    ctx.fillStyle = '#ff40af'; ctx.fillText('4', x, belowY); x += fW + gap;
-    ctx.fillStyle = '#1ad1ff'; ctx.fillText('U', x, belowY);
-  }
+  // 6) 정중앙 작은 🎤 — 비트마다 살짝 확대/글로우
+  ctx.save();
+  const micSize = orbR * 0.42 * (1 + bass * 0.18);
+  ctx.font = micSize + 'px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(255, 255, 255, 0.85)';
+  ctx.shadowBlur = 10 + bass * 20;
+  ctx.fillText('🎤', cx, cy + bob);
+  ctx.restore();
 }
 
 // 오디오 파형을 분석해 "실제로 소리가 큰(=노래가 불리는) 구간"의 시작/끝 시각(초)을 구한다.
@@ -3117,8 +3137,11 @@ function computeVocalSpan(buffer) {
 }
 
 // kie 단어별 타임스탬프로 가사를 단어 단위로 그린다(노래방 하이라이트).
-//   현재 단어 = 라임색, 지난 단어 = 흰색, 다음 단어 = 흐리게.
-//   줄 전환은 그 줄이 실제로 불리기 시작할 때(선행 0) → 오디오보다 앞서지 않음.
+//   · 현재 단어 = 라임→시안 그라데이션 + 라임 글로우 (강조)
+//   · 지난 단어 = 깨끗한 흰색
+//   · 다음 단어 = 흐리게 (대기 상태)
+// 가사가 영상의 메인 콘텐츠라서 글자를 크게(46px) + 강한 검은 외곽선으로 어떤 배경에도 가독성 확보.
+// 위치는 영상 중하단(H*0.66 중심) — 상단 오브와 하단 워드마크/워터마크 사이의 빈 공간.
 function drawTimedLyrics(ctx, W, H, cx, LINES, t) {
   const LINE_LEAD = 0;
   let i = 0;
@@ -3136,9 +3159,9 @@ function drawTimedLyrics(ctx, W, H, cx, LINES, t) {
   ctx.save();
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.font = '800 36px "Black Han Sans", Pretendard, sans-serif';
+  ctx.font = '800 46px "Black Han Sans", Pretendard, sans-serif';
   ctx.lineJoin = 'round';
-  const maxW = W * 0.84, spaceW = ctx.measureText(' ').width;
+  const maxW = W * 0.88, spaceW = ctx.measureText(' ').width;
   const rows = []; let row = [], rowW = 0;
   for (let j = 0; j < ws.length; j++) {
     const ww = ctx.measureText(ws[j].word).width;
@@ -3148,18 +3171,39 @@ function drawTimedLyrics(ctx, W, H, cx, LINES, t) {
   }
   if (row.length) rows.push({ items: row, w: rowW });
   const show = rows.slice(0, 3);
-  let ly = H * 0.72 - (show.length - 1) * 24;
+  const lineH = 60;
+  let ly = H * 0.66 - (show.length - 1) * (lineH / 2);
   for (const r of show) {
     let lx = cx - r.w / 2;
     for (const it of r.items) {
-      ctx.lineWidth = 7;
-      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      // 검은 외곽선 (가독성) — 강조 단어엔 라임 글로우 추가
+      ctx.lineWidth = 9;
+      ctx.strokeStyle = 'rgba(0,0,0,0.82)';
+      if (it.st === 'on') {
+        ctx.shadowColor = 'rgba(212, 255, 58, 0.75)';
+        ctx.shadowBlur = 22;
+      } else {
+        ctx.shadowColor = 'rgba(0,0,0,0.55)';
+        ctx.shadowBlur = 6;
+      }
       ctx.strokeText(it.text, lx, ly);
-      ctx.fillStyle = it.st === 'on' ? '#d4ff3a' : it.st === 'done' ? '#ffffff' : 'rgba(255,255,255,0.42)';
+
+      // 글자 색 — 현재 단어는 라임→시안 그라데이션, 지난 단어는 흰색, 미래는 흐림
+      ctx.shadowBlur = 0;
+      if (it.st === 'on') {
+        const grad = ctx.createLinearGradient(lx, ly - 24, lx, ly + 24);
+        grad.addColorStop(0, '#d4ff3a');   // lime
+        grad.addColorStop(1, '#a3e5ff');   // cyan
+        ctx.fillStyle = grad;
+      } else if (it.st === 'done') {
+        ctx.fillStyle = '#ffffff';
+      } else {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
+      }
       ctx.fillText(it.text, lx, ly);
       lx += it.ww + spaceW;
     }
-    ly += 48;
+    ly += lineH;
   }
   ctx.restore();
 }
@@ -3179,9 +3223,11 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song, lyricSt
   bass = (bass / 10) / 255;       // 0~1
   const energy = (total / bins) / 255;
 
-  const cx = W / 2, cy = H * 0.40;
+  // 레이아웃: 가사가 메인 콘텐츠가 되도록 오브를 영상 상단부로 올리고 크기도 줄임.
+  // 비주얼라이저 바 길이도 짧게 잡아 가사 영역(H*0.55~0.78)을 침범하지 않게 함.
+  const cx = W / 2, cy = H * 0.30;
   const rot = elapsed * 0.6;
-  const orbR = 140 * (1 + bass * 0.45);
+  const orbR = 115 * (1 + bass * 0.45);
 
   // 외곽 글로우
   const glow = ctx.createRadialGradient(cx, cy, orbR * 0.3, cx, cy, orbR * 2.4);
@@ -3196,7 +3242,7 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song, lyricSt
   for (let i = 0; i < bars; i++) {
     const idx = Math.floor(i / bars * (bins * 0.7));
     const v = freq[idx] / 255;
-    const len = 16 + v * 150;
+    const len = 14 + v * 100;   // 150 → 100, 가사 영역 침범 방지
     const ang = (i / bars) * Math.PI * 2 + rot;
     const r0 = orbR + 16;
     const x0 = cx + Math.cos(ang) * r0, y0 = cy + Math.sin(ang) * r0;
@@ -3228,18 +3274,43 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song, lyricSt
     drawTimedLyrics(ctx, W, H, cx, song.timestampedLyrics.lines, elapsed);
   }
 
-  // 워터마크
-  ctx.font = '700 26px "Black Han Sans", Pretendard, sans-serif';
+  // ── 하단 영역: 워드마크 → 워터마크 → 진행바 (위에서 아래로) ─────────
+  // 워드마크(Diss4U PNG) — 영상 하단에 단독으로 큼지막하게. 가사 영역과 안 겹치도록 위치 분리.
+  if (LAYERS.wordmark) {
+    drawImgCentered(ctx, LAYERS.wordmark, cx, H - 110, W * 0.5);
+  } else {
+    // 폴백: 캔버스 텍스트로 Diss4U
+    ctx.save();
+    ctx.font = '900 56px "Black Han Sans", Pretendard, sans-serif';
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    const dW = ctx.measureText('Diss').width;
+    const fW = ctx.measureText('4').width;
+    const uW = ctx.measureText('U').width;
+    const gap = 4, totalW = dW + fW + uW + gap * 2;
+    let x = cx - totalW / 2, yL = H - 110;
+    ctx.fillStyle = '#ffffff'; ctx.fillText('Diss', x, yL); x += dW + gap;
+    ctx.fillStyle = '#ff40af'; ctx.fillText('4', x, yL); x += fW + gap;
+    ctx.fillStyle = '#1ad1ff'; ctx.fillText('U', x, yL);
+    ctx.restore();
+  }
+
+  // 작은 워터마크 — 진행바 바로 위
+  ctx.font = '700 22px "Black Han Sans", Pretendard, sans-serif';
   ctx.fillStyle = '#d4ff3a';
   ctx.textBaseline = 'bottom';
-  ctx.fillText('🎤 Diss4U', cx, H - 44);
+  ctx.textAlign = 'center';
+  ctx.fillText('🎤 Diss4U', cx, H - 22);
 
-  // 진행 바
+  // 진행 바 — 진행 부분에 글로우
   const p = Math.min(elapsed / duration, 1);
   ctx.fillStyle = '#2a2a32';
   ctx.fillRect(0, H - 8, W, 8);
+  ctx.save();
+  ctx.shadowColor = '#d4ff3a';
+  ctx.shadowBlur = 12;
   ctx.fillStyle = '#d4ff3a';
   ctx.fillRect(0, H - 8, W * p, 8);
+  ctx.restore();
 }
 
 // ── WebM duration 패치 ─────────────────────────────────────────────
