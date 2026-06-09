@@ -2609,6 +2609,7 @@ const server = http.createServer(async (req, res) => {
       has_solar_key: !!process.env.SOLAR_API_KEY,
       has_gemini_key: !!process.env.GEMINI_API_KEY,
       has_apiframe_key: !!process.env.APIFRAME_API_KEY,
+      has_kie_key: !!process.env.KIE_API_KEY,
       has_portone_secret: !!process.env.PORTONE_V2_API_SECRET,
       has_coupang_keys: !!(process.env.COUPANG_ACCESS_KEY && process.env.COUPANG_SECRET_KEY),
       credits_enabled: CREDITS_ENABLED,
