@@ -1141,19 +1141,9 @@
 
     <!-- 변환 진행 오버레이 (서버 ffmpeg 작업 중일 때 모달 위에 크게 표시) -->
     <div id="transcodeOverlay" style="display:none;position:absolute;inset:0;background:rgba(13,13,16,0.94);backdrop-filter:blur(6px);border-radius:var(--radius-lg);z-index:5;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;">
-      <!-- 변환 중 상태 -->
-      <div id="tcWaiting" style="display:flex;flex-direction:column;align-items:center;">
-        <div style="width:64px;height:64px;border:5px solid var(--border);border-top-color:var(--lime);border-radius:50%;animation:tcspin 0.9s linear infinite;margin-bottom:18px;"></div>
-        <div style="font-size:17px;font-weight:800;color:var(--lime);margin-bottom:8px;">🛠️ SNS 호환 변환 중...</div>
-        <div style="font-size:13px;color:var(--text-dim);line-height:1.5;word-break:keep-all;">TikTok·인스타·카톡에서<br>깨지지 않도록 표준 MP4로 변환하고 있어요<br><span style="color:var(--text-dimmer);font-size:11px;">(5~15초)</span></div>
-      </div>
-      <!-- 변환 완료 → 사용자가 다시 탭해서 공유시트 띄우기 (iOS user gesture 정책 우회) -->
-      <div id="tcReady" style="display:none;flex-direction:column;align-items:center;">
-        <div style="font-size:42px;margin-bottom:10px;">✅</div>
-        <div style="font-size:17px;font-weight:800;color:var(--lime);margin-bottom:6px;">변환 완료!</div>
-        <div style="font-size:13px;color:var(--text-dim);margin-bottom:18px;word-break:keep-all;">아래 버튼을 눌러 앨범에 저장하세요</div>
-        <button onclick="tcConfirmSave()" style="background:var(--lime);color:#1a1a1f;font-weight:800;font-size:15px;border:none;border-radius:14px;padding:14px 28px;cursor:pointer;box-shadow:0 6px 20px rgba(212,255,58,0.3);">📤 앨범에 저장</button>
-      </div>
+      <div style="width:64px;height:64px;border:5px solid var(--border);border-top-color:var(--lime);border-radius:50%;animation:tcspin 0.9s linear infinite;margin-bottom:18px;"></div>
+      <div style="font-size:17px;font-weight:800;color:var(--lime);margin-bottom:8px;">🛠️ SNS 호환 변환 중...</div>
+      <div style="font-size:13px;color:var(--text-dim);line-height:1.5;word-break:keep-all;">TikTok·인스타·카톡에서<br>깨지지 않도록 표준 MP4로 변환하고 있어요<br><span style="color:var(--text-dimmer);font-size:11px;">(5~15초)</span></div>
     </div>
 
     <div class="progress-track" id="videoProgressTrack">
@@ -2988,8 +2978,8 @@ function closeVideoModal() {
   // 변환본 메모리 정리 (다음 영상 만들 때 새로 변환되도록)
   if (VIDEO.transcodedBlobUrl) { try { URL.revokeObjectURL(VIDEO.transcodedBlobUrl); } catch (e) {} }
   VIDEO.transcodedBlob = null; VIDEO.transcodedBlobUrl = null; VIDEO.transcoding = false;
-  _tcPendingAction = null;
-  showTcOverlay('hidden');
+  const ovClose = document.getElementById('transcodeOverlay');
+  if (ovClose) ovClose.style.display = 'none';
   const muteBtnClose = document.getElementById('videoMuteBtn');
   if (muteBtnClose) muteBtnClose.style.display = 'none';
   const v = document.getElementById('videoPreview');
@@ -3763,9 +3753,6 @@ async function makeInstaVideo() {
   const isMp4 = outType.includes('mp4');
   setVideoStatus(isMp4 ? '✅ 완성! 공유하거나 저장하세요.'
     : '✅ 완성! (webm 형식) SNS에서 안 받으면 저장 후 올려주세요.');
-  // 영상 완성과 동시에 백그라운드로 SNS 호환 변환 시작
-  // → 사용자가 '저장' 누를 때 캐시된 결과를 즉시 사용해 user gesture 안에서 공유시트(앨범 저장) 띄울 수 있음
-  ensureTranscoded().catch(() => {});
 }
 
 function videoFileName() {
@@ -3775,34 +3762,25 @@ function videoFileName() {
 
 // 서버 ffmpeg로 표준 MP4(TikTok 호환)로 변환. 결과는 캐시 → 재호출 시 즉시 반환.
 // 실패하면 null 반환 → 호출자는 원본을 그대로 사용 (가용성 폴백).
-// 오버레이 표시 모드 전환
-function showTcOverlay(mode) {
-  const ov = document.getElementById('transcodeOverlay');
-  const w = document.getElementById('tcWaiting');
-  const r = document.getElementById('tcReady');
-  if (!ov || !w || !r) return;
-  if (mode === 'waiting') { ov.style.display = 'flex'; w.style.display = 'flex'; r.style.display = 'none'; }
-  else if (mode === 'ready') { ov.style.display = 'flex'; w.style.display = 'none'; r.style.display = 'flex'; }
-  else { ov.style.display = 'none'; }
-}
-
 async function ensureTranscoded() {
   if (!VIDEO.blob) return null;
   if (VIDEO.transcodedBlob) return VIDEO.transcodedBlob;
   if (VIDEO.transcoding) {
-    // 이미 백그라운드에서 진행 중 — 완료될 때까지 대기 (오버레이는 손대지 않음)
-    for (let i = 0; i < 80; i++) {
+    // 진행 중이면 끝날 때까지 대기
+    for (let i = 0; i < 60; i++) {
       await new Promise(r => setTimeout(r, 500));
       if (!VIDEO.transcoding) break;
     }
     return VIDEO.transcodedBlob;
   }
-  if (!currentUser) return null;
+  if (!currentUser) return null;   // 비로그인은 변환 안 함
   VIDEO.transcoding = true;
+  const ov = document.getElementById('transcodeOverlay');
+  if (ov) ov.style.display = 'flex';
   try {
     const token = await currentUser.getIdToken();
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 35000);
+    const timer = setTimeout(() => ctrl.abort(), 35000);   // 35초 타임아웃 (서버 30 + 여유)
     const r = await fetch(getWorkerUrl() + '/transcode-video', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/octet-stream' },
@@ -3821,71 +3799,68 @@ async function ensureTranscoded() {
     return null;
   } finally {
     VIDEO.transcoding = false;
+    const ov2 = document.getElementById('transcodeOverlay');
+    if (ov2) ov2.style.display = 'none';
   }
 }
 
-// 사용자가 의도한 액션 기억 ('share' = SNS 공유 / 'download' = 저장).
-// 변환이 끝난 뒤 오버레이 버튼을 다시 탭하면 fresh user gesture로 share()를 호출할 수 있음.
-let _tcPendingAction = null;
+// 공유·저장에 쓸 최종 블롭 (변환 성공 → 변환본, 실패 → 원본 그대로)
+async function getDeliveryBlob() {
+  const t = await ensureTranscoded();
+  return t || VIDEO.blob;
+}
 
-// 공통 실행기: user gesture 안에서만 호출돼야 navigator.share가 동작함 (iOS 정책)
-function runShareWithBlob(blob, action) {
-  const song = STATE.currentSong || {};
+async function shareInstaVideo() {
+  if (!VIDEO.blob) return;
+  const blob = await getDeliveryBlob();
   const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
   const file = new File([blob], videoFileName() + '.' + ext, { type: blob.type });
+  const song = STATE.currentSong || {};
+  claimShareReward(song.id);   // 공유 의도 = 즉시 지급(곡당 1회, 서버에서 중복 차단)
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: song.title || 'Diss4U',
+        text: '🎤 ' + (song.title || '') + ' — Diss4U로 만든 디스곡'
+      });
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      console.warn('video share fail', e);
+    }
+  }
+  showToast('공유시트 미지원 — 저장 후 SNS 앱에 올려주세요');
+  fileDownloadInstaVideo();
+}
+
+// "저장" 버튼: 모바일은 공유시트(→ '비디오 저장'으로 앨범에 저장 가능)를 띄우고,
+// 공유시트가 없거나 PC면 파일 다운로드로 폴백한다.
+async function downloadInstaVideo() {
+  if (!VIDEO.blob) return;
+  const blob = await getDeliveryBlob();
+  const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+  const file = new File([blob], videoFileName() + '.' + ext, { type: blob.type });
+  // 모바일 + 파일 공유 지원 → 공유시트로 (여기서 '비디오 저장'을 누르면 앨범에 저장됨)
   const canShareFile = navigator.canShare && navigator.canShare({ files: [file] });
   if (canShareFile) {
-    navigator.share({
-      files: [file],
-      title: song.title || 'Diss4U',
-      text: action === 'share'
-        ? '🎤 ' + (song.title || '') + ' — Diss4U로 만든 디스곡'
-        : '🎤 Diss4U로 만든 디스곡'
-    }).then(() => {
-      claimShareReward(song.id);
-      if (action === 'download') showToast('💾 "비디오 저장"을 누르면 앨범에 저장돼요');
-    }).catch(e => {
-      if (e.name === 'AbortError') { claimShareReward(song.id); return; }
-      console.warn('share fail', e);
-      showToast('공유시트 미지원 — 저장으로 폴백');
-      fileDownloadInstaVideo();
-    });
-  } else {
-    fileDownloadInstaVideo();
+    try {
+      await navigator.share({
+        files: [file],
+        title: (STATE.currentSong || {}).title || 'Diss4U',
+        text: '🎤 Diss4U로 만든 디스곡'
+      });
+      showToast('💾 "비디오 저장"을 누르면 앨범에 저장돼요');
+      claimShareReward((STATE.currentSong || {}).id);
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') { claimShareReward((STATE.currentSong || {}).id); return; }
+      console.warn('save via share fail', e);
+      // 폴백: 파일 다운로드
+    }
   }
-}
-
-async function shareInstaVideo() { await beginSaveOrShare('share'); }
-async function downloadInstaVideo() { await beginSaveOrShare('download'); }
-
-// 저장·공유 공통 진입점. iOS user gesture 정책 우회 위해 캐시 우선 사용.
-async function beginSaveOrShare(action) {
-  if (!VIDEO.blob) return;
-  // 변환 캐시가 이미 있음 → user gesture 살아있을 때 즉시 공유시트 호출 (앨범 저장 가능)
-  if (VIDEO.transcodedBlob) {
-    runShareWithBlob(VIDEO.transcodedBlob, action);
-    return;
-  }
-  // 변환 진행 중/미시작 → 오버레이로 알리고, 끝나면 "앨범에 저장" 버튼 표시.
-  // 사용자가 그 버튼을 탭하면 새 user gesture로 공유시트가 정상 호출됨.
-  _tcPendingAction = action;
-  showTcOverlay('waiting');
-  const result = await ensureTranscoded();
-  if (result) {
-    showTcOverlay('ready');   // 사용자가 직접 탭 → tcConfirmSave 실행
-  } else {
-    // 변환 실패 — 원본으로 폴백 (user gesture는 이미 잃었지만 시도)
-    showTcOverlay('hidden');
-    runShareWithBlob(VIDEO.blob, action);
-  }
-}
-
-// 오버레이의 '앨범에 저장' 버튼 — 사용자 직접 탭 = 새 user gesture, 공유시트 정상 동작
-function tcConfirmSave() {
-  showTcOverlay('hidden');
-  const blob = VIDEO.transcodedBlob || VIDEO.blob;
-  runShareWithBlob(blob, _tcPendingAction || 'download');
-  _tcPendingAction = null;
+  // PC 또는 공유 미지원 → 파일 다운로드
+  fileDownloadInstaVideo();
 }
 
 // 실제 파일 다운로드 (PC / 공유시트 미지원 폴백) — 변환본 있으면 그걸 다운로드
