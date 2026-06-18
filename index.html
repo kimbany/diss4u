@@ -1816,6 +1816,11 @@ function closeCreditHistory() {
 }
 
 function goHome() {
+  // 어떤 화면/모달에서든 메인(입력)으로 완전 초기화
+  STATE.currentSong = null;
+  document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
+  const pm = document.getElementById('profileMenu');
+  if (pm) pm.style.display = 'none';
   showScreen('input');
   loadHistory();
 }
