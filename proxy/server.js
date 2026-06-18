@@ -3615,27 +3615,22 @@ setInterval(() => {
   }
 }, 5 * 60_000).unref?.();
 
-// ffmpeg 변환 실행 (TikTok·Kakao·Instagram 호환).
-// 1차: 오디오는 원본 그대로 복사 (iOS Safari가 만든 AAC는 호환성 100%).
-// 2차: 1차가 실패하면(Opus 등 비호환 입력 오디오) AAC로 재인코딩.
+// ffmpeg 변환 실행 (TikTok·Instagram·KakaoTalk 호환 표준 MP4).
+// VFR→CFR 30fps, H.264 Main(보편 호환), AAC-LC(Kakao 인식 100%), +faststart.
+// -shortest 같은 트랙 자르기 플래그는 빼서 두 트랙을 자연 길이대로 둠
+// (Kakao가 audio<video 차이를 보고 오디오 트랙을 폐기하는 케이스 회피).
 async function runFfmpeg(input, output, timeoutMs) {
-  // 비디오 공통 옵션 (VFR→CFR 30fps, H.264 Main 보편 호환, faststart)
-  const baseVideoArgs = [
+  const args = [
     '-y', '-i', input,
     '-c:v', 'libx264', '-profile:v', 'main', '-level', '4.0', '-pix_fmt', 'yuv420p',
     '-crf', '22', '-preset', 'veryfast',
-    '-r', '30', '-vsync', 'cfr',
+    '-r', '30', '-fps_mode', 'cfr',
+    '-c:a', 'aac', '-profile:a', 'aac_low', '-b:a', '128k', '-ar', '44100', '-ac', '2',
+    '-disposition:a:0', 'default',
     '-movflags', '+faststart',
-    '-shortest'
+    output
   ];
-  try {
-    await runFfmpegCmd(baseVideoArgs.concat(['-c:a', 'copy', output]), timeoutMs);
-  } catch (e) {
-    // Opus 등 MP4에 그대로 못 넣는 오디오면 AAC로 재인코딩
-    await runFfmpegCmd(baseVideoArgs.concat([
-      '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '2', output
-    ]), timeoutMs);
-  }
+  await runFfmpegCmd(args, timeoutMs);
 }
 
 function runFfmpegCmd(args, timeoutMs) {
