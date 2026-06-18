@@ -1044,9 +1044,9 @@ Hook은 "키워드 반복"보다
 function maskProfanity(text) {
   if (!text) return text;
   let out = text;
-  out = out.replace(/[씨시ㅆ][\s\-_.0-9]*[발팔밤]/g, '삐-');
+  out = out.replace(/[씨시ㅆ][\s\-_.0-9*~!@#]*[발팔밤ㅂ]/g, '삐-');
   out = out.replace(/[좆좇][\s\-_.]*같?/g, '삐-');
-  const words = ['존나', '존내', '개새끼', '개새기', '병신', '븅신', '지랄', '니미', 'ㅅㅂ', 'ㅈㄴ', 'ㅄ', 'ㅂㅅ', 'fuck', 'shit'];
+  const words = ['존나', '존내', '개새끼', '개새기', '병신', '븅신', '지랄', '니미', 'ㅅㅂ', 'ㅈㄴ', 'ㅄ', 'ㅂㅅ', '시ㅂ', '씨ㅂ', 'ㅆㅂ', 'fuck', 'shit'];
   for (const w of words) out = out.split(w).join('삐-');
   return out;
 }
