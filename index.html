@@ -3316,39 +3316,40 @@ function drawSimpleLyrics(ctx, W, H, cx, lines, elapsed, duration, lyricStart, l
   ctx.restore();
 }
 
-// 하단 미니멀 웨이브폼 — 가로 기준선 위/아래로 세로 막대들이 펼쳐지는 깔끔한 오디오 파형.
-// 첨부 레퍼런스 디자인을 따라 미니멀·모던. 좌우 미러(중앙이 가장 활발)로 자연스러운 분포.
-//   · 가운데 살짝 옅은 가로 기준선 1px
-//   · 50개 세로 막대, 두께 2px, 위/아래 대칭 길이
-//   · freq 값에 비례해 막대 길이가 실시간 변화
+// 하단 미니멀 웨이브폼 — 가로 기준선 위/아래로 둥근 막대들이 펼쳐지는 오디오 파형.
+// 막대 끝은 round cap, 두께 4px로 부드럽고 모던한 느낌(첨부 레퍼런스 톤).
+//   · 좌우 미러 매핑(중앙이 가장 활발)
+//   · 길이는 freq^1.5로 dynamic range 확장 → 강약 대비가 또렷
+//   · 가장 짧은 막대도 둥근 캡 덕분에 점처럼 보임
 function drawBottomWaveform(ctx, W, H, freq, baseY) {
   const bins = freq.length;
-  const BAR_COUNT = 50;
-  const drawW = W * 0.84;
+  const BAR_COUNT = 42;
+  const drawW = W * 0.86;
   const startX = (W - drawW) / 2;
   const gap = drawW / BAR_COUNT;
-  const MAX_LEN = 55;   // 최대 위/아래 막대 길이
-  const BASE_LEN = 3;   // 무음 시 최소 길이
+  const MAX_LEN = 75;   // 최대 위/아래 막대 길이 (긴 막대가 더 길게)
+  const BASE_LEN = 2;   // 무음 시 최소 길이 (두께 4 round cap과 합쳐 작은 점)
 
   ctx.save();
 
-  // 가로 기준선 — 얇고 옅은 흰색
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+  // 가로 기준선 — 매우 옅은 흰색 (있는 듯 없는 듯)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.10)';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(startX, baseY);
   ctx.lineTo(startX + drawW, baseY);
   ctx.stroke();
 
-  // 세로 막대 — 좌우 미러 매핑(중앙 강조)
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
-  ctx.lineWidth = 2;
-  ctx.lineCap = 'square';
+  // 세로 막대 — round cap + 두꺼운 라인 + 좌우 미러 매핑
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
   const halfBars = BAR_COUNT / 2;
   for (let i = 0; i < BAR_COUNT; i++) {
     const mirrored = i < halfBars ? i : (BAR_COUNT - 1 - i);
     const idx = Math.floor((mirrored / halfBars) * bins * 0.7);
-    const v = freq[idx] / 255;
+    const raw = freq[idx] / 255;
+    const v = Math.pow(raw, 1.5);   // 작은 값은 더 작게, 큰 값은 더 두드러지게
     const len = BASE_LEN + v * MAX_LEN;
     const x = startX + i * gap + gap / 2;
     ctx.beginPath();
