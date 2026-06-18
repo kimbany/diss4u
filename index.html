@@ -112,7 +112,6 @@
     animation: pulse 2s ease-in-out infinite;
   }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-  @keyframes tcspin { to { transform: rotate(360deg); } }
 
   .settings-icon {
     background: var(--bg-card); border: 1px solid var(--border);
@@ -1138,13 +1137,6 @@
 
     <video id="videoPreview" controls playsinline webkit-playsinline
       style="display:none;width:100%;border-radius:16px;margin-bottom:14px;background:#000;"></video>
-
-    <!-- 변환 진행 오버레이 (서버 ffmpeg 작업 중일 때 모달 위에 크게 표시) -->
-    <div id="transcodeOverlay" style="display:none;position:absolute;inset:0;background:rgba(13,13,16,0.94);backdrop-filter:blur(6px);border-radius:var(--radius-lg);z-index:5;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;">
-      <div style="width:64px;height:64px;border:5px solid var(--border);border-top-color:var(--lime);border-radius:50%;animation:tcspin 0.9s linear infinite;margin-bottom:18px;"></div>
-      <div style="font-size:17px;font-weight:800;color:var(--lime);margin-bottom:8px;">🛠️ SNS 호환 변환 중...</div>
-      <div style="font-size:13px;color:var(--text-dim);line-height:1.5;word-break:keep-all;">TikTok·인스타·카톡에서<br>깨지지 않도록 표준 MP4로 변환하고 있어요<br><span style="color:var(--text-dimmer);font-size:11px;">(5~15초)</span></div>
-    </div>
 
     <div class="progress-track" id="videoProgressTrack">
       <div class="progress-fill" id="videoProgress"></div>
@@ -2978,8 +2970,6 @@ function closeVideoModal() {
   // 변환본 메모리 정리 (다음 영상 만들 때 새로 변환되도록)
   if (VIDEO.transcodedBlobUrl) { try { URL.revokeObjectURL(VIDEO.transcodedBlobUrl); } catch (e) {} }
   VIDEO.transcodedBlob = null; VIDEO.transcodedBlobUrl = null; VIDEO.transcoding = false;
-  const ovClose = document.getElementById('transcodeOverlay');
-  if (ovClose) ovClose.style.display = 'none';
   const muteBtnClose = document.getElementById('videoMuteBtn');
   if (muteBtnClose) muteBtnClose.style.display = 'none';
   const v = document.getElementById('videoPreview');
@@ -3775,8 +3765,8 @@ async function ensureTranscoded() {
   }
   if (!currentUser) return null;   // 비로그인은 변환 안 함
   VIDEO.transcoding = true;
-  const ov = document.getElementById('transcodeOverlay');
-  if (ov) ov.style.display = 'flex';
+  const prev = document.getElementById('videoStatus').textContent;
+  setVideoStatus('🛠️ SNS 호환 변환 중... (5~15초)');
   try {
     const token = await currentUser.getIdToken();
     const ctrl = new AbortController();
@@ -3799,8 +3789,7 @@ async function ensureTranscoded() {
     return null;
   } finally {
     VIDEO.transcoding = false;
-    const ov2 = document.getElementById('transcodeOverlay');
-    if (ov2) ov2.style.display = 'none';
+    setVideoStatus(prev);
   }
 }
 
