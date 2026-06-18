@@ -3188,7 +3188,7 @@ function drawTimedLyrics(ctx, W, H, cx, LINES, t) {
   if (row.length) rows.push({ items: row, w: rowW });
   const show = rows.slice(0, 3);
   const lineH = 60;
-  let ly = H * 0.66 - (show.length - 1) * (lineH / 2);
+  let ly = H * 0.50 - (show.length - 1) * (lineH / 2);
   for (const r of show) {
     let lx = cx - r.w / 2;
     for (const it of r.items) {
@@ -3272,7 +3272,7 @@ function drawSimpleLyrics(ctx, W, H, cx, lines, elapsed, duration, lyricStart, l
 
   const show = rows.slice(0, 3);
   const lineH = 60;
-  let ly = H * 0.66 - (show.length - 1) * (lineH / 2);
+  let ly = H * 0.50 - (show.length - 1) * (lineH / 2);
   for (const r of show) {
     let lx = cx - r.w / 2;
     for (const it of r.items) {
@@ -3306,6 +3306,50 @@ function drawSimpleLyrics(ctx, W, H, cx, lines, elapsed, duration, lyricStart, l
   ctx.restore();
 }
 
+// 하단 미니멀 웨이브폼 — 가로 기준선 위/아래로 세로 막대들이 펼쳐지는 깔끔한 오디오 파형.
+// 첨부 레퍼런스 디자인을 따라 미니멀·모던. 좌우 미러(중앙이 가장 활발)로 자연스러운 분포.
+//   · 가운데 살짝 옅은 가로 기준선 1px
+//   · 50개 세로 막대, 두께 2px, 위/아래 대칭 길이
+//   · freq 값에 비례해 막대 길이가 실시간 변화
+function drawBottomWaveform(ctx, W, H, freq, baseY) {
+  const bins = freq.length;
+  const BAR_COUNT = 50;
+  const drawW = W * 0.84;
+  const startX = (W - drawW) / 2;
+  const gap = drawW / BAR_COUNT;
+  const MAX_LEN = 55;   // 최대 위/아래 막대 길이
+  const BASE_LEN = 3;   // 무음 시 최소 길이
+
+  ctx.save();
+
+  // 가로 기준선 — 얇고 옅은 흰색
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(startX, baseY);
+  ctx.lineTo(startX + drawW, baseY);
+  ctx.stroke();
+
+  // 세로 막대 — 좌우 미러 매핑(중앙 강조)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'square';
+  const halfBars = BAR_COUNT / 2;
+  for (let i = 0; i < BAR_COUNT; i++) {
+    const mirrored = i < halfBars ? i : (BAR_COUNT - 1 - i);
+    const idx = Math.floor((mirrored / halfBars) * bins * 0.7);
+    const v = freq[idx] / 255;
+    const len = BASE_LEN + v * MAX_LEN;
+    const x = startX + i * gap + gap / 2;
+    ctx.beginPath();
+    ctx.moveTo(x, baseY - len);
+    ctx.lineTo(x, baseY + len);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song, lyricStart, lyricEnd) {
   // 배경
   const bg = ctx.createLinearGradient(0, 0, 0, H);
@@ -3321,48 +3365,18 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song, lyricSt
   bass = (bass / 10) / 255;       // 0~1
   const energy = (total / bins) / 255;
 
-  // 레이아웃: 가사가 메인 콘텐츠가 되도록 오브를 영상 상단부로 올리고 크기도 줄임.
-  // 비주얼라이저 바 길이도 짧게 잡아 가사 영역(H*0.55~0.78)을 침범하지 않게 함.
-  const cx = W / 2, cy = H * 0.30;
-  const rot = elapsed * 0.6;
-  const orbR = 115 * (1 + bass * 0.45);
+  // 레이아웃: 미니멀 컴포지션 — 중앙 도형/오브를 다 제거하고 가사를 정중앙에 크게,
+  // 하단에 세로 막대 웨이브폼(첨부 레퍼런스 디자인)을 배치. 모든 시각 요소는 오디오에 반응.
+  const cx = W / 2;
 
-  // 외곽 글로우
-  const glow = ctx.createRadialGradient(cx, cy, orbR * 0.3, cx, cy, orbR * 2.4);
-  glow.addColorStop(0, 'rgba(197,163,255,' + (0.18 + energy * 0.25) + ')');
-  glow.addColorStop(1, 'rgba(13,13,16,0)');
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, W, H);
-
-  // 원형 비주얼라이저 바
-  const bars = 48;
-  ctx.lineCap = 'round';
-  for (let i = 0; i < bars; i++) {
-    const idx = Math.floor(i / bars * (bins * 0.7));
-    const v = freq[idx] / 255;
-    const len = 14 + v * 100;   // 150 → 100, 가사 영역 침범 방지
-    const ang = (i / bars) * Math.PI * 2 + rot;
-    const r0 = orbR + 16;
-    const x0 = cx + Math.cos(ang) * r0, y0 = cy + Math.sin(ang) * r0;
-    const x1 = cx + Math.cos(ang) * (r0 + len), y1 = cy + Math.sin(ang) * (r0 + len);
-    ctx.strokeStyle = VIDEO_PALETTE[i % VIDEO_PALETTE.length];
-    ctx.lineWidth = 5;
-    ctx.globalAlpha = 0.45 + v * 0.55;
-    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-
-  // 중앙: 순수 캔버스 드로잉(브랜드 컬러 오브 + 마이크 + Diss4U 워드마크)
-  drawCenterDecor(ctx, cx, cy, orbR, bass, elapsed);
-
-  // 상단 제목
+  // 상단 제목 — 얇은 폰트(weight 400)로 정돈된 톤, 사이즈도 살짝 줄임
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   ctx.fillStyle = '#ffffff';
-  ctx.font = '700 44px "Black Han Sans", Pretendard, sans-serif';
+  ctx.font = '400 40px Pretendard, sans-serif';
   const titleLines = wrapText(ctx, song.title || '', W * 0.86);
-  let ty = 70;
-  for (const tl of titleLines.slice(0, 2)) { ctx.fillText(tl, cx, ty); ty += 54; }
-  ctx.font = '600 22px Pretendard, sans-serif';
+  let ty = 80;
+  for (const tl of titleLines.slice(0, 2)) { ctx.fillText(tl, cx, ty); ty += 48; }
+  ctx.font = '500 22px Pretendard, sans-serif';
   ctx.fillStyle = '#8a8a99';
   ctx.fillText('🎯 ' + (song.name || '') + ' 에게', cx, ty + 6);
 
@@ -3378,8 +3392,11 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song, lyricSt
     drawSimpleLyrics(ctx, W, H, cx, lines, elapsed, duration, lyricStart, lyricEnd);
   }
 
-  // ── 하단 영역: 워드마크 → 워터마크 → 진행바 (위에서 아래로) ─────────
-  // 워드마크(Diss4U PNG) — 영상 하단에 단독으로 큼지막하게. 가사 영역과 안 겹치도록 위치 분리.
+  // ── 하단 영역: 웨이브폼 → 워드마크 → 워터마크 → 진행바 ─────────
+  // 미니멀 세로 막대 웨이브폼 — 가사 영역(H*0.50)과 워드마크(H-110) 사이.
+  drawBottomWaveform(ctx, W, H, freq, H * 0.76);
+
+  // 워드마크(Diss4U PNG) — 영상 하단에 단독으로 큼지막하게.
   if (LAYERS.wordmark) {
     drawImgCentered(ctx, LAYERS.wordmark, cx, H - 110, W * 0.5);
   } else {
