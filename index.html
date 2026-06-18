@@ -2245,15 +2245,13 @@ function closeCreditHistory() {
 }
 
 function goHome() {
-  loadHistory();
-  // 현재 history가 input 위에 쌓여 있으면 자연스러운 뒤로가기로 처리 → 브라우저 forward도 가능
-  try {
-    if (history.state && history.state.screen && history.state.screen !== 'input') {
-      history.back();
-      return;
-    }
-  } catch (e) {}
+  // 어떤 화면/모달에서든 메인(입력)으로 완전 초기화 (뒤로가기 동작 X)
+  STATE.currentSong = null;
+  document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
+  const pm = document.getElementById('profileMenu');
+  if (pm) pm.style.display = 'none';
   showScreen('input');
+  loadHistory();
 }
 
 async function renderMyList() {
