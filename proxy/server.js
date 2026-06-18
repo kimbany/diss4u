@@ -3633,31 +3633,18 @@ setInterval(() => {
   }
 }, 5 * 60_000).unref?.();
 
-// ffmpeg 변환 실행 (TikTok·Kakao·Instagram 호환).
-// 1차: 오디오는 원본 그대로 복사 (iOS Safari가 만든 AAC는 호환성 100%).
-// 2차: 1차가 실패하면(Opus 등 비호환 입력 오디오) AAC로 재인코딩.
-async function runFfmpeg(input, output, timeoutMs) {
-  // 비디오 공통 옵션 (VFR→CFR 30fps, H.264 Main 보편 호환, faststart)
-  const baseVideoArgs = [
-    '-y', '-i', input,
-    '-c:v', 'libx264', '-profile:v', 'main', '-level', '4.0', '-pix_fmt', 'yuv420p',
-    '-crf', '22', '-preset', 'veryfast',
-    '-r', '30', '-vsync', 'cfr',
-    '-movflags', '+faststart',
-    '-shortest'
-  ];
-  try {
-    await runFfmpegCmd(baseVideoArgs.concat(['-c:a', 'copy', output]), timeoutMs);
-  } catch (e) {
-    // Opus 등 MP4에 그대로 못 넣는 오디오면 AAC로 재인코딩
-    await runFfmpegCmd(baseVideoArgs.concat([
-      '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '2', output
-    ]), timeoutMs);
-  }
-}
-
-function runFfmpegCmd(args, timeoutMs) {
+// ffmpeg 변환 실행 (검증된 TikTok 호환 명령)
+function runFfmpeg(input, output, timeoutMs) {
   return new Promise((resolve, reject) => {
+    const args = [
+      '-y', '-i', input,
+      '-c:v', 'libx264', '-profile:v', 'high', '-pix_fmt', 'yuv420p',
+      '-crf', '22', '-preset', 'veryfast',
+      '-r', '30', '-vsync', 'cfr',
+      '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '2',
+      '-movflags', '+faststart',
+      output
+    ];
     const proc = spawn(ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
     proc.stderr.on('data', d => { if (stderr.length < 4000) stderr += d.toString(); });
