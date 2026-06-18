@@ -3,11 +3,8 @@
 // 환경변수: ANTHROPIC_API_KEY, SOLAR_API_KEY, GEMINI_API_KEY, APIFRAME_API_KEY, PORTONE_V2_API_SECRET
 import http from 'node:http';
 import crypto from 'node:crypto';
-import fs from 'node:fs';
-import { spawn } from 'node:child_process';
 import admin from 'firebase-admin';
 import * as kie from './kie-music.js';   // 곡 생성: APIFRAME → kie.ai (단어별 타임스탬프 제공)
-import ffmpegPath from 'ffmpeg-static';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -3542,124 +3539,8 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // ===== 영상 재인코딩 (TikTok 등 외부 인코더 호환 표준 MP4로) =====
-  // POST /transcode-video — 요청 본문 = 원본 영상 바이너리. 응답 = 변환된 MP4 바이너리.
-  // VFR→CFR 30fps, H.264 High + AAC 44.1k, +faststart 적용.
-  if (path === '/transcode-video' && req.method === 'POST') {
-    if (!ffmpegPath) {
-      return send(res, 503, { error: 'no_ffmpeg', message: 'ffmpeg 미설치 (재배포 필요)' });
-    }
-    const uid = await verifyAuth(req);
-    if (!uid) return send(res, 401, { error: 'auth_required', message: '로그인이 필요해요' });
-    // 사용자별 속도 제한: 1분에 5회까지 (어뷰징 방지)
-    if (!checkTranscodeRate(uid)) {
-      return send(res, 429, { error: 'rate_limited', message: '잠시 후 다시 시도해주세요' });
-    }
-    // 업로드 크기 제한: 100MB
-    const contentLength = parseInt(req.headers['content-length'] || '0', 10);
-    if (contentLength > 100 * 1024 * 1024) {
-      return send(res, 413, { error: 'too_large', message: '영상이 너무 커요 (최대 100MB)' });
-    }
-    const stamp = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-    const tmpIn = `/tmp/diss4u-in-${stamp}`;
-    const tmpOut = `/tmp/diss4u-out-${stamp}.mp4`;
-    let cleaned = false;
-    const cleanup = () => {
-      if (cleaned) return;
-      cleaned = true;
-      try { fs.unlinkSync(tmpIn); } catch (e) {}
-      try { fs.unlinkSync(tmpOut); } catch (e) {}
-    };
-    try {
-      // 1) 요청 본문(원본 영상)을 임시 파일로 저장
-      await new Promise((resolve, reject) => {
-        const ws = fs.createWriteStream(tmpIn);
-        req.on('error', reject);
-        ws.on('error', reject);
-        ws.on('finish', resolve);
-        req.pipe(ws);
-      });
-      // 2) ffmpeg로 표준 MP4 변환 (30초 타임아웃)
-      await runFfmpeg(tmpIn, tmpOut, 30000);
-      // 3) 변환본을 응답으로 스트리밍
-      const stat = fs.statSync(tmpOut);
-      res.writeHead(200, {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'Content-Length',
-        'Content-Type': 'video/mp4',
-        'Content-Length': stat.size,
-        'Cache-Control': 'no-store'
-      });
-      await new Promise((resolve, reject) => {
-        const rs = fs.createReadStream(tmpOut);
-        rs.on('error', reject);
-        rs.on('end', resolve);
-        rs.pipe(res);
-      });
-    } catch (e) {
-      console.warn('transcode fail', e.message);
-      if (!res.headersSent) {
-        return send(res, 500, { error: 'transcode_failed', message: '변환 실패 (잠시 후 다시 시도)' });
-      }
-    } finally {
-      cleanup();
-    }
-    return;
-  }
-
   return send(res, 404, { error: 'Invalid path' });
 });
-
-// 사용자별 변환 요청 속도 제한 (메모리 기반, 단일 인스턴스 가정)
-const _transcodeBuckets = new Map();   // uid -> [timestamps]
-function checkTranscodeRate(uid) {
-  const now = Date.now();
-  const recent = (_transcodeBuckets.get(uid) || []).filter(t => now - t < 60_000);
-  if (recent.length >= 5) {
-    _transcodeBuckets.set(uid, recent);
-    return false;
-  }
-  recent.push(now);
-  _transcodeBuckets.set(uid, recent);
-  return true;
-}
-// 메모리 누수 방지: 5분마다 오래된 항목 정리
-setInterval(() => {
-  const cutoff = Date.now() - 60_000;
-  for (const [uid, arr] of _transcodeBuckets) {
-    const kept = arr.filter(t => t > cutoff);
-    if (kept.length === 0) _transcodeBuckets.delete(uid);
-    else _transcodeBuckets.set(uid, kept);
-  }
-}, 5 * 60_000).unref?.();
-
-// ffmpeg 변환 실행 (검증된 TikTok 호환 명령)
-function runFfmpeg(input, output, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const args = [
-      '-y', '-i', input,
-      '-c:v', 'libx264', '-profile:v', 'high', '-pix_fmt', 'yuv420p',
-      '-crf', '22', '-preset', 'veryfast',
-      '-r', '30', '-vsync', 'cfr',
-      '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '2',
-      '-movflags', '+faststart',
-      output
-    ];
-    const proc = spawn(ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
-    let stderr = '';
-    proc.stderr.on('data', d => { if (stderr.length < 4000) stderr += d.toString(); });
-    const timer = setTimeout(() => {
-      try { proc.kill('SIGKILL'); } catch (e) {}
-      reject(new Error('ffmpeg timeout'));
-    }, timeoutMs);
-    proc.on('error', e => { clearTimeout(timer); reject(e); });
-    proc.on('close', code => {
-      clearTimeout(timer);
-      if (code === 0) resolve();
-      else reject(new Error(`ffmpeg exit ${code}: ${stderr.slice(-400)}`));
-    });
-  });
-}
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log('chinolsong-proxy listening on', PORT));

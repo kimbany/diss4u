@@ -7,7 +7,6 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "ffmpeg-static": "^5.2.0",
     "firebase-admin": "^12.7.0"
   },
   "engines": {

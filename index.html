@@ -2885,8 +2885,6 @@ async function shareKakao() {
 // ===================== 인스타용 영상 만들기 =====================
 const VIDEO = {
   blob: null, blobUrl: null,
-  transcodedBlob: null, transcodedBlobUrl: null,   // 서버 ffmpeg 변환본 (TikTok 호환)
-  transcoding: false,                              // 변환 진행 중 플래그
   audioCtx: null, srcNode: null, recorder: null, speakerGain: null,
   raf: null, drawTimer: null, stopTimer: null, active: false,
   muted: false
@@ -2967,9 +2965,6 @@ function closeVideoModal() {
   try { if (VIDEO.srcNode) VIDEO.srcNode.stop(); } catch (e) {}
   try { if (VIDEO.audioCtx && VIDEO.audioCtx.state !== 'closed') VIDEO.audioCtx.close(); } catch (e) {}
   VIDEO.recorder = null; VIDEO.srcNode = null; VIDEO.audioCtx = null; VIDEO.speakerGain = null;
-  // 변환본 메모리 정리 (다음 영상 만들 때 새로 변환되도록)
-  if (VIDEO.transcodedBlobUrl) { try { URL.revokeObjectURL(VIDEO.transcodedBlobUrl); } catch (e) {} }
-  VIDEO.transcodedBlob = null; VIDEO.transcodedBlobUrl = null; VIDEO.transcoding = false;
   const muteBtnClose = document.getElementById('videoMuteBtn');
   if (muteBtnClose) muteBtnClose.style.display = 'none';
   const v = document.getElementById('videoPreview');
@@ -3750,60 +3745,10 @@ function videoFileName() {
   return t.replace(/[^a-zA-Z0-9가-힣]/g, '_') || 'diss4u';
 }
 
-// 서버 ffmpeg로 표준 MP4(TikTok 호환)로 변환. 결과는 캐시 → 재호출 시 즉시 반환.
-// 실패하면 null 반환 → 호출자는 원본을 그대로 사용 (가용성 폴백).
-async function ensureTranscoded() {
-  if (!VIDEO.blob) return null;
-  if (VIDEO.transcodedBlob) return VIDEO.transcodedBlob;
-  if (VIDEO.transcoding) {
-    // 진행 중이면 끝날 때까지 대기
-    for (let i = 0; i < 60; i++) {
-      await new Promise(r => setTimeout(r, 500));
-      if (!VIDEO.transcoding) break;
-    }
-    return VIDEO.transcodedBlob;
-  }
-  if (!currentUser) return null;   // 비로그인은 변환 안 함
-  VIDEO.transcoding = true;
-  const prev = document.getElementById('videoStatus').textContent;
-  setVideoStatus('🛠️ SNS 호환 변환 중... (5~15초)');
-  try {
-    const token = await currentUser.getIdToken();
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 35000);   // 35초 타임아웃 (서버 30 + 여유)
-    const r = await fetch(getWorkerUrl() + '/transcode-video', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/octet-stream' },
-      body: VIDEO.blob,
-      signal: ctrl.signal
-    });
-    clearTimeout(timer);
-    if (!r.ok) throw new Error('http ' + r.status);
-    const converted = await r.blob();
-    VIDEO.transcodedBlob = converted;
-    if (VIDEO.transcodedBlobUrl) URL.revokeObjectURL(VIDEO.transcodedBlobUrl);
-    VIDEO.transcodedBlobUrl = URL.createObjectURL(converted);
-    return converted;
-  } catch (e) {
-    console.warn('transcode failed, using original:', e.message || e);
-    return null;
-  } finally {
-    VIDEO.transcoding = false;
-    setVideoStatus(prev);
-  }
-}
-
-// 공유·저장에 쓸 최종 블롭 (변환 성공 → 변환본, 실패 → 원본 그대로)
-async function getDeliveryBlob() {
-  const t = await ensureTranscoded();
-  return t || VIDEO.blob;
-}
-
 async function shareInstaVideo() {
   if (!VIDEO.blob) return;
-  const blob = await getDeliveryBlob();
-  const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
-  const file = new File([blob], videoFileName() + '.' + ext, { type: blob.type });
+  const ext = VIDEO.blob.type.includes('mp4') ? 'mp4' : 'webm';
+  const file = new File([VIDEO.blob], videoFileName() + '.' + ext, { type: VIDEO.blob.type });
   const song = STATE.currentSong || {};
   claimShareReward(song.id);   // 공유 의도 = 즉시 지급(곡당 1회, 서버에서 중복 차단)
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -3827,9 +3772,8 @@ async function shareInstaVideo() {
 // 공유시트가 없거나 PC면 파일 다운로드로 폴백한다.
 async function downloadInstaVideo() {
   if (!VIDEO.blob) return;
-  const blob = await getDeliveryBlob();
-  const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
-  const file = new File([blob], videoFileName() + '.' + ext, { type: blob.type });
+  const ext = VIDEO.blob.type.includes('mp4') ? 'mp4' : 'webm';
+  const file = new File([VIDEO.blob], videoFileName() + '.' + ext, { type: VIDEO.blob.type });
   // 모바일 + 파일 공유 지원 → 공유시트로 (여기서 '비디오 저장'을 누르면 앨범에 저장됨)
   const canShareFile = navigator.canShare && navigator.canShare({ files: [file] });
   if (canShareFile) {
@@ -3852,15 +3796,12 @@ async function downloadInstaVideo() {
   fileDownloadInstaVideo();
 }
 
-// 실제 파일 다운로드 (PC / 공유시트 미지원 폴백) — 변환본 있으면 그걸 다운로드
+// 실제 파일 다운로드 (PC / 공유시트 미지원 폴백)
 function fileDownloadInstaVideo() {
-  if (!VIDEO.blobUrl && !VIDEO.transcodedBlobUrl) return;
-  const useTranscoded = !!VIDEO.transcodedBlobUrl;
-  const blob = useTranscoded ? VIDEO.transcodedBlob : VIDEO.blob;
-  const url = useTranscoded ? VIDEO.transcodedBlobUrl : VIDEO.blobUrl;
-  const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+  if (!VIDEO.blobUrl) return;
+  const ext = VIDEO.blob.type.includes('mp4') ? 'mp4' : 'webm';
   const a = document.createElement('a');
-  a.href = url;
+  a.href = VIDEO.blobUrl;
   a.download = videoFileName() + '.' + ext;
   document.body.appendChild(a);
   a.click();
