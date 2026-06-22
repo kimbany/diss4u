@@ -800,17 +800,35 @@ async function lookupKeywordMeanings(keywordsRaw) {
   const lines = [];
   await Promise.all(kws.map(async (kw) => {
     try {
-      // 블로그에서 "{키워드} 뜻" 검색 → 신조어/밈/유행어면 여기 잘 잡힘
-      const items = await naverSearch('blog', kw + ' 뜻', 3);
-      if (!items || !items.length) return;
-      // 신조어/유행어/밈 신호가 있는 결과를 우선 채택(없으면 첫 결과)
-      const hit = items.find(it => /신조어|유행어|밈|MZ|줄임말|용어/.test(stripTags(it.title + ' ' + it.description)));
-      const src = hit || items[0];
-      const desc = stripTags(src.description).slice(0, 140);
-      if (desc) lines.push(`- "${kw}": ${desc}`);
+      // 블로그 + 지식인을 같이 검색 (신조어는 둘 다 잘 잡힘)
+      const [blog, kin] = await Promise.all([
+        naverSearch('blog', kw + ' 뜻', 3),
+        naverSearch('kin', kw + ' 뜻', 2),
+      ]);
+      const items = [...(blog || []), ...(kin || [])];
+      if (!items.length) return;
+      const blob = stripTags(items.map(it => it.title + ' ' + it.description).join(' '));
+      // 신조어/유행어/밈 신호가 있을 때만 AI에 넘김 → 평범한 단어(광고·잡음)는 제외
+      if (!/신조어|유행어|밈|MZ|줄임말/.test(blob)) return;
+      const meaning = extractMeaning(kw, items.map(it => stripTags(it.description)));
+      if (meaning) lines.push(`- "${kw}" (신조어): ${meaning}`);
     } catch (e) {}
   }));
   return lines.join('\n');
+}
+
+// 검색 본문들에서 "키워드는 ~다 / 키워드의 뜻은 ~" 같은 정의 문장을 우선 추출한다.
+// 정의처럼 보이는 문장이 없으면 앞부분을 그대로 발췌(인삿말 위주라 품질은 낮음).
+function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function extractMeaning(keyword, descs) {
+  const joined = descs.join('  ').replace(/\s+/g, ' ').trim();
+  if (!joined) return '';
+  const kw = escapeRe(keyword);
+  // "키워드 + (은/는/란/뜻/의미/를 뜻하는…) + 설명" 패턴을 찾아 그 지점부터 발췌
+  const re = new RegExp(kw + '[\\s\\S]{0,6}?(?:은|는|이란|란|이라는|뜻은|뜻이|의미는|를 뜻|를 의미|이라고)[\\s\\S]{2,70}');
+  const m = joined.match(re);
+  if (m) return m[0].replace(/\s+/g, ' ').trim().slice(0, 110);
+  return joined.slice(0, 180);
 }
 
 function buildPrompt(params) {
