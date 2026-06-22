@@ -7,12 +7,32 @@ const KIE_BASE = process.env.KIE_BASE || 'https://api.kie.ai';
 function pick(obj, ...keys) { for (const k of keys) if (obj && obj[k] != null) return obj[k]; return undefined; }
 function authHeaders(apiKey) { return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }; }
 
+// 곡 생성마다 살짝 다른 보컬·리듬 톤을 섞어서 다양성 확보 — 같은 장르여도 매번 색이 달라짐.
+function pickVarietyModifier() {
+  const VOCALS = [
+    'energetic vocal performance', 'playful vocal delivery',
+    'cheeky punchy vocals', 'sarcastic teasing vocals',
+    'snappy rhythmic vocal flow', 'theatrical exaggerated vocals',
+    'tight staccato vocal style', 'sing-song mocking delivery'
+  ];
+  const TEMPOS = [
+    'punchy upbeat tempo', 'driving energetic rhythm',
+    'bouncy snappy groove', 'tight rhythmic flow',
+    'high-energy drum pattern', 'syncopated catchy beat'
+  ];
+  const v = VOCALS[Math.floor(Math.random() * VOCALS.length)];
+  const t = TEMPOS[Math.floor(Math.random() * TEMPOS.length)];
+  return ', ' + v + ', ' + t;
+}
+
 // 곡 생성 요청 → { jobId }
 export async function generateSong({ lyrics, title, style, model = 'V5', apiKey = process.env.KIE_API_KEY }) {
   if (!apiKey) throw Object.assign(new Error('KIE_API_KEY 없음'), { status: 500 });
   // 운영과 동일한 "짧은 곡" 힌트 + [End] 마커 (proxy/server.js 기존 처리와 동일)
+  // + variety modifier — 호출마다 보컬/리듬 톤이 살짝 달라져 같은 장르라도 매번 색이 다른 곡.
   const SHORT_HINT = ', short song around 45 seconds, no long intro or outro, fade out at end';
-  const finalStyle = /short|seconds|outro|fade/i.test(style || '') ? style : ((style || '') + SHORT_HINT);
+  const variety = pickVarietyModifier();
+  const finalStyle = /short|seconds|outro|fade/i.test(style || '') ? style : ((style || '') + SHORT_HINT + variety);
   const finalLyrics = /\[End\]\s*$/i.test((lyrics || '').trim()) ? lyrics : ((lyrics || '').trim() + '\n\n[End]');
 
   const r = await fetch(`${KIE_BASE}/api/v1/generate`, {
