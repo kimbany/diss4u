@@ -68,8 +68,19 @@ function pickVarietyModifier() {
        + ', ' + pick(TEMPOS);
 }
 
+// 사용자가 UI에서 고른 목소리(gender)를 Suno style에 명시적으로 박는다.
+// 이게 없으면 Suno가 알아서 결정해 같은 선택이라도 매번 성별이 달라지는 회귀가 있었음.
+const VOCAL_HINTS = {
+  male:   'adult male solo vocal, masculine voice, single male singer',
+  female: 'adult female solo vocal, feminine voice, single female singer',
+  child:  'cute child-like vocal, playful innocent young voice',
+  group:  'group chorus vocals, 3 to 4 voices harmonizing together as a group',
+  duet:   'male and female duet, alternating vocals between two singers',
+  pet:    'cute high-pitched playful character voice with animal-like inflections'
+};
+
 // 곡 생성 요청 → { jobId }
-export async function generateSong({ lyrics, title, style, model = 'V5', apiKey = process.env.KIE_API_KEY }) {
+export async function generateSong({ lyrics, title, style, gender, model = 'V5', apiKey = process.env.KIE_API_KEY }) {
   if (!apiKey) throw Object.assign(new Error('KIE_API_KEY 없음'), { status: 500 });
   // 운영 힌트 (proxy/server.js 기존 처리와 동일).
   //  · 사용자 보고: 자체 인트로(보컬 없는 비트만 나오는 구간)가 20초+ 길어지는 회귀.
@@ -78,7 +89,8 @@ export async function generateSong({ lyrics, title, style, model = 'V5', apiKey 
   //  · variety modifier — 호출마다 보컬/리듬 톤이 살짝 달라져 같은 장르여도 매번 색이 다른 곡.
   const SHORT_HINT = ', short song around 45 seconds, vocals start at 0:00, no instrumental intro, no intro buildup, jump straight into the verse, no long outro, fade out at end';
   const variety = pickVarietyModifier();
-  const finalStyle = /short|seconds|outro|fade/i.test(style || '') ? style : ((style || '') + SHORT_HINT + variety);
+  const vocalHint = VOCAL_HINTS[gender] ? ', ' + VOCAL_HINTS[gender] : '';
+  const finalStyle = /short|seconds|outro|fade/i.test(style || '') ? (style + vocalHint) : ((style || '') + SHORT_HINT + variety + vocalHint);
 
   // 가사 안전망: LLM이 실수로 [Intro] 블록을 넣어도 통째로 제거 → Suno가 인트로 마커를 보고
   // 인트로를 만드는 경향을 차단. [End] 마커는 없으면 추가.
