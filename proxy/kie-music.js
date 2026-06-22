@@ -54,8 +54,14 @@ function pickVarietyModifier() {
     'bouncy snappy groove', 'tight rhythmic flow',
     'high-energy drum pattern', 'syncopated catchy beat'
   ];
+  // 매번 강제: 말하는 듯한(스포큰/랩 위주) 톤이 아니라 멜로딕한 노래여야 한다.
+  //   · 사용자 요청 — "말하는 듯한 느낌의 노래는 만들지 말고 최대한 멜로디가 다 있는 노래로"
+  //   · 랩 장르여도 멜로딕 랩(챈트형 후크)으로 유도.
+  //   · 후크의 키워드 음절을 멜로딕 모티프로 만들도록 추가 신호.
+  const MELODIC_FORCE = 'fully sung melodic vocals with clear pitch and singable melody on every line, NOT spoken-word style, NOT rap-only delivery, even verses must have a clear sung melody, K-pop style chant-able syllabic hook (like Gee-gee-gee, Ring-ding-dong, Su-su-su-supernova), playful syllable repetition and vocalized fillers (la-la-la, di-gi-di-gi, dding-dding) as melodic ornamentation';
   const pick = arr => arr[Math.floor(Math.random() * arr.length)];
-  return ', ' + pick(HOOK_MELODY_VARIANTS)
+  return ', ' + MELODIC_FORCE
+       + ', ' + pick(HOOK_MELODY_VARIANTS)
        + ', ' + pick(MELODIC_CONTOURS)
        + ', ' + pick(RHYTHM_FEELS)
        + ', ' + pick(VOCALS)
