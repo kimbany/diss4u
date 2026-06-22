@@ -775,8 +775,46 @@ function readBody(req) {
   });
 }
 
+// ── 유행어/신조어 자동 검색 ───────────────────────────────────────────────
+// 사용자가 넣은 키워드가 최신 신조어·밈이면 AI가 뜻을 몰라 엉뚱하게 해석하는 문제를 막는다.
+// 가사 생성 직전에 키워드를 네이버에 검색해 "진짜 뜻"을 찾아 프롬프트에 같이 넣어준다.
+// 안전 설계: NAVER 키가 없거나 검색이 실패하면 빈 문자열을 반환 → 기존 동작 그대로 유지.
+function stripTags(s) {
+  return String(s || '').replace(/<[^>]+>/g, '').replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim();
+}
+async function naverSearch(kind, query, display) {
+  const id = process.env.NAVER_CLIENT_ID, sec = process.env.NAVER_CLIENT_SECRET;
+  if (!id || !sec) return null;
+  const url = `https://openapi.naver.com/v1/search/${kind}.json?query=${encodeURIComponent(query)}&display=${display || 3}&sort=sim`;
+  try {
+    const r = await fetch(url, { headers: { 'X-Naver-Client-Id': id, 'X-Naver-Client-Secret': sec } });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return Array.isArray(j.items) ? j.items : null;
+  } catch (e) { return null; }
+}
+async function lookupKeywordMeanings(keywordsRaw) {
+  if (!process.env.NAVER_CLIENT_ID || !process.env.NAVER_CLIENT_SECRET) return '';   // 키 없으면 건너뜀
+  const kws = String(keywordsRaw || '').split(/[,\n]/).map(s => s.trim()).filter(Boolean).slice(0, 6);
+  if (!kws.length) return '';
+  const lines = [];
+  await Promise.all(kws.map(async (kw) => {
+    try {
+      // 블로그에서 "{키워드} 뜻" 검색 → 신조어/밈/유행어면 여기 잘 잡힘
+      const items = await naverSearch('blog', kw + ' 뜻', 3);
+      if (!items || !items.length) return;
+      // 신조어/유행어/밈 신호가 있는 결과를 우선 채택(없으면 첫 결과)
+      const hit = items.find(it => /신조어|유행어|밈|MZ|줄임말|용어/.test(stripTags(it.title + ' ' + it.description)));
+      const src = hit || items[0];
+      const desc = stripTags(src.description).slice(0, 140);
+      if (desc) lines.push(`- "${kw}": ${desc}`);
+    } catch (e) {}
+  }));
+  return lines.join('\n');
+}
+
 function buildPrompt(params) {
-  const { name, relationship, keywords, genre: genreRaw, lang, gender, mustInclude, useNameInLyrics } = params;
+  const { name, relationship, keywords, genre: genreRaw, lang, gender, mustInclude, useNameInLyrics, slangNote } = params;
   // 프런트에서 영어 코드로 넘어오는 장르를 프롬프트의 [장르별 작성 가이드] 섹션명과 정확히 매칭되는 한국어로 변환
   const GENRE_MAP = {
     hiphop: '힙합', rap: '장난 랩', ballad: '과몰입 발라드', trot: '킹받 트로트',
@@ -923,6 +961,13 @@ ${rel}
 
 [키워드]
 ${keywords}
+
+[키워드 참고 뜻 — 인터넷 검색 결과]
+${slangNote && slangNote.trim() ? slangNote : '(검색 결과 없음 — 키워드를 일반적인 의미로 해석하라)'}
+※ 위는 키워드를 인터넷에서 검색한 참고 자료다. 다음을 지켜라:
+  - 키워드가 "최신 신조어·밈·유행어"인 경우에만 검색된 진짜 뜻을 반영해라. (예: 모르는 단어인데 검색에 "신조어/밈"이라고 나오면 그 뜻대로 써라)
+  - "머리숱 적음", "늦잠" 같은 평범한 일상 단어면 검색 결과를 무시하고 평소 뜻대로 해석해라.
+  - 검색 결과에 섞인 광고·홍보·블로그 문구는 절대 가사에 넣지 마라. 뜻만 참고해라.
 
 [꼭 넣고 싶은 문장] (아래 ${fixedCount}개 문장, 각각 따옴표로 구분됨)
 ${fixed}
@@ -3339,6 +3384,9 @@ const server = http.createServer(async (req, res) => {
     }
     const params = await readBody(req);
     if (!params.name || !params.keywords) return send(res, 400, { error: '필수 항목 누락' });
+    // 가사 만들기 직전, 키워드를 검색해 신조어/밈의 진짜 뜻을 찾아 프롬프트에 같이 넣는다.
+    // (네이버 키 없거나 실패 시 빈 문자열 → 기존과 동일 동작)
+    params.slangNote = await lookupKeywordMeanings(params.keywords);
     const prompt = buildPrompt(params);
 
     let r = await tryClaude(prompt);
