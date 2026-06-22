@@ -3,8 +3,11 @@
 // 환경변수: ANTHROPIC_API_KEY, SOLAR_API_KEY, GEMINI_API_KEY, APIFRAME_API_KEY, PORTONE_V2_API_SECRET
 import http from 'node:http';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import { spawn } from 'node:child_process';
 import admin from 'firebase-admin';
 import * as kie from './kie-music.js';   // 곡 생성: APIFRAME → kie.ai (단어별 타임스탬프 제공)
+import ffmpegPath from 'ffmpeg-static';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -829,6 +832,71 @@ function buildPrompt(params) {
 "단톡방에 보내고 싶다"
 라는 반응이 나와야 한다.
 
+═══════════════════════════════
+★ 절대 최우선 원칙 (이것부터 지켜라) ★
+═══════════════════════════════
+
+이 노래에서 가장 중요한 두 가지는 "문맥"과 "킹받음"이다.
+아래 규칙은 그 어떤 규칙보다 우선한다.
+
+1. 문맥(말이 되는 흐름)이 최우선이다.
+   - 모든 줄은 앞뒤가 자연스럽게 이어져야 한다.
+   - "냉장고 문이 울었다" 같은 뜬금없고 의미 불명한 줄은 절대 금지.
+   - 한 곡은 하나의 상황(장면)이 이어지는 짧은 이야기여야 한다.
+   - 멋져 보이려고 의미 없는 비유를 넣지 마라. 말이 되는 게 먼저다.
+   ★ 라임(운율)을 맞추려고 뜻 없는 단어를 끼워넣지 마라.
+     라임과 뜻이 충돌하면 "라임을 포기하고" 뜻을 지켜라. 뜻이 깨진 라임은 0점이다.
+     - 나쁜 예: "맨날 쉽고 못 말린 바보 짓이야" → '쉽고'가 왜 들어갔나? 뜻이 안 통한다.
+       좋은 예: "맨날 똑같은 못 말리는 바보 짓이야" (뜻이 자연스럽게 이어짐)
+
+2. 입력된 [키워드]를 "뜻 그대로" 정확히 해석해서 전부 자연스럽게 녹여야 한다.
+   - 키워드 하나에만 치중하고 나머지를 버리면 안 된다.
+   - 단, 키워드를 욱여넣어 문맥을 깨면 안 된다. 자연스럽게 연결해라.
+
+   ★★ 키워드의 "단어 자체"를 가사 안에 가능한 한 그대로 등장시켜라. 기본 원칙은 "원형 유지".
+     - 모든 입력 키워드는 최소 1회 이상 가사에 "원형 그대로" 나오는 것이 기본.
+     - 나쁜 예(불필요한 변형): "발냄새" → "발 향기", "쿰쿰한 발", "지린내"
+       좋은 예(원형 유지): "쟤 발냄새 진짜 무기야", "발냄새 한 방에 KO"
+     - 나쁜 예: "늦잠" → "아침에 못 일어남" / "ADHD" → "산만함"
+       좋은 예: "또 늦잠이야 너", "ADHD 풀가동 모드"
+     - 키워드 원형이 어색하면 조사/어미만 살짝 붙여 자연스럽게 만들어라. 단어 자체는 바꾸지 마라.
+
+   ★ 예외 — "도저히 원형으로는 문맥이 안 살 때만" 의미를 살린 웃긴 표현으로 변형 허용:
+     - 키워드가 너무 길거나 서술형이거나, 한 줄에 욱여넣으면 노래 흐름이 깨지는 경우에 한해 허용.
+     - 변형 시 반드시 두 조건을 지켜라:
+       (가) 키워드의 핵심 의미가 그대로 살아 있어야 한다.
+       (나) 같은 곡 안에서 그 키워드가 한 번이라도 "원형"으로 등장하면 더 좋다. 원형 0회는 가급적 피해라.
+     - 예: "주말마다 잠수타고 집에서 안 나옴" → "주말엔 또 잠수네 또" (핵심 단어 "주말", "잠수" 보존)
+     - 짧고 자연스러운 단어형 키워드(발냄새·늦잠·ADHD 등)는 변형 금지. 무조건 원형.
+
+   ★ 키워드의 진짜 의미를 멋대로 바꾸거나 엉뚱한 행동을 지어내지 마라.
+     - 나쁜 예: "강아지 스토커" → "강아지 따라다니면서 꼬집고" ('꼬집기'는 지어낸 엉뚱한 행동)
+       좋은 예: "강아지 뒤만 졸졸 하루 종일 따라다녀" / "개가 어디 가나 그림자처럼 붙어있네"
+     - "집순이"=집에만 있는 사람, "욕쟁이"=말이 거친 사람 → 키워드가 가리키는 그 사람의 실제 모습만 그려라. 없는 행동을 만들지 마라.
+
+3. 욕설·비속어는 절대 쓰지 마라.
+   - "욕쟁이", "입이 거칠다" 같은 키워드가 들어와도
+     실제 욕설(씨발, 시발, 병신, 존나, 개새끼, 좆, 지랄 등)을 가사에 쓰면 안 된다.
+   - 대신 "또 욕 나오겠네", "입만 열면 거칠어", "말이 곱지가 않아"
+     처럼 욕하는 상황 자체를 귀엽게 묘사해라.
+   - 욕설을 쓰면 자동 필터가 "삐-"로 가려서 문맥이 깨진다. 그러니 처음부터 쓰지 마라.
+
+4. 입력되지 않은 새로운 사실을 만들지 마라.
+   - 예를 들어 키워드가 "하얀개"라면:
+     가능: 흰 털, 솜뭉치, 하얀 발, 털 뿜뿜
+     금지: 배만 까맣다, 검은 얼룩, 뚱뚱하다, 냄새난다, 사고를 쳤다
+   - 과장은 가능하지만, 새로운 사실을 만들어내면 안 된다.
+
+5. 완성 후 스스로 검토해라:
+   - 모든 줄이 말이 되는가? 뜬금없는 줄은 없는가?
+   - 입력 키워드가 모두 원형 또는 의미 보존 변형으로 가사에 들어갔는가?
+   - Hook은 따라 부르고 싶은가? 머리에 남는가?
+   - 듣는 사람이 "아 쟤 딱 이래 ㅋㅋ" 하고 웃을 만한가?
+   - 약오르지만 상처는 아닌가?
+   하나라도 아니면 다시 써라.
+
+═══════════════════════════════
+
 전체 분위기는:
 
 * 귀여운 캐릭터가 부르는 느낌
@@ -837,7 +905,8 @@ function buildPrompt(params) {
 * 반복되는 Hook 중심
 * 약오르지만 귀여운 놀림
 * 한 번 들으면 머리에 남는 중독성
-  이어야 한다.
+
+이어야 한다.
 
 ---
 
@@ -855,7 +924,7 @@ ${rel}
 [키워드]
 ${keywords}
 
-[꼭 넣고 싶은 문장]
+[꼭 넣고 싶은 문장] (아래 ${fixedCount}개 문장, 각각 따옴표로 구분됨)
 ${fixed}
 
 [가사 언어]
@@ -863,6 +932,9 @@ ${langText}
 
 [장르]
 ${genre}
+
+[이 장르의 style 키워드 — style 필드에 반드시 그대로 포함할 것]
+${genreStyle}${nameRule}
 
 ---
 
@@ -883,6 +955,14 @@ ${genre}
 
 관계 정보를 억지로 가사에 넣지 마라.
 
+예시:
+* 친구 → 편하고 장난스러운 느낌
+* 형/오빠 → 친근하게 놀리는 느낌
+* 언니/누나 → 친밀한 장난 느낌
+* 선배/윗사람 → 너무 무례하지 않게 장난스럽게
+* 후배 → 귀엽게 놀리는 느낌
+* 반려동물 → 귀엽고 애정 표현 중심
+
 ---
 
 [전체 길이 규칙]
@@ -894,9 +974,7 @@ ${genre}
 절대 1분을 넘길 수 있는 구성으로 만들지 마라.
 
 Intro는 넣어도 되지만 최대 10초 이하로 매우 짧게 작성해라.
-
-Intro가 길면 지루해지므로,
-Intro는 분위기만 열고 바로 Verse 또는 Hook으로 넘어가야 한다.
+Intro가 길면 지루해지므로, Intro는 분위기만 열고 바로 Verse 또는 Hook으로 넘어가야 한다.
 
 2절, 긴 Bridge, 긴 Outro, 긴 엔딩은 금지한다.
 
@@ -917,22 +995,14 @@ Intro는 분위기만 열고 바로 Verse 또는 Hook으로 넘어가야 한다.
 [Pre-Hook]
 [Hook]
 
-Intro는 선택 사항이다.
-꼭 필요할 때만 넣어라.
+Intro는 선택 사항이다. 꼭 필요할 때만 넣어라.
 
 중요:
 Verse보다 Hook이 더 길고 강해야 한다.
-
-Verse는 설명하는 파트가 아니라,
-대상의 특징을 짧게 보여주는 준비 파트다.
-
-Hook은 노래의 중심이며,
-가장 중독성 있고,
-가장 웃기고,
-가장 따라 부르기 쉬워야 한다.
+Verse는 설명하는 파트가 아니라, 대상의 특징을 짧게 보여주는 준비 파트다.
+Hook은 노래의 중심이며, 가장 중독성 있고, 가장 웃기고, 가장 따라 부르기 쉬워야 한다.
 
 권장 줄 수:
-
 * Intro: 1~2줄 이하
 * Verse: 3~4줄
 * Pre-Hook: 2줄
@@ -946,52 +1016,42 @@ Hook은 노래의 중심이며,
 
 Intro는 넣는 경우 최대 10초 이하로 짧게 작성해라.
 
-Intro는 설명하지 말고,
-귀여운 캐릭터가 등장하는 느낌이나
-짧은 추임새로 시작해라.
+Intro는 설명하지 말고, 귀여운 캐릭터가 등장하는 느낌이나 짧은 추임새로 시작해라.
 
 좋은 Intro 느낌:
-
 * 아르릉, 시작한다
 * 요를레이히, 딱 걸렸다
 * 뚜루루, 오늘의 주인공
 * 야야, 조용히 들어봐
 
 나쁜 Intro:
-
 * 지금부터 이 사람의 특징을 설명하겠습니다
 * 오늘은 사용자가 입력한 키워드를 바탕으로 노래를 만들겠습니다
 * 긴 상황 설명
 
-Intro는 없어도 된다.
-Hook의 중독성이 더 중요하다.
+Intro는 없어도 된다. Hook의 중독성이 더 중요하다.
 
 ---
 
 [Verse 규칙]
 
 Verse는 짧게 작성해라.
-
-Verse에서는 키워드를 설명하지 말고,
-짧은 장면으로 보여줘라.
+Verse에서는 키워드를 설명하지 말고, 짧은 장면으로 보여줘라.
 
 긴 문장 금지.
 설명문 금지.
 
 좋은 Verse:
-
 * 알람 열 개 울렸는데
 * 이불 속은 회의 중
 * 계획표를 또 꺼내
 * 즉흥 얘기 나오면 정지
 
 나쁜 Verse:
-
 * 그는 평소에 계획적인 성격을 가지고 있으며 즉흥적인 상황을 싫어하는 편이다
 * 이 친구는 아침마다 늦잠을 많이 자서 약속 시간에 자주 늦는다
 
-Verse는 Hook을 위한 빌드업이다.
-Verse에서 모든 것을 설명하려고 하지 마라.
+Verse는 Hook을 위한 빌드업이다. Verse에서 모든 것을 설명하려고 하지 마라.
 
 ---
 
@@ -1006,17 +1066,11 @@ Pre-Hook은 Hook 직전의 몰아가기 파트다.
 짧고 리듬감 있게 작성해라.
 
 좋은 Pre-Hook:
-
 * 시계도 포기했네
-
 * 오늘도 딱 걸렸네
-
 * 체크리스트 또 꺼내
-
 * 즉흥은 안 된다네
-
 * 단추가 긴장했네
-
 * 배부터 등장했네
 
 ---
@@ -1024,21 +1078,18 @@ Pre-Hook은 Hook 직전의 몰아가기 파트다.
 [Hook 규칙]
 
 Hook은 Verse보다 길고 강해야 한다.
-
 Hook은 이 노래의 핵심이다.
 
 Hook은 반드시:
-
 * 짧은 문장
 * 강한 반복
 * 말맛 있는 표현
 * 따라 부르기 쉬운 리듬
 * 친구가 들으면 킹받는 한마디
 * 제목으로 써도 될 만큼 선명한 표현
-  으로 작성해라.
+으로 작성해라.
 
-Hook은 2줄짜리 핵심 문장 A/B를 만들고,
-이를 반복/변형하는 구조를 사용해라.
+Hook은 2줄짜리 핵심 문장 A/B를 만들고, 이를 반복/변형하는 구조를 사용해라.
 
 권장 구조:
 A
@@ -1051,11 +1102,9 @@ A
 B'
 
 마지막 B'는 노래가 끝나는 느낌이 나도록 살짝 변형해라.
-
 Hook 마지막 줄은 Outro 없이도 엔딩처럼 느껴져야 한다.
 
 좋은 마무리 느낌:
-
 * 오늘도 딱 걸렸네
 * 또 너답게 끝났네
 * 내일도 똑같겠네
@@ -1065,7 +1114,7 @@ Hook 마지막 줄은 Outro 없이도 엔딩처럼 느껴져야 한다.
 
 Hook은 설명이 아니라 구호처럼 들려야 한다.
 
-좋은 Hook:
+좋은 Hook 예시 (★ 그대로 복사 금지, 구조만 참고):
 말만 관리 중이야
 또 야식 앞에 서 있네
 말만 관리 중이야
@@ -1078,67 +1127,102 @@ Hook은 설명이 아니라 구호처럼 들려야 한다.
 나쁜 Hook:
 너는 다이어트를 한다고 말했지만 실제로는 야식을 자주 먹는 습관이 있다
 
+★ Hook 자체 검토 — Hook을 쓰고 나서 아래를 스스로 확인해라:
+   - 이 Hook 듣고 따라 부르고 싶은가?
+   - 한 번 듣고 머리에 남는가?
+   - 친구가 듣고 "아 이거 우리 ○○ 얘기 같다" 하고 웃을 만한가?
+   - 제목으로 써도 될 만큼 선명한가?
+   - 같은 문장이 살짝 변형되며 반복되는가?
+   하나라도 아니면 Hook을 다시 써라.
+
+★★ 마무리 문장 복사 금지 규칙 ★★
+   위에 적힌 마무리 예시("오늘도 딱 걸렸네", "또 너답게 끝났네" 등)는
+   "끝나는 느낌"을 보여주기 위한 패턴 예시일 뿐이다.
+   매 곡마다 그 곡의 키워드·상황에 맞는 새 마무리 문장을 직접 만들어라.
+   예시 문장을 그대로 가져다 쓰면 모든 곡이 똑같은 엔딩이 되어 식상해진다.
+
 ---
 
 [중독성 규칙]
 
-이 노래는 멋있는 노래보다
-중독성 있는 노래가 되어야 한다.
+이 노래는 멋있는 노래보다 중독성 있는 노래가 되어야 한다.
 
 아래 요소를 적극 활용해라.
 
 1. 반복
    같은 문장을 반복하되, 마지막 단어를 조금씩 바꿔라.
 
-예:
-또 늦었네
-또 걸렸네
-또 시작이네
-또 너답네
+   예:
+   또 늦었네
+   또 걸렸네
+   또 시작이네
+   또 너답네
 
 2. 말맛
    입에 잘 붙는 짧은 단어를 사용해라.
 
-예:
-딱 걸렸네
-또 시작
-폼 미쳤네
-아니 이게
-말만 관리
-현실 장인
+   예:
+   딱 걸렸네 / 또 시작 / 폼 미쳤네 / 아니 이게 / 말만 관리 / 현실 장인
 
 3. 의성어/추임새
    장르에 맞는 추임새를 2~4번만 넣어라.
 
-예:
-아르릉
-아르르
-요들레이
-요를레이히
-뚜루루
-띠리리
-둠칫
-짝짝
-얼쑤
-야야
+   예:
+   아르릉 / 아르르 / 요들레이 / 요를레이히 / 뚜루루 / 띠리리 / 둠칫 / 짝짝 / 얼쑤 / 야야
 
-추임새가 너무 많으면 유치해진다.
-추임새는 Hook을 살리는 양념으로만 사용해라.
+   추임새가 너무 많으면 유치해진다.
+   추임새는 Hook을 살리는 양념으로만 사용해라.
 
 4. 언어유희
    가능하면 키워드를 이용해 짧은 말장난, 라임, 반복음을 만들어라.
 
-예:
+   예:
+   * 계획표 인간 / 계획만 만렙
+   * 말만 관리 / 맛만 관리
+   * 지각 장인 / 시계 배신
+   * 읽씹 장인 / 답장 실종
+   * 단추 비상 / 배부터 등장
+   * 덤벙 대장 / 가방 난장
 
-* 계획표 인간 / 계획만 만렙
-* 말만 관리 / 맛만 관리
-* 지각 장인 / 시계 배신
-* 읽씹 장인 / 답장 실종
-* 단추 비상 / 배부터 등장
-* 덤벙 대장 / 가방 난장
+   언어유희는 억지로 만들지 말고, 자연스럽게 입에 붙을 때만 사용해라.
 
-언어유희는 억지로 만들지 말고,
-자연스럽게 입에 붙을 때만 사용해라.
+---
+
+[★★ 추임새 표기 절대 규칙 ★★]
+
+추임새는 가사가 또렷이 불리도록 표기하는 방식이 매우 중요하다.
+
+★ 절대 금지: Hook 가사 한 줄 안에 추임새를 직접 박아 넣지 마라.
+   - 나쁜 예 (가사가 안 불림):
+     [Hook]
+     요를레이히 또 늦었네 요를레이히 또 걸렸네
+   - 가사와 추임새가 한 줄에 섞이면 보컬이 흐려져서
+     사람들이 무슨 말인지 안 들린다.
+
+★ 좋은 예 (가사가 또렷이 불림):
+   [Hook]
+   (요를레이히)
+   또 늦었네
+   (요를레이히)
+   또 걸렸네
+
+   추임새는 별도 줄에 괄호로 묶어 표기해라.
+   가사 줄과 추임새 줄이 명확히 분리되어야 한다.
+
+같은 규칙이 요들송("요를레이히"), 킹받 트로트("얼쑤", "아이고"),
+힙합/장난 랩("yo", "yeah"), 발리우드("아이야이야") 등에도 적용된다.
+
+★★ 추임새 사용 여부/다양성 규칙 ★★
+
+위 가이드와 아래 장르별 예시에 나오는 추임새("요를레이히", "얼쑤", "쿵짝", "둠칫" 등)는
+**표기 방법을 보여주기 위한 예시일 뿐**이다.
+
+매 곡마다 그 곡의 가사/키워드에 어울리는 추임새를 새로 만들어라.
+
+   - 예시 단어를 그대로 쓰는 것보다, 가사 흐름과 연결되는 추임새가 훨씬 좋다.
+   - 같은 장르의 곡이라도 매번 다른 추임새 조합을 시도해라.
+
+추임새 자체가 가사의 핵심이 되면 안 된다. 양념일 뿐이다.
 
 ---
 
@@ -1150,7 +1234,6 @@ Hook은 설명이 아니라 구호처럼 들려야 한다.
 키워드를 그대로 나열하지 마라.
 
 먼저 아래를 생각해라.
-
 * 이 키워드는 왜 웃긴가?
 * 친구들이 실제로 어떻게 놀릴까?
 * 어떻게 과장하면 킹받을까?
@@ -1159,9 +1242,9 @@ Hook은 설명이 아니라 구호처럼 들려야 한다.
 
 키워드는 문장에 억지로 끼워 넣는 것이 아니라,
 행동, 장면, 핀잔, 별명, 구호, 말장난으로 바꿔라.
+(★ 단, 위 "★★ 키워드 원형 유지" 규칙을 같이 지켜라. 변형은 예외 케이스에만.)
 
 좋은 변환 예시:
-
 * 올챙이배 → 단추 비상, 배부터 등장, 단추가 긴장했네
 * 꼬집기 대마왕 → 옆구리 테러범, 꼬집고 튀어, 손버릇 또 나왔네
 * 365일 다이어터 → 말만 관리 중, 내일부터 인간, 맛만 관리 중
@@ -1169,129 +1252,114 @@ Hook은 설명이 아니라 구호처럼 들려야 한다.
 * 덤벙이 → 현실 덤벙 장인, 가방도 포기, 카드가 도망갔네
 * ISTJ → 계획표 인간, 즉흥 알레르기, 체크리스트 또 꺼냈네
 
-모든 키워드를 억지로 다 쓰지 마라.
+[키워드 변환 단계별 가이드]
 
-가장 웃기고 Hook으로 만들기 좋은 키워드 1~2개를 중심으로 깊게 파라.
+각 키워드를 받았을 때 아래 순서로 처리해라.
 
-단, 선택한 키워드는 가사 안에서 분명히 느껴져야 한다.
+1단계 — 키워드의 진짜 의미와 뉘앙스 파악
+   예: "올챙이배" = 배가 살짝 나온 상태. 본인은 신경 쓰는데 친구들은 놀리기 좋아하는 포인트.
 
----
+2단계 — 그 키워드가 일상에서 드러나는 "장면" 떠올리기
+   예: 단추가 안 잠겨서 입씨름하는 장면, 거울 보고 한숨, 배 만지면서 다이어트 결심
 
-[입력되지 않은 설정 금지]
+3단계 — 그 장면을 "한 줄 가사"로 압축
+   예: "단추가 오늘도 비상사태야"
 
-입력되지 않은 새로운 사실을 만들지 마라.
+4단계 — 가사 한 줄에서 "별명" 또는 "구호"로 끌어올리기
+   예: "단추 비상", "배부터 등장"
 
-예를 들어 키워드가 "하얀개"라면:
-가능:
+5단계 — 같은 키워드를 변주해서 Hook의 A/B 라인으로 만들기
+   예: A "또 단추 비상이네" / B "오늘도 배부터 등장하네"
 
-* 흰 털
-* 솜뭉치
-* 하얀 발
-* 털 뿜뿜
+[키워드 배분 규칙 — 매우 중요]
 
-금지:
+키워드 개수에 따라 어떻게 배분할지 가이드:
 
-* 배만 까맣다
-* 검은 얼룩이 있다
-* 뚱뚱하다
-* 냄새난다
-* 사고를 쳤다
-* 눈이 빨갛다
+* 키워드 1~2개 → Hook과 Verse 모두에 강하게 등장. 메인 소재로 깊게 파라.
 
-과장은 가능하지만,
-새로운 사실을 만들어내면 안 된다.
+* 키워드 3개 → 1개를 Hook 메인으로 잡고, 나머지 2개는 Verse·Pre-Hook에 자연스럽게 흩뿌려라.
+
+* 키워드 4개 이상 → 가장 웃기고 Hook으로 만들기 좋은 1~2개를 메인으로 잡고
+  Hook에서 반복, 나머지는 Verse에 한두 줄씩 짧게 배치.
+  배분 예시 (4개): Hook 메인 1개 × 반복 / Verse 각 줄 1개씩 (3개) / Pre-Hook 메인 키워드 연결
+
+★ 모든 키워드를 억지로 다 쓰지 마라. 단, 입력된 모든 키워드는 가사 어딘가에 최소 1회 등장해야 한다.
+
+[키워드 처리 금지 사항]
+
+* 키워드를 그대로 나열만 하기 (단순 나열 X)
+* 위 변환 예시 문장을 그대로 복사하기
+* 키워드와 무관한 새 행동/상황 만들기
+* 키워드를 비유로 바꿔서 원형을 안 쓰기 (★ 원형 유지 규칙 위반)
 
 ---
 
 [킹받는 유머 기법]
 
-아래 7가지 유머 기법 중
-매 곡마다 2~3개만 골라 자연스럽게 섞어라.
+아래 7가지 유머 기법 중 매 곡마다 2~3개만 골라 자연스럽게 섞어라.
 
-모든 기법을 억지로 다 쓰지 마라.
-같은 기법만 반복하지 마라.
+모든 기법을 억지로 다 쓰지 마라. 같은 기법만 반복하지 마라.
+예시 문장은 그대로 복사하지 말고, 방식만 참고해서 매번 새롭게 작성해라.
 
-예시 문장은 그대로 복사하지 말고,
-방식만 참고해서 매번 새롭게 작성해라.
-
-목표는:
-"아 이거 우리 단톡방에서 쟤 놀릴 때 쓰는 말이랑 똑같다 ㅋㅋㅋ"
-라는 느낌이다.
+목표는: "아 이거 우리 단톡방에서 쟤 놀릴 때 쓰는 말이랑 똑같다 ㅋㅋㅋ"
 
 1. 의인화
    사물이나 주변 요소가 대상 때문에 고통받는 것처럼 표현한다.
-
-예:
-늦잠 → 알람이 먼저 지쳐서 포기했대
-올챙이배 → 단추가 오늘도 버티는 중
-덤벙이 → 가방도 따라 정신없네
+   예 (방식만 참고, 복사 금지):
+   * 늦잠 → 알람이 먼저 지쳐서 포기했대
+   * 올챙이배 → 단추가 오늘도 버티는 중
+   * 덤벙이 → 가방도 따라 정신없네
+   * 지각 → 엘리베이터도 기다리다 포기함
 
 2. 공식 기록 / 타이틀 수여
    특징을 수상 경력이나 공식 기록처럼 표현한다.
-
-예:
-지각 → 지각 부문 대상 수상
-야식 → 야식 출석률 1위
-덤벙이 → 분실물계 레전드
+   예 (방식만 참고, 복사 금지):
+   * 지각 → 지각 부문 대상 수상
+   * 야식 → 야식 출석률 1위
+   * 덤벙이 → 분실물계 레전드
+   * 늦잠 → 알람 무시 그랜드슬램
 
 3. 주변의 반응으로 표현
    본인이 아니라 주변이 어떻게 됐는지로 표현한다.
-
-예:
-코골이 → 옆집에서 공사하냐고 물어봄
-지각 → 엘리베이터도 기다리다 포기함
-꼬집기 → 옆구리가 먼저 도망감
+   예 (방식만 참고, 복사 금지):
+   * 코골이 → 옆집에서 공사하냐고 물어봄
+   * 지각 → 엘리베이터도 기다리다 포기함
+   * 꼬집기 → 옆구리가 먼저 도망감
+   * 야식 → 배달 기사가 단골 인사
 
 4. 인터넷 밈 화법
    요즘 단톡방이나 숏폼 댓글 같은 말투를 살짝 사용한다.
 
-사용 가능:
+   사용 가능 (곡당 1~2번만):
+   * 하는 거 실화냐 / 폼 미쳤다 / 레전드 갱신 / 현실 ○○ 장인
+   * 이 정도면 재능 / 오늘도 갱신 / 또 시작이네
 
-* 하는 거 실화냐
-* 폼 미쳤다
-* 레전드 갱신
-* 현실 ○○ 장인
-* 이 정도면 재능
-* 오늘도 갱신
-* 또 시작이네
-
-곡당 1~2번만 사용해라.
-
-금지:
-
-* 헐
-* 대박
-* 킹왕짱
-* 완전 짱
-* 오래된 유행어
-* 맥락 없는 인터넷 말투
+   금지:
+   * 헐 / 대박 / 킹왕짱 / 완전 짱 / 오래된 유행어 / 맥락 없는 인터넷 말투
 
 5. 진지한 톤으로 어이없는 내용 말하기
-   뉴스, 다큐, 리포트처럼 진지하게 말하지만
-   내용은 사소하고 웃긴 상황이어야 한다.
-
-예:
-본 기자 아직도 기다리는 중
-긴급 속보 또 야식 발견
-현장 검거 김밥 앞
+   뉴스, 다큐, 리포트처럼 진지하게 말하지만 내용은 사소하고 웃긴 상황이어야 한다.
+   예 (방식만 참고, 복사 금지):
+   * 본 기자 아직도 기다리는 중
+   * 긴급 속보 또 야식 발견
+   * 현장 검거 김밥 앞
+   * 단독 입수 또 지각 영상
 
 6. 칭찬인 척 디스
    앞은 칭찬처럼 시작하고 뒤에서 뒤집는다.
-
-예:
-꾸준한 건 인정해, 맨날 늦는 게
-성실하긴 해, 야식 앞에서
-집중력 좋네, 메뉴판 볼 때
+   예 (방식만 참고, 복사 금지):
+   * 꾸준한 건 인정해, 맨날 늦는 게
+   * 성실하긴 해, 야식 앞에서
+   * 집중력 좋네, 메뉴판 볼 때
+   * 부지런해, 거울 볼 때만
 
 7. 숫자로 과장
-   구체적인 숫자를 넣어 웃기게 과장한다.
-
-예:
-알람 17개 다 무시
-5분 거릴 40분째
-365일 내일부터
-
-숫자는 곡당 1~2번만 사용해라.
+   구체적인 숫자를 넣어 웃기게 과장한다. (곡당 1~2번만)
+   예 (방식만 참고, 복사 금지):
+   * 알람 17개 다 무시
+   * 5분 거릴 40분째
+   * 365일 내일부터
+   * 단추 3개째 항복
 
 ---
 
@@ -1315,11 +1383,7 @@ Hook은 설명이 아니라 구호처럼 들려야 한다.
 
 3. 별명화
    예:
-   계획표 인간
-   말만 관리러
-   현실 덤벙 장인
-   지각 VIP
-   옆구리 테러범
+   계획표 인간 / 말만 관리러 / 현실 덤벙 장인 / 지각 VIP / 옆구리 테러범
 
 4. 구호화
    예:
@@ -1338,125 +1402,140 @@ Hook은 설명이 아니라 구호처럼 들려야 한다.
 
 [가사 언어]가 영어이면 영어 중심으로 작성해라.
 
-[가사 언어]가 섞기이면 한국어를 기본으로 하고,
-영어는 포인트처럼만 사용해라.
-
-섞기일 때 영어 비중은 40%를 넘지 마라.
-맥락 없는 영어 사용은 금지한다.
+[가사 언어]가 섞기이면 한국어를 기본으로 하고, 영어는 포인트처럼만 사용해라.
+섞기일 때 영어 비중은 40%를 넘지 마라. 맥락 없는 영어 사용은 금지한다.
 
 ---
 
-[꼭 넣고 싶은 문장 규칙]
+[★★ 꼭 넣고 싶은 문장 처리 규칙 — 반드시 지켜라 ★★]
 
-[꼭 넣고 싶은 문장]이 "(없음)"이 아니면,
-해당 문장을 절대 수정하지 말고 가사 안에 자연스럽게 넣어라.
+[꼭 넣고 싶은 문장]이 "(없음)"이 아니면:
 
-단, 전체 흐름을 해치지 않게 배치해라.
+* 입력된 모든 문장을 가사 안에 반드시 자연스럽게 포함해라.
+* 문장을 절대 수정하지 마라. 한 글자도 바꾸면 안 된다.
+* 단, 전체 흐름을 해치지 않게 배치해라.
+* 위치는 자유 — Verse, Pre-Hook, Hook 어디든 OK.
+* 전체 14~16줄 구조 안에서 자연스럽게 녹여라.
 
-[꼭 넣고 싶은 문장]이 "(없음)"이면 무시해라.
+"(없음)"이면 이 규칙은 무시해라.
 
 ---
 
 [장르 반영 규칙]
 
-[장르]는 style 필드에만 반영하지 말고,
-가사, Hook, 추임새, 반복 방식, 리듬감에도 반영해라.
+[장르]는 단순히 style 필드에만 적는 정보가 아니다.
+가사, Hook, 추임새, 반복 방식, 리듬감, 별명 톤에 모두 반영해라.
 
 장르 때문에 가사가 길어지면 안 된다.
 
 장르는 노래의 말투와 리듬을 결정한다.
 
-장르별 방향:
+---
 
-1. 요들송
+[장르별 작성 가이드]
 
-* 요들레이, 요를레이히 같은 추임새 사용
-* 밝고 익살스러운 알프스풍
-* Hook에 1~2번만 사용
+★ 사용자가 선택한 [장르]에 해당하는 섹션의 가이드를 따라라.
 
-style:
-short complete under-60-second Korean yodel meme song, intro under 10 seconds, longer hook than verse, repeated catchy hook, clear ending feel, bright alpine yodel melody, bouncy acoustic rhythm, comic yodel vocal flips
+1. 힙합 (hiphop)
+   * 라임감, 박자감, 단호한 톤
+   * 짧은 펀치라인 위주
+   * 추임새 후보: yo, yeah, uh, hey
+   style 키워드:
+   Korean boom-bap hip hop, punchy 808 bass, crisp trap hi-hats, head-nodding groove, confident rap-sung flow, vinyl scratch accents
 
-2. 장난 랩
+2. 장난 랩 (rap)
+   * 짧은 라임, 박자감, 말맛 중심
+   * 장난스럽게 톡톡 쏘는 느낌
+   * 추임새 후보: yo, ay, 워워
+   style 키워드:
+   short complete under-60-second playful Korean comedy rap, bouncy hip-hop beat, witty rhythmic delivery, playful ad-libs
 
-* 짧은 라임, 박자감, 말맛 중심
-* 장난스럽게 톡톡 쏘는 느낌
+3. 과몰입 발라드 (ballad)
+   * 쓸데없이 진지해서 웃긴 느낌
+   * 감정 과잉 멜로디와 어이없는 가사 대비
+   * 추임새 없거나 한숨/한탄형
+   style 키워드:
+   short complete under-60-second dramatic Korean comedy ballad, emotional piano chords, heartfelt vocal delivery with ironic funny lyrics
 
-style:
-short complete under-60-second playful Korean comedy rap, intro under 10 seconds, longer hook than verse, repeated catchy hook, clear ending feel, bouncy hip-hop beat, witty rhythmic delivery, playful ad-libs
+4. 킹받 트로트 (trot)
+   * 얼쑤, 아이고, 좋다 같은 추임새 소량 사용
+   * 꺾는 창법과 장난스러운 뽕끼
+   style 키워드:
+   short complete under-60-second playful Korean trot meme song, bouncy trot rhythm, comic vocal bends, cheerful brass accents
 
-3. 놀림 동요
+5. 뽕짝 EDM (ppongjjak)
+   * 트로트와 EDM이 섞인 둠칫한 느낌
+   * Hook 반복이 가장 중요
+   * 추임새: 둠칫둠칫, 짠짠, 쿵짝
+   ★ 뽕짝 style 작성 특별 규칙:
+   - BPM은 140~150 정도의 빠른 템포로 유지
+   - "fast", "high energy", "relentless", "drop" 같은 키워드 style 필드에 반드시 포함
+   - 폭렬한 트로트 리듬 + EDM drop 조합을 명시
+   style 키워드:
+   short complete under-60-second Korean ppongjjak EDM meme song, 145 BPM high energy, fast oom-pah polka bass, retro synthesizer stabs, bright synth drop, comic energy, relentless four-on-the-floor beat
 
-* 단순하고 귀여운 멜로디
-* 아이들도 따라 부를 만큼 쉬운 반복
+6. K-pop (kpop)
+   * 폴리시드 신스, 아이돌 보컬 느낌
+   * 후렴 멜로디 강한 캐치성
+   * 추임새 후보: oh, woo, yeah
+   style 키워드:
+   bright modern K-pop, polished synth-pop production, punchy electronic drums, catchy melodic hook, layered idol-style vocals, sparkly pop energy
 
-style:
-short complete under-60-second Korean teasing nursery rhyme, intro under 10 seconds, longer hook than verse, repeated catchy hook, clear ending feel, simple cute melody, light xylophone, kazoo, hand claps, playful childlike vocals
+7. 락 (rock)
+   * 디스토션 기타, 앤서믹 코러스
+   * 거칠지만 장난스러운 톤
+   * 추임새 후보: oh yeah, woo, let's go
+   style 키워드:
+   energetic Korean pop-rock, distorted electric guitars, driving live drums, punchy bass, anthemic shout-along chorus, rebellious fun mood
 
-4. 킹받 트로트
+8. 놀림 동요 (kids)
+   * 단순하고 귀여운 멜로디
+   * 아이들도 따라 부를 만큼 쉬운 반복
+   * 추임새 후보: 짝짝, 쿵쿵, 라라라
+   style 키워드:
+   short complete under-60-second Korean teasing nursery rhyme, simple cute melody, light xylophone, kazoo, hand claps, playful childlike vocals
 
-* 얼쑤, 아이고, 좋다 같은 추임새 소량 사용
-* 꺾는 창법과 장난스러운 뽕끼
+9. 로파이 (lofi)
+   * 차분하고 게으른 톤
+   * Hook은 부드럽게 반복
+   * 추임새 없거나 매우 소량
+   style 키워드:
+   chill Korean lo-fi hip hop, dusty mellow piano, soft boom-bap drums, vinyl crackle, lazy laid-back half-sung vocals, cozy sarcastic mood
 
-style:
-short complete under-60-second playful Korean trot meme song, intro under 10 seconds, longer hook than verse, repeated catchy hook, clear ending feel, bouncy trot rhythm, comic vocal bends, cheerful brass accents
+10. 요들송 (yodel)
+    * 요들레이, 요를레이히 같은 추임새 사용
+    * 밝고 익살스러운 알프스풍
+    * Hook에 1~2번만 사용
+    style 키워드:
+    short complete under-60-second Korean yodel meme song, bright alpine yodel melody, bouncy acoustic rhythm, comic yodel vocal flips, accordion and cowbell
 
-5. 놀림 챈트
+11. 쌈바 (samba)
+    * 카니발 퍼커션, 흥겨운 그루브
+    * 추임새 후보: 아이야, 호이, 헤이
+    style 키워드:
+    festive Brazilian samba, lively surdo and pandeiro percussion, fast carnival groove, bright brass horns, energetic call-and-response vocals
 
-* 응원가/구호처럼 단체로 외치는 느낌
-* 짝짝, 헤이, 어이 소량 사용
+12. 발리우드 (bollywood)
+    * 인도 타악기와 시타르
+    * 댄스 무드와 그룹 합창
+    * 추임새 후보: 아이야이야, 발레발레
+    ★ 발리우드 style 작성 특별 규칙:
+    - "tabla", "dhol", "sitar" 같은 인도 악기 키워드 style 필드에 반드시 포함
+    - "festive", "wedding-party", "cinematic" 같은 분위기 키워드 명시
+    - 다른 장르 악기(피아노, 일렉기타) 섞지 마라
+    style 키워드:
+    energetic Bollywood dance number, tabla and dhol percussion, sitar riffs and lush Indian strings, dramatic cinematic melody, group chorus chanting, festive wedding-party mood
 
-style:
-short complete under-60-second Korean teasing chant, intro under 10 seconds, longer hook than verse, repeated catchy hook, clear ending feel, stadium chant rhythm, claps and group vocals, simple shout-along melody
+---
 
-6. 뽕짝 EDM
+[style 작성 규칙]
 
-* 트로트와 EDM이 섞인 둠칫한 느낌
-* Hook 반복이 가장 중요
-
-style:
-short complete under-60-second Korean ppongjjak EDM meme song, intro under 10 seconds, longer hook than verse, repeated catchy hook, clear ending feel, trot-inspired EDM beat, bright synth drop, comic energy
-
-7. 키즈팝
-
-* 밝고 통통 튀는 현대적인 귀여운 팝
-* 귀여운 캐릭터송처럼 작성
-
-style:
-short complete under-60-second Korean kids pop meme song, intro under 10 seconds, longer hook than verse, repeated catchy hook, clear ending feel, bright bubbly melody, cute synths, hand claps, playful character vocals
-
-8. 만화 주제가
-
-* 캐릭터 소개송처럼 표현
-* 없는 설정이나 능력은 만들지 마라
-
-style:
-short complete under-60-second Korean cartoon theme meme song, intro under 10 seconds, longer hook than verse, repeated catchy hook, clear ending feel, heroic comic melody, upbeat drums and bright synth brass, playful character vocals
-
-9. 과몰입 발라드
-
-* 쓸데없이 진지해서 웃긴 느낌
-* 감정 과잉 멜로디와 어이없는 가사 대비
-
-style:
-short complete under-60-second dramatic Korean comedy ballad, intro under 10 seconds, longer hook than verse, repeated catchy hook, clear ending feel, emotional piano chords, heartfelt vocal delivery with ironic funny lyrics
-
-10. 놀림 행진곡
-
-* 군가/행진곡 느낌
-* 하나 둘, 전진 같은 구호는 소량만 사용
-
-style:
-short complete under-60-second Korean comic march song, intro under 10 seconds, longer hook than verse, repeated catchy hook, clear ending feel, military-style snare rhythm, comic chant vocals, playful marching energy
-
-11. 캐릭터 밈송
-
-* 귀여운 3D 캐릭터가 부르는 느낌
-* 동요, 요들, 밈송이 섞인 중독성
-* 가장 범용적으로 추천되는 스타일
-
-style:
-short complete under-60-second cute Korean 3D character meme song, intro under 10 seconds, longer hook than verse, repeated catchy hook, simple major-key melody, bouncy rhythm, light xylophone, accordion, kazoo, hand claps, yodel-like funny vocal ad-libs, playful character vocals, no long outro, clear ending feel
+★ style 필드는 영어로 작성해라.
+★ 선택된 장르의 style 키워드를 그대로 포함해라. 위 ${genreStyle}에서 주입된 키워드를 우선 사용.
+★ 다른 장르의 악기/키워드를 섞지 마라.
+   - 발리우드 곡인데 "K-pop synth" 추가 X
+   - 트로트 곡인데 "lo-fi piano" 추가 X
+★ "short complete under-60-second", "clear ending feel" 같은 곡 완결성 키워드 반드시 포함.
 
 ---
 
@@ -1465,7 +1544,6 @@ short complete under-60-second cute Korean 3D character meme song, intro under 1
 가벼운 장난 표현은 허용한다.
 
 허용:
-
 * 바보
 * 허당
 * 덤벙이
@@ -1475,19 +1553,10 @@ short complete under-60-second cute Korean 3D character meme song, intro under 1
 * 또 시작이네
 
 금지:
-
-* 씨발
-* 시발
-* 병신
-* 미친놈
-* 미친년
-* 개새끼
-* 좆
-* 혐오 표현
-* 인격 비하
-* 성희롱
-* 가족 비하
-* 장애/질병 비하
+* 씨발 / 시발 / 시1발 / 씨ㅂ / ㅅㅂ
+* 병신 / 미친놈 / 미친년 / 개새끼 / 좆 / 존나 / 지랄
+* 혐오 표현 / 인격 비하 / 성희롱
+* 가족 비하 / 장애·질병 비하
 * 외모를 심하게 깎아내리는 표현
 * 따돌림처럼 느껴지는 조롱
 
@@ -1498,30 +1567,21 @@ short complete under-60-second cute Korean 3D character meme song, intro under 1
 
 [제목 규칙]
 
-제목은 2~8글자 중심으로 작성해라.
-길어도 12글자를 넘지 마라.
+제목은 2~8글자 중심으로 작성해라. 길어도 12글자를 넘지 마라.
 
 제목은 키워드 나열이 아니라,
 Hook으로 써도 될 만큼 짧고 선명한 밈형 제목이어야 한다.
 
 좋은 제목:
-
-* 또 먹네
-* 말만 관리
-* 단추 비상
-* 옆구리 테러범
-* 계획표 인간
-* 지각 장인
-* 허당 모닝콜
-* 맛만 관리
-* 딱 걸림
-* 또 시작
+* 또 먹네 / 말만 관리 / 단추 비상 / 옆구리 테러범 / 계획표 인간
+* 지각 장인 / 허당 모닝콜 / 맛만 관리 / 딱 걸림 / 또 시작
 
 나쁜 제목:
-
 * 친구의 여러 가지 특징을 담은 노래
 * 지각하고 다이어트를 실패하는 친구 이야기
 * 사용자가 입력한 키워드를 반영한 디스송
+
+★ 위 좋은 제목 예시도 그대로 복사 금지. 매 곡 키워드로 새로 만들어라.
 
 ---
 
@@ -1534,7 +1594,7 @@ Hook으로 써도 될 만큼 짧고 선명한 밈형 제목이어야 한다.
 {
 "title": "...",
 "style": "...",
-"lyrics": "[Intro]\n...\n...\n\n[Verse]\n...\n...\n...\n...\n\n[Pre-Hook]\n...\n...\n\n[Hook]\nA\nB\nA\nB\nA\nB\nA\nB'"
+"lyrics": "[Intro]\n...\n...\n\n[Verse]\n...\n...\n...\n...\n\n[Pre-Hook]\n...\n...\n\n[Hook]\n(추임새)\nA\n(추임새)\nB\nA\nB\nA\nB\nA\nB'"
 }
 
 Intro가 필요 없으면 아래 형식을 사용해라.
@@ -1545,8 +1605,7 @@ Intro가 필요 없으면 아래 형식을 사용해라.
 "lyrics": "[Verse]\n...\n...\n...\n...\n\n[Pre-Hook]\n...\n...\n\n[Hook]\nA\nB\nA\nB\nA\nB\nA\nB'"
 }
 
-반드시 JSON만 출력하고,
-추가 설명은 하지 마라.${nameRule}`;
+반드시 JSON만 출력하고, 추가 설명은 하지 마라.`;
 }
 
 function maskProfanity(text) {
@@ -2603,8 +2662,132 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // ===== 영상 재인코딩 (TikTok 등 외부 인코더 호환 표준 MP4로) =====
+  // POST /transcode-video — 요청 본문 = 원본 영상 바이너리. 응답 = 변환된 MP4 바이너리.
+  // VFR→CFR 30fps, H.264 High + AAC 44.1k, +faststart 적용.
+  if (path === '/transcode-video' && req.method === 'POST') {
+    if (!ffmpegPath) {
+      return send(res, 503, { error: 'no_ffmpeg', message: 'ffmpeg 미설치 (재배포 필요)' });
+    }
+    const uid = await verifyAuth(req);
+    if (!uid) return send(res, 401, { error: 'auth_required', message: '로그인이 필요해요' });
+    // 사용자별 속도 제한: 1분에 5회까지 (어뷰징 방지)
+    if (!checkTranscodeRate(uid)) {
+      return send(res, 429, { error: 'rate_limited', message: '잠시 후 다시 시도해주세요' });
+    }
+    // 업로드 크기 제한: 100MB
+    const contentLength = parseInt(req.headers['content-length'] || '0', 10);
+    if (contentLength > 100 * 1024 * 1024) {
+      return send(res, 413, { error: 'too_large', message: '영상이 너무 커요 (최대 100MB)' });
+    }
+    const stamp = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    const tmpIn = `/tmp/diss4u-in-${stamp}`;
+    const tmpOut = `/tmp/diss4u-out-${stamp}.mp4`;
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      try { fs.unlinkSync(tmpIn); } catch (e) {}
+      try { fs.unlinkSync(tmpOut); } catch (e) {}
+    };
+    try {
+      // 1) 요청 본문(원본 영상)을 임시 파일로 저장
+      await new Promise((resolve, reject) => {
+        const ws = fs.createWriteStream(tmpIn);
+        req.on('error', reject);
+        ws.on('error', reject);
+        ws.on('finish', resolve);
+        req.pipe(ws);
+      });
+      // 2) ffmpeg로 표준 MP4 변환 (30초 타임아웃)
+      await runFfmpeg(tmpIn, tmpOut, 30000);
+      // 3) 변환본을 응답으로 스트리밍
+      const stat = fs.statSync(tmpOut);
+      res.writeHead(200, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Expose-Headers': 'Content-Length',
+        'Content-Type': 'video/mp4',
+        'Content-Length': stat.size,
+        'Cache-Control': 'no-store'
+      });
+      await new Promise((resolve, reject) => {
+        const rs = fs.createReadStream(tmpOut);
+        rs.on('error', reject);
+        rs.on('end', resolve);
+        rs.pipe(res);
+      });
+    } catch (e) {
+      console.warn('transcode fail', e.message);
+      if (!res.headersSent) {
+        return send(res, 500, { error: 'transcode_failed', message: '변환 실패 (잠시 후 다시 시도)' });
+      }
+    } finally {
+      cleanup();
+    }
+    return;
+  }
+
   return send(res, 404, { error: 'Invalid path' });
 });
+
+// 사용자별 변환 요청 속도 제한 (메모리 기반, 단일 인스턴스 가정)
+const _transcodeBuckets = new Map();   // uid -> [timestamps]
+function checkTranscodeRate(uid) {
+  const now = Date.now();
+  const recent = (_transcodeBuckets.get(uid) || []).filter(t => now - t < 60_000);
+  if (recent.length >= 5) {
+    _transcodeBuckets.set(uid, recent);
+    return false;
+  }
+  recent.push(now);
+  _transcodeBuckets.set(uid, recent);
+  return true;
+}
+// 메모리 누수 방지: 5분마다 오래된 항목 정리
+setInterval(() => {
+  const cutoff = Date.now() - 60_000;
+  for (const [uid, arr] of _transcodeBuckets) {
+    const kept = arr.filter(t => t > cutoff);
+    if (kept.length === 0) _transcodeBuckets.delete(uid);
+    else _transcodeBuckets.set(uid, kept);
+  }
+}, 5 * 60_000).unref?.();
+
+// ffmpeg 변환 실행 (TikTok·Instagram·KakaoTalk 호환 표준 MP4).
+// VFR→CFR 30fps, H.264 Main(보편 호환), AAC-LC(Kakao 인식 100%), +faststart.
+// -shortest 같은 트랙 자르기 플래그는 빼서 두 트랙을 자연 길이대로 둠
+// (Kakao가 audio<video 차이를 보고 오디오 트랙을 폐기하는 케이스 회피).
+async function runFfmpeg(input, output, timeoutMs) {
+  const args = [
+    '-y', '-i', input,
+    '-c:v', 'libx264', '-profile:v', 'main', '-level', '4.0', '-pix_fmt', 'yuv420p',
+    '-crf', '22', '-preset', 'veryfast',
+    '-r', '30', '-fps_mode', 'cfr',
+    '-c:a', 'aac', '-profile:a', 'aac_low', '-b:a', '128k', '-ar', '44100', '-ac', '2',
+    '-disposition:a:0', 'default',
+    '-movflags', '+faststart',
+    output
+  ];
+  await runFfmpegCmd(args, timeoutMs);
+}
+
+function runFfmpegCmd(args, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    proc.stderr.on('data', d => { if (stderr.length < 4000) stderr += d.toString(); });
+    const timer = setTimeout(() => {
+      try { proc.kill('SIGKILL'); } catch (e) {}
+      reject(new Error('ffmpeg timeout'));
+    }, timeoutMs);
+    proc.on('error', e => { clearTimeout(timer); reject(e); });
+    proc.on('close', code => {
+      clearTimeout(timer);
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg exit ${code}: ${stderr.slice(-400)}`));
+    });
+  });
+}
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log('chinolsong-proxy listening on', PORT));
