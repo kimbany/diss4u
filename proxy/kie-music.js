@@ -9,7 +9,11 @@ function authHeaders(apiKey) { return { 'Content-Type': 'application/json', 'Aut
 
 // 곡 생성마다 멜로디·리듬·보컬·후크 형태를 모두 랜덤으로 골라 같은 장르여도 매번 다른 곡이 나오게 한다.
 // 같은 조합이 다시 나올 확률을 낮추기 위해 5개 축에서 각각 독립 랜덤 → 약 1만 가지 조합.
-function pickVarietyModifier() {
+//
+// ★ voice 옵션이 명시된 경우(robot/elder 등) variety의 VOCALS·MELODIC_FORCE를 빼고 호출한다.
+//   안 그러면 'robotic vocal' 신호와 'energetic vocal performance' / 'fully sung melodic'이
+//   동시에 Suno에 가서 충돌 → voice 선택이 무시되던 회귀가 있었음.
+function pickVarietyModifier({ skipVocalConflict = false } = {}) {
   // 1) HOOK 멜로디 형태 — "입에 붙는 반복 후크"라는 강제 신호는 유지하되 표현을 매번 다르게.
   const HOOK_MELODY_VARIANTS = [
     'earworm catchy melodic hook, repetitive memorable chorus melody, looping singalong vocal motif',
@@ -60,6 +64,14 @@ function pickVarietyModifier() {
   //   · 후크의 키워드 음절을 멜로딕 모티프로 만들도록 추가 신호.
   const MELODIC_FORCE = 'fully sung melodic vocals with clear pitch and singable melody on every line, NOT spoken-word style, NOT rap-only delivery, even verses must have a clear sung melody, K-pop style chant-able syllabic hook (like Gee-gee-gee, Ring-ding-dong, Su-su-su-supernova), playful syllable repetition and vocalized fillers (la-la-la, di-gi-di-gi, dding-dding) as melodic ornamentation';
   const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+  // skipVocalConflict=true 일 때 보컬·멜로딕 강제 신호 빼고 멜로디 형태/리듬/템포만 다양화.
+  // (캐릭터 보이스 옵션과 충돌하지 않도록)
+  if (skipVocalConflict) {
+    return ', ' + pick(HOOK_MELODY_VARIANTS)
+         + ', ' + pick(MELODIC_CONTOURS)
+         + ', ' + pick(RHYTHM_FEELS)
+         + ', ' + pick(TEMPOS);
+  }
   return ', ' + MELODIC_FORCE
        + ', ' + pick(HOOK_MELODY_VARIANTS)
        + ', ' + pick(MELODIC_CONTOURS)
@@ -92,9 +104,19 @@ export async function generateSong({ lyrics, title, style, voice, model = 'V5', 
   //      no buildup' 같은 강한 신호 다중 박음.
   //  · variety modifier — 호출마다 보컬/리듬 톤이 살짝 달라져 같은 장르여도 매번 색이 다른 곡.
   const SHORT_HINT = ', short song around 45 seconds, vocals start at 0:00, no instrumental intro, no intro buildup, jump straight into the verse, no long outro, fade out at end';
-  const variety = pickVarietyModifier();
-  const vocalHint = VOCAL_HINTS[voice] ? ', ' + VOCAL_HINTS[voice] : '';
-  const finalStyle = /short|seconds|outro|fade/i.test(style || '') ? (style + vocalHint) : ((style || '') + SHORT_HINT + variety + vocalHint);
+  // voice가 명시되면 variety의 보컬·멜로딕 강제 신호를 빼고(충돌 방지) vocalHint를 style의
+  // 맨 앞에 박는다. Suno는 앞쪽 키워드를 우선 처리해서 voice 선택이 확실히 반영됨.
+  const hasVoice = !!VOCAL_HINTS[voice];
+  const variety = pickVarietyModifier({ skipVocalConflict: hasVoice });
+  const vocalLead = hasVoice ? VOCAL_HINTS[voice] + ', ' : '';   // style 맨 앞에 강하게
+  const baseStyle = style || '';
+  const finalStyle = /short|seconds|outro|fade/i.test(baseStyle)
+    ? (vocalLead + baseStyle)
+    : (vocalLead + baseStyle + SHORT_HINT + variety);
+
+  // 디버그 — voice 선택이 finalStyle에 잘 박혔는지 서버 로그에서 확인.
+  console.log('[kie generateSong] voice=' + (voice || 'none') + ' / hasVoice=' + hasVoice
+    + ' / finalStyle head: ' + finalStyle.slice(0, 200));
 
   // 가사 안전망: LLM이 실수로 [Intro] 블록을 넣어도 통째로 제거 → Suno가 인트로 마커를 보고
   // 인트로를 만드는 경향을 차단. [End] 마커는 없으면 추가.
