@@ -8,7 +8,8 @@
 <title>Diss4U 🎤 AI 친구 놀리는 노래</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Pretendard:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://hangeul.pstatic.net/hangeul_static/css/nanum-square.css" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -92,7 +93,7 @@
     to { transform: rotate(360deg); }
   }
   .brand {
-    font-family: 'Black Han Sans', sans-serif;
+    font-family: 'NanumSquare', sans-serif;
     font-size: 24px; letter-spacing: -1px; line-height: 1;
   }
   .brand-en {
@@ -349,7 +350,7 @@
   /* === 소셜 미디어 아이콘 === */
   .social-label {
     text-align: center; margin: 32px auto 10px;
-    font-family: 'Black Han Sans', sans-serif;
+    font-family: 'NanumSquare', sans-serif;
     font-size: 14px; letter-spacing: 1px; color: var(--text-dim);
   }
   .social-row {
@@ -376,7 +377,7 @@
     text-align: center; color: var(--text-dimmer); font-size: 11px; line-height: 1.8;
   }
   .biz-footer .biz-brand {
-    font-family: 'Black Han Sans', sans-serif; font-size: 14px;
+    font-family: 'NanumSquare', sans-serif; font-size: 14px;
     color: var(--text-dim); margin-bottom: 6px;
   }
   .biz-footer .biz-line { word-break: keep-all; }
@@ -463,7 +464,7 @@
     margin-bottom: 8px; position: relative; z-index: 2;
   }
   .result-title {
-    font-family: 'Black Han Sans', sans-serif;
+    font-family: 'NanumSquare', sans-serif;
     font-size: 24px; line-height: 1.2; letter-spacing: -0.5px;
     margin-bottom: 16px; position: relative; z-index: 2;
   }
@@ -3165,7 +3166,7 @@ function drawTimedLyrics(ctx, W, H, cx, LINES, t) {
   ctx.save();
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.font = '800 46px "Black Han Sans", Pretendard, sans-serif';
+  ctx.font = '800 46px "NanumSquare", Pretendard, sans-serif';
   ctx.lineJoin = 'round';
   const maxW = W * 0.88, spaceW = ctx.measureText(' ').width;
   const rows = []; let row = [], rowW = 0;
@@ -3244,7 +3245,7 @@ function drawSimpleLyrics(ctx, W, H, cx, lines, elapsed, duration, lyricStart, l
   ctx.save();
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.font = '800 46px "Black Han Sans", Pretendard, sans-serif';
+  ctx.font = '800 46px "NanumSquare", Pretendard, sans-serif';
   ctx.lineJoin = 'round';
   ctx.globalAlpha = fade;
 
@@ -3367,9 +3368,6 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song, lyricSt
   const titleLines = wrapText(ctx, song.title || '', W * 0.86);
   let ty = 80;
   for (const tl of titleLines.slice(0, 2)) { ctx.fillText(tl, cx, ty); ty += 48; }
-  ctx.font = '500 22px Pretendard, sans-serif';
-  ctx.fillStyle = '#8a8a99';
-  ctx.fillText('🎯 ' + (song.name || '') + ' 에게', cx, ty + 6);
 
   // ── 가사 자막
   //   1) kie 단어별 타임스탬프가 있으면 노래방 모드(단어별 하이라이트, 정확한 싱크)
@@ -3393,7 +3391,7 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song, lyricSt
   } else {
     // 폴백: 캔버스 텍스트로 Diss4U
     ctx.save();
-    ctx.font = '900 56px "Black Han Sans", Pretendard, sans-serif';
+    ctx.font = '900 56px "NanumSquare", Pretendard, sans-serif';
     ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
     const dW = ctx.measureText('Diss').width;
     const fW = ctx.measureText('4').width;
@@ -3407,7 +3405,7 @@ function drawVideoFrame(ctx, W, H, freq, lines, elapsed, duration, song, lyricSt
   }
 
   // 작은 워터마크 — 진행바 바로 위
-  ctx.font = '700 22px "Black Han Sans", Pretendard, sans-serif';
+  ctx.font = '700 22px "NanumSquare", Pretendard, sans-serif';
   ctx.fillStyle = '#d4ff3a';
   ctx.textBaseline = 'bottom';
   ctx.textAlign = 'center';
