@@ -31,12 +31,20 @@ function pickVarietyModifier() {
 // 곡 생성 요청 → { jobId }
 export async function generateSong({ lyrics, title, style, model = 'V5', apiKey = process.env.KIE_API_KEY }) {
   if (!apiKey) throw Object.assign(new Error('KIE_API_KEY 없음'), { status: 500 });
-  // 운영과 동일한 "짧은 곡" 힌트 + [End] 마커 (proxy/server.js 기존 처리와 동일)
-  // + variety modifier — 호출마다 보컬/리듬 톤이 살짝 달라져 같은 장르라도 매번 색이 다른 곡.
-  const SHORT_HINT = ', short song around 45 seconds, no long intro or outro, fade out at end';
+  // 운영 힌트 (proxy/server.js 기존 처리와 동일).
+  //  · 사용자 보고: 자체 인트로(보컬 없는 비트만 나오는 구간)가 20초+ 길어지는 회귀.
+  //    → 'no long intro' 만으로는 부족. 'vocals start at 0:00 / no instrumental intro /
+  //      no buildup' 같은 강한 신호 다중 박음.
+  //  · variety modifier — 호출마다 보컬/리듬 톤이 살짝 달라져 같은 장르여도 매번 색이 다른 곡.
+  const SHORT_HINT = ', short song around 45 seconds, vocals start at 0:00, no instrumental intro, no intro buildup, jump straight into the verse, no long outro, fade out at end';
   const variety = pickVarietyModifier();
   const finalStyle = /short|seconds|outro|fade/i.test(style || '') ? style : ((style || '') + SHORT_HINT + variety);
-  const finalLyrics = /\[End\]\s*$/i.test((lyrics || '').trim()) ? lyrics : ((lyrics || '').trim() + '\n\n[End]');
+
+  // 가사 안전망: LLM이 실수로 [Intro] 블록을 넣어도 통째로 제거 → Suno가 인트로 마커를 보고
+  // 인트로를 만드는 경향을 차단. [End] 마커는 없으면 추가.
+  let finalLyrics = (lyrics || '').trim();
+  finalLyrics = finalLyrics.replace(/\[Intro\][\s\S]*?(?=\n\s*\[[^\]]+\]|$)/gi, '').trim();
+  if (!/\[End\]\s*$/i.test(finalLyrics)) finalLyrics += '\n\n[End]';
 
   const r = await fetch(`${KIE_BASE}/api/v1/generate`, {
     method: 'POST',
