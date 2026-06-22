@@ -777,10 +777,13 @@
       </div>
 
       <div class="field">
-        <div class="label"><span class="label-icon">⚧</span>성별 / 종류</div>
+        <div class="label"><span class="label-icon">⚧</span>목소리</div>
         <div class="pill-row" id="genderRow">
           <div class="pill selected" data-gender="male">🚹 남자</div>
           <div class="pill" data-gender="female">🚺 여자</div>
+          <div class="pill" data-gender="child">🧒 어린이</div>
+          <div class="pill" data-gender="group">👥 그룹</div>
+          <div class="pill" data-gender="duet">🎭 듀엣</div>
           <div class="pill" data-gender="pet">🐶 반려동물</div>
         </div>
       </div>
@@ -2478,7 +2481,8 @@ async function startGeneration() {
     const submitResult = await callWorker('/generate-song', {
       lyrics: lyricsData.lyrics,
       title: lyricsData.title,
-      style: lyricsData.style
+      style: lyricsData.style,
+      gender: STATE.selectedGender
     });
 
     const jobId = submitResult.jobId || submitResult.job_id || submitResult.id;
