@@ -1152,6 +1152,13 @@
       <b>틱톡·유튜브 쇼츠</b>는 앨범에 저장한 뒤 해당 앱에서 올리는 게 가장 확실해요.
     </div>
 
+    <!-- iOS Chrome 등 앨범 저장이 안 되는 환경에서 사파리로 열도록 안내 -->
+    <div id="iosChromeBanner" style="display:none;margin-top:12px;padding:12px;background:rgba(255,170,80,0.12);border:1px solid rgba(255,170,80,0.4);border-radius:12px;font-size:12px;color:#ffb87a;line-height:1.5;text-align:left;">
+      ⚠️ <b>크롬에서는 앨범 저장이 안 돼요</b> (iOS 정책).<br>
+      <b>사파리</b>에서 열어야 "비디오 저장"으로 앨범에 저장돼요.
+      <button onclick="openInSafari()" style="display:block;width:100%;margin-top:10px;background:#ffb87a;color:#1a1a1f;border:none;border-radius:10px;padding:10px;font-weight:800;cursor:pointer;font-size:13px;">📱 사파리에서 열기</button>
+    </div>
+
     <button class="btn-secondary" id="videoCloseBtn" onclick="closeVideoModal()" style="margin-top:10px;width:100%;">닫기</button>
   </div>
 </div>
@@ -3735,9 +3742,39 @@ async function makeInstaVideo() {
   v.style.display = 'block';
   document.getElementById('videoActions').style.display = 'grid';
   { const tip = document.getElementById('videoShareTip'); if (tip) tip.style.display = 'block'; }
+  // iOS Chrome 등에선 앨범 저장이 안 되니까 사파리 안내 배너 노출
+  { const ban = document.getElementById('iosChromeBanner'); if (ban) ban.style.display = isIOSNonSafari() ? 'block' : 'none'; }
   const isMp4 = outType.includes('mp4');
   setVideoStatus(isMp4 ? '✅ 완성! 공유하거나 저장하세요.'
     : '✅ 완성! (webm 형식) SNS에서 안 받으면 저장 후 올려주세요.');
+}
+
+// iOS에서 사파리가 아닌 다른 브라우저(Chrome/Naver/Kakao 등) 감지.
+// 이런 환경에선 Web Share API의 파일 공유가 제한적이라 앨범 저장이 불안정 → 사파리 사용 권장.
+function isIOSNonSafari() {
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPhone|iPad|iPod/.test(ua);
+  if (!isIOS) return false;
+  // Chrome iOS는 'CriOS', Firefox는 'FxiOS', Edge는 'EdgiOS', 그 외 인앱 브라우저들
+  // (사파리는 'Safari/' 포함 + 위 키워드들 모두 없음)
+  return /CriOS|FxiOS|EdgiOS|NAVER|KAKAO|FBAN|FBAV|Instagram|Line/i.test(ua) ||
+         !/Safari\//.test(ua);
+}
+
+// 현재 페이지를 사파리에서 다시 열기 (iOS Chrome 등에서 동작)
+function openInSafari() {
+  try {
+    const u = location.href;
+    // x-safari-https:// 스킴 — iOS Chrome 등에서 사파리로 포워딩
+    const safariUrl = u.replace(/^https?:\/\//, 'x-safari-https://');
+    location.href = safariUrl;
+    // 일부 환경에서 스킴이 안 먹으면 사용자에게 안내
+    setTimeout(() => {
+      alert('사파리가 자동으로 안 열리면, 주소(' + location.host + ')를 복사해서 사파리에 직접 붙여넣어주세요.');
+    }, 1500);
+  } catch (e) {
+    alert('사파리를 직접 열어 ' + location.host + ' 로 접속해주세요.');
+  }
 }
 
 function videoFileName() {
