@@ -3751,7 +3751,8 @@ async function shareInstaVideo() {
   const file = new File([VIDEO.blob], videoFileName() + '.' + ext, { type: VIDEO.blob.type });
   const song = STATE.currentSong || {};
   claimShareReward(song.id);   // 공유 의도 = 즉시 지급(곡당 1회, 서버에서 중복 차단)
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+  // canShare가 false를 돌려도 일단 share() 시도 (브라우저별 판단이 까다로움)
+  if (navigator.share) {
     try {
       await navigator.share({
         files: [file],
@@ -3773,26 +3774,33 @@ async function shareInstaVideo() {
 async function downloadInstaVideo() {
   if (!VIDEO.blob) return;
   const ext = VIDEO.blob.type.includes('mp4') ? 'mp4' : 'webm';
+  const isWebm = ext === 'webm';
   const file = new File([VIDEO.blob], videoFileName() + '.' + ext, { type: VIDEO.blob.type });
-  // 모바일 + 파일 공유 지원 → 공유시트로 (여기서 '비디오 저장'을 누르면 앨범에 저장됨)
-  const canShareFile = navigator.canShare && navigator.canShare({ files: [file] });
-  if (canShareFile) {
+  // canShare 체크 없이 일단 share() 시도. canShare가 보수적으로 false를 돌려도
+  // 실제로는 동작하는 브라우저가 있어서 시도 후 catch로 폴백하는 게 더 안전.
+  if (navigator.share) {
     try {
       await navigator.share({
         files: [file],
         title: (STATE.currentSong || {}).title || 'Diss4U',
         text: '🎤 Diss4U로 만든 디스곡'
       });
-      showToast('💾 "비디오 저장"을 누르면 앨범에 저장돼요');
+      // WebM은 iOS Photos가 안 받음 → 명확히 안내
+      showToast(isWebm
+        ? '⚠️ 이 영상은 WebM이라 앨범엔 안 들어가요. "파일에 저장" 선택'
+        : '💾 "비디오 저장"을 누르면 앨범에 저장돼요');
       claimShareReward((STATE.currentSong || {}).id);
       return;
     } catch (e) {
       if (e.name === 'AbortError') { claimShareReward((STATE.currentSong || {}).id); return; }
       console.warn('save via share fail', e);
-      // 폴백: 파일 다운로드
+      // 공유 자체가 실패 → 파일 다운로드로 폴백
     }
   }
-  // PC 또는 공유 미지원 → 파일 다운로드
+  // PC 또는 공유 미지원 (in-app browser 등)
+  showToast(isWebm
+    ? '⚠️ WebM 영상이라 앨범 저장이 안 돼요. 파일 앱에서 확인'
+    : '📂 사파리에서 직접 열어주세요 — 인앱 브라우저는 앨범 저장 미지원');
   fileDownloadInstaVideo();
 }
 
