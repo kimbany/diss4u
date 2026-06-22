@@ -78,7 +78,9 @@ const VOCAL_HINTS = {
   group:    'group chorus vocals, 3 to 4 voices harmonizing together as a group',
   duet:     'male and female duet, alternating vocals between two singers',
   husky:    'husky low-pitched raspy vocal, smoky deep voice, gravelly texture',
-  hightone: 'bright high-pitched soaring vocal, crystal clear soprano-like tone'
+  hightone: 'bright high-pitched soaring vocal, crystal clear soprano-like tone',
+  robot:    'robotic vocal with strong auto-tune and vocoder effects, synthesized digital voice, sci-fi machine-like delivery',
+  elder:    'old elderly male voice, raspy aged warm tone, grandfather-like wise character voice with gentle vibrato'
 };
 
 // 곡 생성 요청 → { jobId }
