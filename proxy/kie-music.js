@@ -7,25 +7,59 @@ const KIE_BASE = process.env.KIE_BASE || 'https://api.kie.ai';
 function pick(obj, ...keys) { for (const k of keys) if (obj && obj[k] != null) return obj[k]; return undefined; }
 function authHeaders(apiKey) { return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }; }
 
-// 곡 생성마다 살짝 다른 보컬·리듬 톤을 섞어서 다양성 확보 — 같은 장르여도 매번 색이 달라짐.
-// 추가로 "입에 붙는 후크 멜로디"는 매번 강제 — Suno가 반복 멜로딕 후크를 만들도록 항상 박는다.
+// 곡 생성마다 멜로디·리듬·보컬·후크 형태를 모두 랜덤으로 골라 같은 장르여도 매번 다른 곡이 나오게 한다.
+// 같은 조합이 다시 나올 확률을 낮추기 위해 5개 축에서 각각 독립 랜덤 → 약 1만 가지 조합.
 function pickVarietyModifier() {
+  // 1) HOOK 멜로디 형태 — "입에 붙는 반복 후크"라는 강제 신호는 유지하되 표현을 매번 다르게.
+  const HOOK_MELODY_VARIANTS = [
+    'earworm catchy melodic hook, repetitive memorable chorus melody, looping singalong vocal motif',
+    'sticky chant-like chorus hook, simple memorable refrain, addictive vocal phrase repeated multiple times',
+    'meme-style sing-song hook, short looping vocal hook, easy-to-mimic chorus phrase',
+    'rhythmic chant hook, punchy repeated catchphrase melody, group-singalong chorus',
+    'percussive vocal hook with strong rhythm, repeated catchy syllables, viral-style refrain'
+  ];
+  // 2) 멜로디 컨투어 — 음의 진행 모양. 곡마다 멜로딕 캐릭터가 확 달라지는 핵심 축.
+  const MELODIC_CONTOURS = [
+    'melody with playful upward leaps and bouncy intervals',
+    'descending stepwise melody with resigned funny tone',
+    'melody centered around a single repeated note with rhythmic variations',
+    'call-and-response melody with question-and-answer phrasing',
+    'melody with surprise jumps between low growl and high screech notes',
+    'pendulum melody swinging obsessively between two notes',
+    'staircase melody climbing up then dramatically falling back',
+    'chant-like flat melody with sudden punctuation notes',
+    'wavy melody with playful slides and pitch bends'
+  ];
+  // 3) 리듬 필 — 박자 감각. 같은 BPM이어도 느낌이 달라짐.
+  const RHYTHM_FEELS = [
+    'with off-beat snare hits and syncopated groove',
+    'with half-time groove that lands heavy',
+    'with double-time fast rhythm and quick vocal flow',
+    'in 6/8 swung shuffle feel',
+    'with steady straight boom-bap rhythm',
+    'with stuttered stop-and-go rhythm',
+    'with marching beat and clappy snares',
+    'with skippy bouncy two-step rhythm'
+  ];
+  // 4) 보컬 톤
   const VOCALS = [
     'energetic vocal performance', 'playful vocal delivery',
     'cheeky punchy vocals', 'sarcastic teasing vocals',
     'snappy rhythmic vocal flow', 'theatrical exaggerated vocals',
     'tight staccato vocal style', 'sing-song mocking delivery'
   ];
+  // 5) 템포 톤
   const TEMPOS = [
     'punchy upbeat tempo', 'driving energetic rhythm',
     'bouncy snappy groove', 'tight rhythmic flow',
     'high-energy drum pattern', 'syncopated catchy beat'
   ];
-  // 매번 들어가는 강제 후크 멜로디 키워드 — 중독성 있는 반복 멜로디를 만들도록 Suno에게 강제 신호.
-  const HOOK_MELODY = 'earworm catchy melodic hook, repetitive memorable chorus melody, looping singalong vocal motif, melodic hook line repeats 4+ times';
-  const v = VOCALS[Math.floor(Math.random() * VOCALS.length)];
-  const t = TEMPOS[Math.floor(Math.random() * TEMPOS.length)];
-  return ', ' + HOOK_MELODY + ', ' + v + ', ' + t;
+  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+  return ', ' + pick(HOOK_MELODY_VARIANTS)
+       + ', ' + pick(MELODIC_CONTOURS)
+       + ', ' + pick(RHYTHM_FEELS)
+       + ', ' + pick(VOCALS)
+       + ', ' + pick(TEMPOS);
 }
 
 // 곡 생성 요청 → { jobId }
