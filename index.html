@@ -3204,8 +3204,8 @@ function drawTimedLyrics(ctx, W, H, cx, LINES, t) {
     let lx = cx - r.w / 2;
     for (const it of r.items) {
       // 검은 외곽선 (가독성) — 강조 단어엔 라임 글로우 추가
-      ctx.lineWidth = 9;
-      ctx.strokeStyle = 'rgba(0,0,0,0.82)';
+      ctx.lineWidth = 13;
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
       if (it.st === 'on') {
         ctx.shadowColor = 'rgba(212, 255, 58, 0.75)';
         ctx.shadowBlur = 22;
@@ -3228,6 +3228,10 @@ function drawTimedLyrics(ctx, W, H, cx, LINES, t) {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
       }
       ctx.fillText(it.text, lx, ly);
+      // 같은 색으로 한 번 더 stroke해서 시각적으로 굵게
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.strokeText(it.text, lx, ly);
       lx += it.ww + spaceW;
     }
     ly += lineH;
@@ -3287,8 +3291,8 @@ function drawSimpleLyrics(ctx, W, H, cx, lines, elapsed, duration, lyricStart, l
   for (const r of show) {
     let lx = cx - r.w / 2;
     for (const it of r.items) {
-      ctx.lineWidth = 9;
-      ctx.strokeStyle = 'rgba(0,0,0,0.82)';
+      ctx.lineWidth = 13;
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
       if (it.st === 'on') {
         ctx.shadowColor = 'rgba(212, 255, 58, 0.75)';
         ctx.shadowBlur = 22;
@@ -3310,6 +3314,10 @@ function drawSimpleLyrics(ctx, W, H, cx, lines, elapsed, duration, lyricStart, l
         ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
       }
       ctx.fillText(it.text, lx, ly);
+      // 같은 색으로 한 번 더 stroke해서 시각적으로 굵게
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.strokeText(it.text, lx, ly);
       lx += it.ww + spaceW;
     }
     ly += lineH;
