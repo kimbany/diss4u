@@ -68,19 +68,21 @@ function pickVarietyModifier() {
        + ', ' + pick(TEMPOS);
 }
 
-// 사용자가 UI에서 고른 목소리(gender)를 Suno style에 명시적으로 박는다.
-// 이게 없으면 Suno가 알아서 결정해 같은 선택이라도 매번 성별이 달라지는 회귀가 있었음.
+// 사용자가 UI "노래 부르는 목소리"에서 고른 voice를 Suno style에 명시적으로 박는다.
+// (놀림 대상의 성별 'gender'와는 별개 — voice는 노래 부르는 가수의 보컬 성격)
+// random 또는 매핑 없는 값은 hint 안 박음 → Suno가 알아서 + 기존 variety 모디파이어가 다양성 제공.
 const VOCAL_HINTS = {
-  male:   'adult male solo vocal, masculine voice, single male singer',
-  female: 'adult female solo vocal, feminine voice, single female singer',
-  child:  'cute child-like vocal, playful innocent young voice',
-  group:  'group chorus vocals, 3 to 4 voices harmonizing together as a group',
-  duet:   'male and female duet, alternating vocals between two singers',
-  pet:    'cute high-pitched playful character voice with animal-like inflections'
+  male:     'adult male solo vocal, masculine voice, single male singer',
+  female:   'adult female solo vocal, feminine voice, single female singer',
+  child:    'cute child-like vocal, playful innocent young voice',
+  group:    'group chorus vocals, 3 to 4 voices harmonizing together as a group',
+  duet:     'male and female duet, alternating vocals between two singers',
+  husky:    'husky low-pitched raspy vocal, smoky deep voice, gravelly texture',
+  hightone: 'bright high-pitched soaring vocal, crystal clear soprano-like tone'
 };
 
 // 곡 생성 요청 → { jobId }
-export async function generateSong({ lyrics, title, style, gender, model = 'V5', apiKey = process.env.KIE_API_KEY }) {
+export async function generateSong({ lyrics, title, style, voice, model = 'V5', apiKey = process.env.KIE_API_KEY }) {
   if (!apiKey) throw Object.assign(new Error('KIE_API_KEY 없음'), { status: 500 });
   // 운영 힌트 (proxy/server.js 기존 처리와 동일).
   //  · 사용자 보고: 자체 인트로(보컬 없는 비트만 나오는 구간)가 20초+ 길어지는 회귀.
@@ -89,7 +91,7 @@ export async function generateSong({ lyrics, title, style, gender, model = 'V5',
   //  · variety modifier — 호출마다 보컬/리듬 톤이 살짝 달라져 같은 장르여도 매번 색이 다른 곡.
   const SHORT_HINT = ', short song around 45 seconds, vocals start at 0:00, no instrumental intro, no intro buildup, jump straight into the verse, no long outro, fade out at end';
   const variety = pickVarietyModifier();
-  const vocalHint = VOCAL_HINTS[gender] ? ', ' + VOCAL_HINTS[gender] : '';
+  const vocalHint = VOCAL_HINTS[voice] ? ', ' + VOCAL_HINTS[voice] : '';
   const finalStyle = /short|seconds|outro|fade/i.test(style || '') ? (style + vocalHint) : ((style || '') + SHORT_HINT + variety + vocalHint);
 
   // 가사 안전망: LLM이 실수로 [Intro] 블록을 넣어도 통째로 제거 → Suno가 인트로 마커를 보고

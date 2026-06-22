@@ -866,10 +866,7 @@ function buildPrompt(params) {
     bollywood: 'energetic Bollywood dance number, tabla and dhol percussion, sitar riffs and lush Indian strings, dramatic cinematic melody, group chorus chanting, festive wedding-party mood'
   };
   const genreStyle = GENRE_STYLE[genreRaw] || 'upbeat playful Korean pop, catchy melodic hook, bright energetic mood';
-  const genderText = {
-    male: '남자', female: '여자', child: '어린이',
-    group: '그룹(여러 명 코러스)', duet: '남녀 듀엣', pet: '반려동물'
-  }[gender] || '미지정';
+  const genderText = { male: '남자', female: '여자', pet: '반려동물' }[gender] || '미지정';
   const langText = { ko: '한글', en: '영어', mix: '섞기' }[lang] || '한글';
   // 꼭 넣고 싶은 문장: 콤마(,) 또는 줄바꿈으로 여러 문장 구분 → 각 문장을 그대로 보존
   const mustList = (mustInclude && mustInclude.trim())
@@ -2994,7 +2991,7 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    const { lyrics, title, style, gender } = await readBody(req);
+    const { lyrics, title, style, voice } = await readBody(req);
     if (!lyrics || !title || !style) {
       if (uid) await refundCredits(uid, COST_PER_SONG);
       return send(res, 400, { error: '필수 항목 누락' });
@@ -3003,7 +3000,7 @@ const server = http.createServer(async (req, res) => {
     // 곡 생성: kie.ai(Suno). 길이 단축 힌트·[End] 마커는 kie-music.js가 처리.
     let jobId;
     try {
-      ({ jobId } = await kie.generateSong({ lyrics, title, style, gender }));
+      ({ jobId } = await kie.generateSong({ lyrics, title, style, voice }));
     } catch (e) {
       // 제출 실패 → 즉시 환불
       if (uid) await refundCredits(uid, COST_PER_SONG);

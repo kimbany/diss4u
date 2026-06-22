@@ -777,13 +777,10 @@
       </div>
 
       <div class="field">
-        <div class="label"><span class="label-icon">⚧</span>목소리</div>
+        <div class="label"><span class="label-icon">⚧</span>놀릴 상대 (성별 / 종류)</div>
         <div class="pill-row" id="genderRow">
           <div class="pill selected" data-gender="male">🚹 남자</div>
           <div class="pill" data-gender="female">🚺 여자</div>
-          <div class="pill" data-gender="child">🧒 어린이</div>
-          <div class="pill" data-gender="group">👥 그룹</div>
-          <div class="pill" data-gender="duet">🎭 듀엣</div>
           <div class="pill" data-gender="pet">🐶 반려동물</div>
         </div>
       </div>
@@ -830,6 +827,20 @@
           <div class="pill" data-genre="random">🎲 랜덤</div>
           <div class="pill soon" data-genre="trot">트로트 <span class="soon-tag">준비중</span></div>
           <div class="pill soon" data-genre="ppongjjak">뽕짝 <span class="soon-tag">준비중</span></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="label"><span class="label-icon">🎤</span>노래 부르는 목소리</div>
+        <div class="pill-row" id="voiceRow">
+          <div class="pill selected" data-voice="random">🎲 랜덤</div>
+          <div class="pill" data-voice="male">🚹 남자</div>
+          <div class="pill" data-voice="female">🚺 여자</div>
+          <div class="pill" data-voice="child">🧒 어린이</div>
+          <div class="pill" data-voice="group">👥 그룹</div>
+          <div class="pill" data-voice="duet">🎭 듀엣</div>
+          <div class="pill" data-voice="husky">🎙️ 허스키</div>
+          <div class="pill" data-voice="hightone">✨ 하이톤</div>
         </div>
       </div>
 
@@ -2322,7 +2333,8 @@ async function renderMyList() {
 
 const STATE = {
   selectedGenre: 'yodel',
-  selectedGender: 'male',
+  selectedGender: 'male',   // 놀릴 대상의 성별/종류 (대상 정보)
+  selectedVoice: 'random',  // 노래 부르는 가수의 보컬 (랜덤 = Suno 자동 + 다양성 모디파이어)
   selectedLang: 'ko',
   currentSong: null,
   generationCancelled: false,
@@ -2384,12 +2396,21 @@ window.addEventListener('load', () => {
     });
   });
 
-  // 성별 선택 (성별 그룹 내에서만)
+  // 성별 선택 (놀림 대상의 성별/종류)
   document.querySelectorAll('#genderRow .pill').forEach(pill => {
     pill.addEventListener('click', () => {
       document.querySelectorAll('#genderRow .pill').forEach(p => p.classList.remove('selected'));
       pill.classList.add('selected');
       STATE.selectedGender = pill.dataset.gender;
+    });
+  });
+
+  // 목소리 선택 (노래 부르는 가수의 보컬 — 대상 성별과 별개)
+  document.querySelectorAll('#voiceRow .pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('#voiceRow .pill').forEach(p => p.classList.remove('selected'));
+      pill.classList.add('selected');
+      STATE.selectedVoice = pill.dataset.voice;
     });
   });
 
@@ -2482,7 +2503,7 @@ async function startGeneration() {
       lyrics: lyricsData.lyrics,
       title: lyricsData.title,
       style: lyricsData.style,
-      gender: STATE.selectedGender
+      voice: STATE.selectedVoice
     });
 
     const jobId = submitResult.jobId || submitResult.job_id || submitResult.id;
@@ -2769,11 +2790,13 @@ function newSong() {
     }
     resetPills('genreRow', 'genre', 'yodel');
     resetPills('genderRow', 'gender', 'male');
+    resetPills('voiceRow', 'voice', 'random');
     document.querySelectorAll('.lang-toggle button').forEach(b => {
       b.classList.toggle('active', b.dataset.lang === 'ko');
     });
     STATE.selectedGenre = 'yodel';
     STATE.selectedGender = 'male';
+    STATE.selectedVoice = 'random';
     STATE.selectedLang = 'ko';
   } catch (e) { console.warn('newSong reset fail', e); }
 
