@@ -320,6 +320,17 @@ async function markLastGrant(uid, amount, source, by) {
   } catch (e) { console.warn('lastGrant mark fail', e.message); }
 }
 
+// 쿠폰 시리얼 생성: 12자 (4-4-4 그룹). 혼동 문자 제외 (0/O/1/I 등).
+const COUPON_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function generateCouponCode() {
+  let out = '';
+  for (let i = 0; i < 12; i++) {
+    out += COUPON_CHARS.charAt(Math.floor(Math.random() * COUPON_CHARS.length));
+    if (i === 3 || i === 7) out += '-';
+  }
+  return out;
+}
+
 // 충전 크레딧 소멸일(다음에 만료될 충전 건): 결제일 + 1년.
 // FIFO로 가장 오래된 미소진 결제 건을 찾아 만료일을 산출.
 // 입력: uid, 현재 paidCredits(잔액). 결과: ISO 문자열 또는 null.
@@ -2474,6 +2485,102 @@ const server = http.createServer(async (req, res) => {
     const genres = Object.entries(genreMap).map(([genre, c]) => ({ genre, count: c })).sort((a, b) => b.count - a.count);
     const keywords = Object.entries(kwMap).map(([keyword, c]) => ({ keyword, count: c })).sort((a, b) => b.count - a.count).slice(0, 30);
     return send(res, 200, { ok: true, from, to, count, uniqueUsers: uniqueUsers.size, genres, keywords });
+  }
+
+  // [관리자] 쿠폰 생성. body: { amount, perUserOnce }
+  // 시리얼 자동 생성(12자, 4-4-4 그룹, 혼동 문자 제외).
+  if (path === '/admin/coupons' && req.method === 'POST') {
+    if (!(await verifyAdmin(req))) return send(res, 401, { error: 'admin_auth_required', message: '관리자 인증이 필요해요' });
+    const { amount, perUserOnce } = await readBody(req);
+    const amt = Math.floor(Number(amount));
+    if (!Number.isFinite(amt) || amt <= 0) return send(res, 400, { error: 'bad_amount', message: '크레딧 수량은 1 이상의 숫자여야 해요' });
+    if (amt > 100000) return send(res, 400, { error: 'too_large', message: '한 쿠폰에 너무 큰 금액은 만들 수 없어요' });
+    for (let i = 0; i < 5; i++) {
+      const code = generateCouponCode();
+      const ref = fdb.collection('coupons').doc(code);
+      const snap = await ref.get();
+      if (snap.exists) continue;
+      await ref.set({
+        code, amount: amt, perUserOnce: !!perUserOnce, uses: 0, lastUsedAt: null,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(), createdBy: 'admin'
+      });
+      return send(res, 200, { ok: true, code, amount: amt, perUserOnce: !!perUserOnce });
+    }
+    return send(res, 500, { error: 'collision', message: '시리얼 생성 충돌 — 다시 시도해주세요' });
+  }
+
+  // [관리자] 쿠폰 목록
+  if (path === '/admin/coupons' && req.method === 'GET') {
+    if (!(await verifyAdmin(req))) return send(res, 401, { error: 'admin_auth_required', message: '관리자 인증이 필요해요' });
+    let rows = [];
+    try {
+      const qs = await fdb.collection('coupons').get();
+      rows = qs.docs.map(d => {
+        const x = d.data();
+        return {
+          code: d.id,
+          amount: x.amount || 0,
+          perUserOnce: !!x.perUserOnce,
+          uses: x.uses || 0,
+          createdAt: (x.createdAt && x.createdAt.toDate) ? x.createdAt.toDate().toISOString() : null,
+          lastUsedAt: (x.lastUsedAt && x.lastUsedAt.toDate) ? x.lastUsedAt.toDate().toISOString() : null
+        };
+      });
+    } catch (e) {
+      return send(res, 500, { error: 'list_failed', message: '쿠폰 목록 조회 실패', detail: e.message });
+    }
+    rows.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    return send(res, 200, { ok: true, count: rows.length, coupons: rows });
+  }
+
+  // [사용자] 쿠폰 사용. body: { code }. 무료 풀로 적립, perUserOnce면 1회만.
+  if (path === '/redeem-coupon' && req.method === 'POST') {
+    if (!CREDITS_ENABLED) return send(res, 400, { error: 'credits_disabled', message: '크레딧 시스템이 꺼져 있어요' });
+    const a = await verifyAuthFull(req);
+    if (!a) return send(res, 401, { error: 'auth_required', message: '로그인이 필요해요' });
+    const { code } = await readBody(req);
+    if (!code) return send(res, 400, { error: 'no_code', message: '쿠폰 시리얼을 입력해주세요' });
+    const normCode = String(code).trim().toUpperCase();
+    if (!/^[A-Z2-9-]+$/.test(normCode)) return send(res, 400, { error: 'bad_code', message: '쿠폰 형식이 올바르지 않아요' });
+    const cref = fdb.collection('coupons').doc(normCode);
+    const csnap = await cref.get();
+    if (!csnap.exists) return send(res, 404, { error: 'not_found', message: '쿠폰을 찾을 수 없어요. 시리얼을 다시 확인해주세요' });
+    const c = csnap.data();
+    const amount = Math.floor(Number(c.amount) || 0);
+    if (amount <= 0) return send(res, 400, { error: 'bad_coupon', message: '잘못된 쿠폰이에요' });
+    const uref = fdb.collection('users').doc(a.uid);
+    const rref = cref.collection('redemptions').doc(a.uid);
+    let result;
+    try {
+      await getOrCreateUser(a.uid, a.email);
+      result = await fdb.runTransaction(async (t) => {
+        // 모든 READ 먼저
+        const usnap = await t.get(uref);
+        let rsnap = null;
+        if (c.perUserOnce) { rsnap = await t.get(rref); }
+        const cs2 = await t.get(cref);
+        if (!cs2.exists) { const e = new Error('not_found'); e.code = 'not_found'; throw e; }
+        if (c.perUserOnce && rsnap && rsnap.exists) { const e = new Error('already_used'); e.code = 'already_used'; throw e; }
+        // WRITE
+        const p = usnap.exists ? splitPools(usnap.data()) : { free: 0, paid: 0, freeGranted: 0, paidGranted: 0 };
+        p.free += amount;
+        p.freeGranted += amount;
+        const extra = usnap.exists ? {} : { createdAt: admin.firestore.FieldValue.serverTimestamp() };
+        t.set(uref, poolPatch(p, extra), { merge: true });
+        if (c.perUserOnce) {
+          t.set(rref, { uid: a.uid, amount, redeemedAt: admin.firestore.FieldValue.serverTimestamp() });
+        }
+        t.update(cref, { uses: admin.firestore.FieldValue.increment(1), lastUsedAt: admin.firestore.FieldValue.serverTimestamp() });
+        return { credits: p.free + p.paid, free: p.free, paid: p.paid };
+      });
+    } catch (e) {
+      if (e && e.code === 'already_used') return send(res, 409, { error: 'already_used', message: '이미 사용한 쿠폰이에요' });
+      if (e && e.code === 'not_found') return send(res, 404, { error: 'not_found', message: '쿠폰을 찾을 수 없어요' });
+      return send(res, 500, { error: 'redeem_failed', message: '쿠폰 사용 실패', detail: e && e.message });
+    }
+    await logCredit(a.uid, amount, 'free', 'coupon');
+    await markLastGrant(a.uid, amount, 'coupon', normCode);
+    return send(res, 200, { ok: true, granted: amount, code: normCode, credits: result.credits, freeCredits: result.free, paidCredits: result.paid });
   }
 
   // [관리자] 자동 환불: 포트원 취소(부분/전액) + 유료 크레딧 차감 + 기록
