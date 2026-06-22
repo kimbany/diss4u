@@ -8,6 +8,7 @@ function pick(obj, ...keys) { for (const k of keys) if (obj && obj[k] != null) r
 function authHeaders(apiKey) { return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }; }
 
 // 곡 생성마다 살짝 다른 보컬·리듬 톤을 섞어서 다양성 확보 — 같은 장르여도 매번 색이 달라짐.
+// 추가로 "입에 붙는 후크 멜로디"는 매번 강제 — Suno가 반복 멜로딕 후크를 만들도록 항상 박는다.
 function pickVarietyModifier() {
   const VOCALS = [
     'energetic vocal performance', 'playful vocal delivery',
@@ -20,9 +21,11 @@ function pickVarietyModifier() {
     'bouncy snappy groove', 'tight rhythmic flow',
     'high-energy drum pattern', 'syncopated catchy beat'
   ];
+  // 매번 들어가는 강제 후크 멜로디 키워드 — 중독성 있는 반복 멜로디를 만들도록 Suno에게 강제 신호.
+  const HOOK_MELODY = 'earworm catchy melodic hook, repetitive memorable chorus melody, looping singalong vocal motif, melodic hook line repeats 4+ times';
   const v = VOCALS[Math.floor(Math.random() * VOCALS.length)];
   const t = TEMPOS[Math.floor(Math.random() * TEMPOS.length)];
-  return ', ' + v + ', ' + t;
+  return ', ' + HOOK_MELODY + ', ' + v + ', ' + t;
 }
 
 // 곡 생성 요청 → { jobId }
