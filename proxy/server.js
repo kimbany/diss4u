@@ -778,8 +778,59 @@ function readBody(req) {
   });
 }
 
+// ── 유행어/신조어 자동 검색 ───────────────────────────────────────────────
+// 가사 LLM은 아주 최신 신조어(예: "밤티")를 몰라 글자 그대로 엉뚱하게 해석한다.
+// 가사 생성 직전 키워드를 네이버에 검색해 "진짜 뜻"을 찾아 프롬프트에 같이 넣어준다.
+// 안전 설계: NAVER 키가 없거나 검색이 실패하면 빈 문자열 → 기존 동작 그대로 유지.
+function stripTags(s) {
+  return String(s || '').replace(/<[^>]+>/g, '').replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim();
+}
+function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+async function naverSearch(kind, query, display) {
+  const id = process.env.NAVER_CLIENT_ID, sec = process.env.NAVER_CLIENT_SECRET;
+  if (!id || !sec) return null;
+  const url = `https://openapi.naver.com/v1/search/${kind}.json?query=${encodeURIComponent(query)}&display=${display || 3}&sort=sim`;
+  try {
+    const r = await fetch(url, { headers: { 'X-Naver-Client-Id': id, 'X-Naver-Client-Secret': sec } });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return Array.isArray(j.items) ? j.items : null;
+  } catch (e) { return null; }
+}
+// 검색 본문들에서 "키워드는 ~다 / 키워드의 뜻은 ~" 같은 정의 문장을 우선 추출한다.
+function extractMeaning(keyword, descs) {
+  const joined = descs.join('  ').replace(/\s+/g, ' ').trim();
+  if (!joined) return '';
+  const re = new RegExp(escapeRe(keyword) + '[\\s\\S]{0,6}?(?:은|는|이란|란|이라는|뜻은|뜻이|의미는|를 뜻|를 의미|이라고)[\\s\\S]{2,70}');
+  const m = joined.match(re);
+  if (m) return m[0].replace(/\s+/g, ' ').trim().slice(0, 110);
+  return joined.slice(0, 180);
+}
+async function lookupKeywordMeanings(keywordsRaw) {
+  if (!process.env.NAVER_CLIENT_ID || !process.env.NAVER_CLIENT_SECRET) return '';   // 키 없으면 건너뜀
+  const kws = String(keywordsRaw || '').split(/[,\n]/).map(s => s.trim()).filter(Boolean).slice(0, 6);
+  if (!kws.length) return '';
+  const lines = [];
+  await Promise.all(kws.map(async (kw) => {
+    try {
+      const [blog, kin] = await Promise.all([
+        naverSearch('blog', kw + ' 뜻', 3),
+        naverSearch('kin', kw + ' 뜻', 2),
+      ]);
+      const items = [...(blog || []), ...(kin || [])];
+      if (!items.length) return;
+      const blob = stripTags(items.map(it => it.title + ' ' + it.description).join(' '));
+      // 신조어/유행어/밈 신호가 있을 때만 AI에 넘김 → 평범한 단어(광고·잡음)는 제외
+      if (!/신조어|유행어|밈|MZ|줄임말/.test(blob)) return;
+      const meaning = extractMeaning(kw, items.map(it => stripTags(it.description)));
+      if (meaning) lines.push(`- "${kw}" (신조어): ${meaning}`);
+    } catch (e) {}
+  }));
+  return lines.join('\n');
+}
+
 function buildPrompt(params) {
-  const { name, relationship, keywords, genre: genreRaw, lang, gender, mustInclude, useNameInLyrics } = params;
+  const { name, relationship, keywords, genre: genreRaw, lang, gender, mustInclude, useNameInLyrics, slangNote } = params;
   // 프런트에서 영어 코드로 넘어오는 장르를 프롬프트의 [장르별 작성 가이드] 섹션명과 정확히 매칭되는 한국어로 변환
   const GENRE_MAP = {
     hiphop: '힙합', rap: '장난 랩', ballad: '과몰입 발라드', trot: '킹받 트로트',
@@ -1284,6 +1335,13 @@ Hook은 설명이 아니라 구호처럼 들려야 한다.
 
 ★ 너의 학습 데이터 기준 최신 유행어를 활용하되, 의미가 불확실한 단어는 쓰지 마라.
 ★ 키워드와 가사 맥락에 맞을 때만 유행어를 사용해라. 억지로 끼워넣지 마라.
+
+[실시간 검색된 키워드 뜻 — 인터넷 검색 결과]
+${slangNote && slangNote.trim() ? slangNote : '(검색된 신조어 없음 — 키워드를 일반적인 의미로 해석하라)'}
+※ 위는 키워드를 방금 인터넷에서 검색한 "실제 뜻"이다. 다음을 지켜라:
+  - 네가 모르는 최신 신조어라도 위에 뜻이 있으면 그 뜻대로 정확히 해석해 가사에 녹여라.
+    (글자 그대로 엉뚱하게 풀지 마라. 예: "밤티"가 검색에서 "촌스럽다는 신조어"면 그 뜻으로 써라.)
+  - 검색 결과의 광고·홍보·블로그 인삿말은 절대 가사에 넣지 마라 — 뜻만 참고해라.
 
 ---
 
@@ -2617,6 +2675,9 @@ const server = http.createServer(async (req, res) => {
     }
     const params = await readBody(req);
     if (!params.name || !params.keywords) return send(res, 400, { error: '필수 항목 누락' });
+    // 가사 만들기 직전, 키워드를 검색해 신조어/밈의 진짜 뜻을 찾아 프롬프트에 같이 넣는다.
+    // (네이버 키 없거나 실패 시 빈 문자열 → 기존과 동일 동작)
+    params.slangNote = await lookupKeywordMeanings(params.keywords);
     const prompt = buildPrompt(params);
 
     let r = await tryClaude(prompt);
