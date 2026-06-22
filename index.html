@@ -563,7 +563,9 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;       /* Firefox: 스크롤바 숨김 */
   }
+  .modal::-webkit-scrollbar { display: none; }   /* Chrome/Safari: 스크롤바 숨김 */
   .modal-title {
     font-size: 20px; font-weight: 700;
     color: var(--lime); margin-bottom: 8px;
@@ -3166,9 +3168,9 @@ function drawTimedLyrics(ctx, W, H, cx, LINES, t) {
   ctx.save();
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.font = '800 46px "NanumSquare", Pretendard, sans-serif';
+  ctx.font = '900 38px "NanumSquare", Pretendard, sans-serif';
   ctx.lineJoin = 'round';
-  const maxW = W * 0.88, spaceW = ctx.measureText(' ').width;
+  const maxW = W * 0.76, spaceW = ctx.measureText(' ').width;
   const rows = []; let row = [], rowW = 0;
   for (let j = 0; j < ws.length; j++) {
     const ww = ctx.measureText(ws[j].word).width;
@@ -3178,8 +3180,8 @@ function drawTimedLyrics(ctx, W, H, cx, LINES, t) {
   }
   if (row.length) rows.push({ items: row, w: rowW });
   const show = rows.slice(0, 3);
-  const lineH = 60;
-  let ly = H * 0.50 - (show.length - 1) * (lineH / 2);
+  const lineH = 50;
+  let ly = H * 0.42 - (show.length - 1) * (lineH / 2);
   for (const r of show) {
     let lx = cx - r.w / 2;
     for (const it of r.items) {
@@ -3245,11 +3247,11 @@ function drawSimpleLyrics(ctx, W, H, cx, lines, elapsed, duration, lyricStart, l
   ctx.save();
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.font = '800 46px "NanumSquare", Pretendard, sans-serif';
+  ctx.font = '900 38px "NanumSquare", Pretendard, sans-serif';
   ctx.lineJoin = 'round';
   ctx.globalAlpha = fade;
 
-  const maxW = W * 0.88, spaceW = ctx.measureText(' ').width;
+  const maxW = W * 0.76, spaceW = ctx.measureText(' ').width;
 
   // 단어를 행으로 묶기 + 각 단어 상태(이미 지난 / 현재 / 미래) 부여
   const rows = []; let row = [], rowW = 0;
@@ -3262,8 +3264,8 @@ function drawSimpleLyrics(ctx, W, H, cx, lines, elapsed, duration, lyricStart, l
   if (row.length) rows.push({ items: row, w: rowW });
 
   const show = rows.slice(0, 3);
-  const lineH = 60;
-  let ly = H * 0.50 - (show.length - 1) * (lineH / 2);
+  const lineH = 50;
+  let ly = H * 0.42 - (show.length - 1) * (lineH / 2);
   for (const r of show) {
     let lx = cx - r.w / 2;
     for (const it of r.items) {
