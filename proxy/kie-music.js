@@ -82,17 +82,34 @@ function pickVarietyModifier({ skipVocalConflict = false } = {}) {
 
 // 사용자가 UI "노래 부르는 목소리"에서 고른 voice를 Suno style에 명시적으로 박는다.
 // (놀림 대상의 성별 'gender'와는 별개 — voice는 노래 부르는 가수의 보컬 성격)
-// random 또는 매핑 없는 값은 hint 안 박음 → Suno가 알아서 + 기존 variety 모디파이어가 다양성 제공.
+//
+// ★ Suno V5는 style 키워드만으로 vocal effect를 약하게 처리하는 경향이 있어서:
+//   1) 키워드를 구체적 레퍼런스(Daft Punk/T-Pain 등)와 강제어(HEAVILY/NOT/MUST)로 강화.
+//   2) 가사 안에도 효과 마커를 같이 박는다(아래 VOICE_LYRIC_MARKERS).
+// random 또는 매핑 없는 값은 hint 안 박음 → variety 모디파이어가 다양성 제공.
 const VOCAL_HINTS = {
   male:     'adult male solo vocal, masculine voice, single male singer',
   female:   'adult female solo vocal, feminine voice, single female singer',
-  child:    'cute child-like vocal, playful innocent young voice',
-  group:    'group chorus vocals, 3 to 4 voices harmonizing together as a group',
-  duet:     'male and female duet, alternating vocals between two singers',
-  husky:    'husky low-pitched raspy vocal, smoky deep voice, gravelly texture',
-  hightone: 'bright high-pitched soaring vocal, crystal clear soprano-like tone',
-  robot:    'robotic vocal with strong auto-tune and vocoder effects, synthesized digital voice, sci-fi machine-like delivery',
-  elder:    'old elderly male voice, raspy aged warm tone, grandfather-like wise character voice with gentle vibrato'
+  child:    'cute child-like vocal, playful innocent young child voice, high-pitched kid singer',
+  group:    'group chorus vocals, 4 voices harmonizing together as a K-pop style boy/girl group',
+  duet:     'male and female duet, clear alternating call-and-response vocals between two distinct singers',
+  husky:    'very husky low-pitched raspy vocal, smoky deep gravelly voice, gritty texture, NOT smooth or clean voice',
+  hightone: 'extremely bright high-pitched soaring vocal, crystal clear soprano-like falsetto tone, NOT low or normal pitch',
+  robot:    'HEAVILY auto-tuned robotic vocoder vocal throughout the entire song, Daft Punk-style and T-Pain-style metallic synthesized android voice, clearly artificial mechanical cyborg singing with pitch correction, NOT a natural human voice, electronic processed vocals must be obvious',
+  elder:    'noticeably old elderly man voice, raspy weak aged trembling vocals with audible wobble and vibrato, grandfather-like wise warm gentle delivery, clearly an old man NOT a young adult'
+};
+
+// 가사 안에 보컬 효과 마커를 박는다. Suno V5는 가사 안의 [bracket vocal effect] 마커를
+// style 키워드보다 더 강하게 따른다(사용자 보고: "오토튠 안 들린다" → style만으론 약함).
+// male/female는 일반 솔로라 마커 없이도 OK → 매핑 안 함.
+const VOICE_LYRIC_MARKERS = {
+  child:    '[cute child-like high-pitched voice]',
+  group:    '[group chorus harmonized vocals]',
+  duet:     '[male and female duet alternating vocals]',
+  husky:    '[husky deep raspy gravelly vocal]',
+  hightone: '[bright high-pitched soaring falsetto vocal]',
+  robot:    '[heavy auto-tune robotic vocoder vocal]',
+  elder:    '[elderly raspy old man voice with vibrato]'
 };
 
 // 곡 생성 요청 → { jobId }
@@ -114,14 +131,24 @@ export async function generateSong({ lyrics, title, style, voice, model = 'V5', 
     ? (vocalLead + baseStyle)
     : (vocalLead + baseStyle + SHORT_HINT + variety);
 
-  // 디버그 — voice 선택이 finalStyle에 잘 박혔는지 서버 로그에서 확인.
-  console.log('[kie generateSong] voice=' + (voice || 'none') + ' / hasVoice=' + hasVoice
-    + ' / finalStyle head: ' + finalStyle.slice(0, 200));
+  // 디버그 — voice 선택이 finalStyle/가사 마커에 잘 박혔는지 서버 로그에서 확인.
+  console.log('[kie generateSong] voice=' + (voice || 'none')
+    + ' / hasVoice=' + hasVoice
+    + ' / lyricMarker=' + (VOICE_LYRIC_MARKERS[voice] || 'none')
+    + ' / finalStyle head: ' + finalStyle.slice(0, 220));
 
   // 가사 안전망: LLM이 실수로 [Intro] 블록을 넣어도 통째로 제거 → Suno가 인트로 마커를 보고
   // 인트로를 만드는 경향을 차단. [End] 마커는 없으면 추가.
   let finalLyrics = (lyrics || '').trim();
   finalLyrics = finalLyrics.replace(/\[Intro\][\s\S]*?(?=\n\s*\[[^\]]+\]|$)/gi, '').trim();
+
+  // 가사 안에 보컬 효과 마커 삽입 — Suno V5가 style 키워드만으로 약하게 처리하는 vocal effect를
+  // 가사 안에 명시적으로 박아 강제. 첫 섹션 마커([Verse]/[Hook] 등) 바로 다음 줄에 삽입.
+  const lyricMarker = VOICE_LYRIC_MARKERS[voice];
+  if (lyricMarker) {
+    finalLyrics = finalLyrics.replace(/^(\[[^\]]+\]\s*\n)/, '$1' + lyricMarker + '\n');
+  }
+
   if (!/\[End\]\s*$/i.test(finalLyrics)) finalLyrics += '\n\n[End]';
 
   const r = await fetch(`${KIE_BASE}/api/v1/generate`, {
