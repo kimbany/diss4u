@@ -95,7 +95,7 @@ const VOCAL_HINTS = {
   duet:     'male and female duet, clear alternating call-and-response vocals between two distinct singers',
   husky:    'very husky low-pitched raspy vocal, smoky deep gravelly voice, gritty texture, NOT smooth or clean voice',
   hightone: 'extremely bright high-pitched soaring vocal, crystal clear soprano-like falsetto tone, NOT low or normal pitch',
-  robot:    'HEAVILY auto-tuned robotic vocoder vocal throughout the entire song, Daft Punk-style and T-Pain-style metallic synthesized android voice, clearly artificial mechanical cyborg singing with pitch correction, NOT a natural human voice, electronic processed vocals must be obvious',
+  robot:    'HEAVILY auto-tuned robotic vocoder vocal throughout the entire song, metallic synthesized android voice with obvious pitch correction and talk-box effect, clearly artificial mechanical cyborg singing, NOT a natural human voice, electronic processed vocals must be obvious',
   elder:    'noticeably old elderly man voice, raspy weak aged trembling vocals with audible wobble and vibrato, grandfather-like wise warm gentle delivery, clearly an old man NOT a young adult'
 };
 
