@@ -970,11 +970,19 @@ function buildPrompt(params) {
     syllable: syllableMode,
     syllablePattern: syllableMode.tag === 'no_syllable' ? null : pickRand(SYLLABLE_PATTERNS),
     angle: pickRand(APPROACH_ANGLES),
-    scene: pickRand(SCENE_DOMAINS)
+    // 무대(장면)는 가끔만(40%) 준다 — 매번 강제하면 노래가 키워드 대신 장면을 주제로 삼아 이탈함.
+    scene: (Math.random() < 0.4 ? pickRand(SCENE_DOMAINS) : null)
   };
   const syllableSeedLine = seed.syllable.tag === 'no_syllable'
     ? `5. 음절 후크 모드:  ${seed.syllable.desc}`
     : `5. 음절 후크 모드:  ${seed.syllable.desc}\n   - 사용할 음절 패턴: ${seed.syllablePattern}`;
+  // 무대 시드: 있을 때만 "배경"으로 약하게 — 노래 주제는 항상 키워드임을 명시.
+  const sceneSeedLine = seed.scene
+    ? `7. 이번 곡 배경(선택): "${seed.scene}"\n`
+      + `   → 이건 "배경"일 뿐이다. ★ 노래의 주제는 항상 키워드(대상의 특징)다 ★.\n`
+      + `   → 키워드가 이 배경에서 어떻게 드러나는지만 그려라. 배경 자체를 노래하지 마라.\n`
+      + `   → 배경이 키워드와 안 어울리면 그냥 무시하고 키워드에 집중해라.`
+    : `7. 이번 곡 배경: (자유 — 무대 제약 없이 키워드에만 집중해서 풀어라)`;
   const seedBlock = `
 
 ═══════════════════════════════
@@ -990,10 +998,7 @@ function buildPrompt(params) {
 4. 문장 스타일:   ${seed.sent}
 ${syllableSeedLine}
 6. 가사 접근 각도: ${seed.angle}
-7. 이번 곡 영감(장면): "${seed.scene}"
-   → 뻔한 소재(거울·셀카)로 도망가지 않기 위한 출발 영감일 뿐이다.
-   → 이 무대를 배경으로 신선한 장면을 그리되, ★억지로 끼워맞춰 흐름을 깨지 마라★.
-   → 키워드와 자연스럽게 안 어울리면, 무대는 살짝만 비추거나 분위기만 빌려와도 된다.
+${sceneSeedLine}
 
 ═══════════════════════════════
 ★★ 시드보다 위인 단 하나의 규칙: 문맥(흐름) ★★
@@ -1164,6 +1169,15 @@ ${genreStyle}${nameRule}
 
 규칙끼리 충돌하면, 문맥과 Hook의 중독성을 먼저 살려라.
 뜻이 깨지는 라임, 억지 키워드 삽입, 뜬금없는 비유는 모두 실패다.
+
+★★ 키워드 결속 규칙 (가장 중요) ★★
+이 노래의 "주제"는 언제나 입력 키워드 = 놀릴 대상의 특징·습관·약점이다.
+- 모든 Hook·Verse 줄은 키워드(또는 그 의미)와 직접 연결돼야 한다.
+- ★ 키워드와 상관없는 문장을 지어내지 마라. 무대(배경)·감정·각도·장르는 키워드를
+  "표현하는 도구"일 뿐, 노래의 주제가 절대 아니다.
+- "원형 완화"는 키워드 단어를 꼭 그대로 안 써도 된다는 뜻이지,
+  키워드 주제에서 벗어나도 된다는 뜻이 절대 아니다.
+- 자체 점검: 가사의 모든 줄이 "이게 이 키워드 때문에 나온 말인가?"에 YES여야 한다.
 
 ---
 
