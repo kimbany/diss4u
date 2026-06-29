@@ -971,6 +971,19 @@ function buildPrompt(params) {
     '공항·여행 가는 길', '반려동물 산책', '온라인 쇼핑 장바구니', '회식 끝까지 남은 자리',
     '줌(화상) 회의', '셀프 사진관 부스', '버스킹·길거리', '새벽 편의점'
   ];
+  // 표현 렌즈 — 같은 키워드라도 매 곡 "다른 각도/소재"로 풀게 강제하는 핵심 장치.
+  // (스테이트리스라 곡끼리 기억을 못 하므로, 랜덤 렌즈로 소재 수렴을 깬다.)
+  const CONTENT_LENS = [
+    '주변 사람들의 반응·놀림 중심 — 친구·가족이 그 특징을 보고 보이는 리액션으로 풀어라',
+    '허세 → 무너짐 반전 중심 — 큰소리 치다가 그 특징 때문에 무너지는 장면으로',
+    '딱 한 가지 구체적 상황 하나만 깊게 — 소재를 여러 개 나열하지 말고 한 장면을 길게',
+    '별명·칭호 짓기 중심 — 그 특징에 웃긴 별명/타이틀을 붙여 띄워라',
+    '미래 예언·저주 중심 — "평생 이럴 거다" 식으로 과장해 미래를 놀려라',
+    '남들과의 대비 중심 — "다들 ○○, 너만 ○○" 식 비교를 계속 보여줘라',
+    '후폭풍·결과 중심 — 그 행동/특징 "이후"에 벌어지는 일로 풀어라',
+    '변명·핑계 중심 — 본인이 그 특징을 그럴듯하게 변명/포장하는 모습으로',
+    '엉뚱한 비유·은유 중심 — 그 특징을 전혀 다른 것에 빗대 과장하라'
+  ];
   const pickRand = a => a[Math.floor(Math.random() * a.length)];
   const syllableMode = pickRand(SYLLABLE_HOOK_MODES);
   const seed = {
@@ -982,6 +995,7 @@ function buildPrompt(params) {
     syllable: syllableMode,
     syllablePattern: syllableMode.tag === 'no_syllable' ? null : pickRand(SYLLABLE_PATTERNS),
     angle: pickRand(APPROACH_ANGLES),
+    lens: pickRand(CONTENT_LENS),
     // 무대(장면)는 가끔만(40%) 준다 — 매번 강제하면 노래가 키워드 대신 장면을 주제로 삼아 이탈함.
     scene: null   // 랜덤 장소 강제는 끔(억지 장소 유발) — 아래 sceneSeedLine이 "자연스러운 구체 장면"만 유도
   };
@@ -1010,6 +1024,11 @@ function buildPrompt(params) {
 4. 문장 스타일:   ${seed.sent}
 ${syllableSeedLine}
 6. 가사 접근 각도: ${seed.angle}
+   ★★ 이번 곡 표현 렌즈 (매우 중요 — 같은 키워드도 매 곡 소재가 달라지게): ${seed.lens}
+   → 이번 곡은 이 렌즈로만 풀어라. 그래야 같은 키워드여도 매번 다른 노래가 된다.
+   → ★ 같은 종류의 소재를 3개 이상 줄줄이 나열하지 마라
+      (예: 떡볶이·신라면·라면·우유를 매 곡 똑같이 나열 = 실패).
+      핵심 소재는 곡당 1~2개만 고르고, 나머지는 위 렌즈로 풀어라.
 ${sceneSeedLine}
 
 ═══════════════════════════════
