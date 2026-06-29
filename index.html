@@ -839,10 +839,10 @@
           <div class="pill" data-voice="child">🧒 어린이</div>
           <div class="pill" data-voice="group">👥 그룹</div>
           <div class="pill" data-voice="duet">🎭 듀엣</div>
-          <div class="pill" data-voice="husky">🎙️ 허스키</div>
-          <div class="pill" data-voice="hightone">✨ 하이톤</div>
-          <div class="pill" data-voice="robot">🤖 로봇</div>
-          <div class="pill" data-voice="elder">👴 할아버지</div>
+          <div class="pill soon" data-voice="husky">🎙️ 허스키 <span class="soon-tag">준비중</span></div>
+          <div class="pill soon" data-voice="hightone">✨ 하이톤 <span class="soon-tag">준비중</span></div>
+          <div class="pill soon" data-voice="robot">🤖 로봇 <span class="soon-tag">준비중</span></div>
+          <div class="pill soon" data-voice="elder">👴 할아버지 <span class="soon-tag">준비중</span></div>
         </div>
       </div>
 
@@ -2410,6 +2410,7 @@ window.addEventListener('load', () => {
   // 목소리 선택 (노래 부르는 가수의 보컬 — 대상 성별과 별개)
   document.querySelectorAll('#voiceRow .pill').forEach(pill => {
     pill.addEventListener('click', () => {
+      if (pill.classList.contains('soon')) return;   // 준비중 옵션은 선택 불가
       document.querySelectorAll('#voiceRow .pill').forEach(p => p.classList.remove('selected'));
       pill.classList.add('selected');
       STATE.selectedVoice = pill.dataset.voice;
