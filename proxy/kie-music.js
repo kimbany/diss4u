@@ -91,7 +91,7 @@ const VOCAL_HINTS = {
   male:     'adult male solo vocal, masculine voice, single male singer',
   female:   'adult female solo vocal, feminine voice, single female singer',
   child:    'cute child-like vocal, playful innocent young child voice, high-pitched kid singer',
-  group:    'group chorus vocals, 4 voices harmonizing together as a K-pop style boy/girl group',
+  group:    'group chorus vocals, 4 voices harmonizing together as a vocal group',
   duet:     'male and female duet, clear alternating call-and-response vocals between two distinct singers',
   husky:    'very husky low-pitched raspy vocal, smoky deep gravelly voice, gritty texture, NOT smooth or clean voice',
   hightone: 'extremely bright high-pitched soaring vocal, crystal clear soprano-like falsetto tone, NOT low or normal pitch',
@@ -121,15 +121,16 @@ export async function generateSong({ lyrics, title, style, voice, model = 'V5', 
   //      no buildup' 같은 강한 신호 다중 박음.
   //  · variety modifier — 호출마다 보컬/리듬 톤이 살짝 달라져 같은 장르여도 매번 색이 다른 곡.
   const SHORT_HINT = ', short song around 45 seconds, vocals start at 0:00, no instrumental intro, no intro buildup, jump straight into the verse, no long outro, fade out at end';
-  // voice가 명시되면 variety의 보컬·멜로딕 강제 신호를 빼고(충돌 방지) vocalHint를 style의
-  // 맨 앞에 박는다. Suno는 앞쪽 키워드를 우선 처리해서 voice 선택이 확실히 반영됨.
+  // ★ 장르 느낌 보존: style은 "장르 먼저", 목소리 힌트는 장르 뒤에 붙인다.
+  //   Suno는 앞쪽 키워드를 더 강하게 반영하므로, 앞자리를 장르에 줘야 장르 특유의 색이 산다.
+  //   (목소리 반영은 가사 안 [voice marker]가 더 강하게 담당하므로, 목소리를 뒤로 빼도 유지됨)
   const hasVoice = !!VOCAL_HINTS[voice];
   const variety = pickVarietyModifier({ skipVocalConflict: hasVoice });
-  const vocalLead = hasVoice ? VOCAL_HINTS[voice] + ', ' : '';   // style 맨 앞에 강하게
+  const vocalHint = hasVoice ? ', ' + VOCAL_HINTS[voice] : '';   // 장르 뒤에 붙임
   const baseStyle = style || '';
   const finalStyle = /short|seconds|outro|fade/i.test(baseStyle)
-    ? (vocalLead + baseStyle)
-    : (vocalLead + baseStyle + SHORT_HINT + variety);
+    ? (baseStyle + vocalHint)
+    : (baseStyle + vocalHint + SHORT_HINT + variety);
 
   // 디버그 — voice 선택이 finalStyle/가사 마커에 잘 박혔는지 서버 로그에서 확인.
   console.log('[kie generateSong] voice=' + (voice || 'none')
