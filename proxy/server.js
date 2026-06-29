@@ -893,6 +893,17 @@ function buildPrompt(params) {
     'A B B A (회문형 — 시작·끝 임팩트)',
     'A A A B (같은 줄을 세 번, 끝에 펀치라인)'
   ];
+  // Hook A라인(반복 구호)의 "형식" — 매번 달라서 "또 ○○"만 반복되지 않게 함.
+  const HOOK_ALINE_FORMS = [
+    '"또 ○○" 형 (예: 또 맵찔이)',
+    '"○○ 비상" / "○○ 발동" 형 (예: 맵찔이 비상)',
+    '키워드 3연타 형 (예: 맵찔이 맵찔이 맵찔이)',
+    '"이게 ○○" / "역시 ○○" 형 (예: 이게 맵찔이)',
+    '의문형 "또 ○○야?" (예: 또 맵찔이야?)',
+    '"○○ 클라스" / "○○ 장인" 형 (예: 맵찔이 클라스)',
+    '부르기형 "○○야 ○○야" (예: 맵찔이야 맵찔이야)',
+    '감탄형 "와 ○○" / "오 ○○" (예: 와 맵찔이)'
+  ];
   const MOODS = [
     '귀엽고 약 올리는 톤 (말꼬리 살랑살랑)',
     '격하게 몰아붙이는 톤 (말투 강하고 빠르게)',
@@ -964,6 +975,7 @@ function buildPrompt(params) {
   const syllableMode = pickRand(SYLLABLE_HOOK_MODES);
   const seed = {
     hook: pickRand(HOOK_PATTERNS),
+    aline: pickRand(HOOK_ALINE_FORMS),
     mood: pickRand(MOODS),
     adlib: pickRand(ADLIB_STYLES),
     sent: pickRand(SENTENCE_STYLES),
@@ -992,6 +1004,7 @@ function buildPrompt(params) {
 같은 키워드라도 시드가 다르면 결과 노래가 달라져야 한다.
 
 1. Hook 반복 패턴: ${seed.hook}
+   - ★ Hook A라인(반복 구호) 형식: ${seed.aline}  → "또 ○○"만 쓰지 말고 이 형식으로!
 2. 전체 감정 톤:   ${seed.mood}
 3. 추임새 스타일: ${seed.adlib}
 4. 문장 스타일:   ${seed.sent}

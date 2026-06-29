@@ -62,7 +62,10 @@ function pickVarietyModifier({ skipVocalConflict = false } = {}) {
   //   · 사용자 요청 — "말하는 듯한 느낌의 노래는 만들지 말고 최대한 멜로디가 다 있는 노래로"
   //   · 랩 장르여도 멜로딕 랩(챈트형 후크)으로 유도.
   //   · 후크의 키워드 음절을 멜로딕 모티프로 만들도록 추가 신호.
-  const MELODIC_FORCE = 'fully sung melodic vocals with clear pitch and singable melody on every line, NOT spoken-word style, NOT rap-only delivery, even verses must have a clear sung melody, K-pop style chant-able syllabic hook (like Gee-gee-gee, Ring-ding-dong, Su-su-su-supernova), playful syllable repetition and vocalized fillers (la-la-la, di-gi-di-gi, dding-dding) as melodic ornamentation';
+  // 멜로디 다양화: "노래답게(말하기/랩만 X)"만 강제하고, K-pop 챈트 강요는 뺐다.
+  //   (챈트·음절 후크는 가사 시드의 '음절 후크 모드'가 곡마다 다르게 결정 → 멜로디가 한 방향으로
+  //    수렴하던 문제 해결. 같은 챈트풍 멜로디 반복을 막는다.)
+  const MELODIC_FORCE = 'fully sung melodic vocals with a clear singable melody on every line, NOT spoken-word style, NOT rap-only delivery, even verses must have a clear sung melody';
   const pick = arr => arr[Math.floor(Math.random() * arr.length)];
   // skipVocalConflict=true 일 때 보컬·멜로딕 강제 신호 빼고 멜로디 형태/리듬/템포만 다양화.
   // (캐릭터 보이스 옵션과 충돌하지 않도록)
