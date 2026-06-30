@@ -123,7 +123,11 @@ export async function generateSong({ lyrics, title, style, voice, model = 'V5', 
   //    → 'no long intro' 만으로는 부족. 'vocals start at 0:00 / no instrumental intro /
   //      no buildup' 같은 강한 신호 다중 박음.
   //  · variety modifier — 호출마다 보컬/리듬 톤이 살짝 달라져 같은 장르여도 매번 색이 다른 곡.
-  const SHORT_HINT = ', short song around 45 seconds, vocals start at 0:00, no instrumental intro, no intro buildup, jump straight into the verse, no long outro, fade out at end';
+  // 길이: 45초는 너무 빡빡(후렴 반복 부족 → 덜 중독적 + 가사 잘림). ~55~60초로 여유를 줘서
+  // 후렴이 충분히 반복되며 귀에 박히게 한다(중독성↑) + 가사도 다 불려 노래와 일치율↑.
+  const SHORT_HINT = ', short catchy song around 55 to 60 seconds, vocals start at 0:00, no instrumental intro, no intro buildup, jump straight into the verse, no long outro, fade out at end';
+  // 음악 자체의 매력·중독성 강제 신호 (가사와 무관, 사운드 측면). 항상 적용.
+  const CATCHY_HINT = ', extremely catchy earworm hook, instantly memorable singalong chorus that listeners can repeat after one listen, polished radio-ready professional production, punchy high-energy mix, strong addictive chorus that hits hard';
   // ★ 장르 느낌 보존: style은 "장르 먼저", 목소리 힌트는 장르 뒤에 붙인다.
   //   Suno는 앞쪽 키워드를 더 강하게 반영하므로, 앞자리를 장르에 줘야 장르 특유의 색이 산다.
   //   (목소리 반영은 가사 안 [voice marker]가 더 강하게 담당하므로, 목소리를 뒤로 빼도 유지됨)
@@ -132,8 +136,8 @@ export async function generateSong({ lyrics, title, style, voice, model = 'V5', 
   const vocalHint = hasVoice ? ', ' + VOCAL_HINTS[voice] : '';   // 장르 뒤에 붙임
   const baseStyle = style || '';
   const finalStyle = /short|seconds|outro|fade/i.test(baseStyle)
-    ? (baseStyle + vocalHint)
-    : (baseStyle + vocalHint + SHORT_HINT + variety);
+    ? (baseStyle + vocalHint + CATCHY_HINT)
+    : (baseStyle + vocalHint + SHORT_HINT + variety + CATCHY_HINT);
 
   // 디버그 — voice 선택이 finalStyle/가사 마커에 잘 박혔는지 서버 로그에서 확인.
   console.log('[kie generateSong] voice=' + (voice || 'none')
